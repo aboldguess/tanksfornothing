@@ -41,10 +41,31 @@ function requireAdmin(req, res, next) {
 app.post('/admin/login', (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
-    res.cookie('admin', 'true', { httpOnly: true });
+    // Set signed-in flag with secure attributes to prevent XSS and CSRF
+    res.cookie('admin', 'true', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict'
+    });
     return res.json({ success: true });
   }
   res.status(403).json({ error: 'bad password' });
+});
+
+// Admin logout endpoint to clear auth cookie with matching attributes
+app.post('/admin/logout', (req, res) => {
+  res.clearCookie('admin', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+  res.json({ success: true });
+});
+
+// Quick check endpoint for client to verify admin status
+app.get('/admin/status', (req, res) => {
+  if (req.cookies && req.cookies.admin === 'true') return res.json({ admin: true });
+  res.status(401).json({ admin: false });
 });
 
 // Admin CRUD endpoints
