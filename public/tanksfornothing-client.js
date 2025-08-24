@@ -1,10 +1,11 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Renders 3D scene and handles user input.
 // Structure: setup -> input handling -> animation loop -> networking.
-// Usage: Included by index.html; requires socket.io and Three.js.
+// Usage: Included by index.html; expects `io` global from Socket.IO and local Three.js module.
 // ---------------------------------------------------------------------------
-import * as THREE from 'three';
-import io from 'socket.io-client';
+import * as THREE from './libs/three.module.js';
+
+// `io` is provided globally by the socket.io script tag in index.html
 
 const socket = io();
 let tank, turret, camera, scene, renderer;
@@ -116,7 +117,9 @@ function updateCamera() {
     const offset = new THREE.Vector3(0, 1, 0);
     offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y + turret.rotation.y);
     camera.position.copy(tank.position).add(offset);
-    const look = new THREE.Vector3(0, 0, -1).applyQuaternion(tank.quaternion).applyAxisAngle(new THREE.Vector3(0, 1, 0), turret.rotation.y);
+    const look = new THREE.Vector3(0, 0, -1)
+      .applyQuaternion(tank.quaternion)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), turret.rotation.y);
     camera.lookAt(camera.position.clone().add(look));
   }
 }
