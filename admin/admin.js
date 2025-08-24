@@ -1,18 +1,16 @@
 // admin.js
 // Summary: Handles admin login and CRUD actions for Tanks for Nothing.
+// Uses secure httpOnly cookie set by server and provides logout endpoint.
 // Structure: auth helpers -> data loaders -> CRUD functions -> UI handlers.
 // Usage: Included by admin.html.
 // ---------------------------------------------------------------------------
-function isAdmin() {
-  return document.cookie.includes('admin=true');
-}
 
 function toggleMenu() {
   document.getElementById('profileMenu').classList.toggle('show');
 }
 
-function signOut() {
-  document.cookie = 'admin=false; Max-Age=0';
+async function signOut() {
+  await fetch('/admin/logout', { method: 'POST' });
   location.reload();
 }
 
@@ -24,7 +22,7 @@ async function login() {
     body: JSON.stringify({ password })
   });
   if (res.ok) {
-    document.cookie = 'admin=true';
+    // Cookie is set server-side; simply render dashboard
     showDashboard();
   } else alert('Login failed');
 }
@@ -78,4 +76,9 @@ async function setTerrain() {
   loadData();
 }
 
-if (isAdmin()) showDashboard();
+// Check on load if admin cookie is present via server endpoint
+async function checkAdmin() {
+  const res = await fetch('/admin/status');
+  if (res.ok) showDashboard();
+}
+checkAdmin();
