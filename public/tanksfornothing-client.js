@@ -5,16 +5,39 @@
 // ---------------------------------------------------------------------------
 import * as THREE from './libs/three.module.js';
 
-// `io` is provided globally by the socket.io script tag in index.html
+// Utility: render fatal errors directly on screen for easier debugging.
+function showError(message) {
+  console.error(message);
+  const overlay = document.createElement('div');
+  overlay.textContent = message;
+  overlay.style.position = 'fixed';
+  overlay.style.top = '50%';
+  overlay.style.left = '50%';
+  overlay.style.transform = 'translate(-50%, -50%)';
+  overlay.style.background = 'rgba(0,0,0,0.8)';
+  overlay.style.color = '#fff';
+  overlay.style.padding = '10px 20px';
+  overlay.style.borderRadius = '4px';
+  overlay.style.zIndex = '1000';
+  document.body.appendChild(overlay);
+}
 
-const socket = io();
+window.addEventListener('error', (e) => showError(`Error: ${e.message}`));
+
+// `io` is provided globally by the socket.io script tag in index.html. Gracefully
+// handle cases where it is missing to avoid a blank page.
+const socket = window.io ? window.io() : null;
+if (!socket) {
+  showError('Socket.IO failed to load. Ensure the server is running.');
+}
+
 let tank, turret, camera, scene, renderer;
 let cameraMode = 'third'; // 'first' or 'third'
 let freelook = false;
 let cameraDistance = 10;
 const keys = {};
 
-init();
+if (socket) init();
 
 function init() {
   scene = new THREE.Scene();
