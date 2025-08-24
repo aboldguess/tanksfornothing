@@ -1,7 +1,8 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Renders 3D scene and handles user input.
-// Structure: setup -> input handling -> animation loop -> networking.
-// Usage: Included by index.html; expects `io` global from Socket.IO and local Three.js module.
+// Summary: Browser client for Tanks for Nothing. Renders 3D scene, handles user input,
+//          and optionally synchronizes with a server via Socket.IO.
+// Structure: scene setup -> input handling -> animation loop -> optional networking.
+// Usage: Included by index.html; requires Socket.IO only for multiplayer networking.
 // ---------------------------------------------------------------------------
 import * as THREE from './libs/three.module.js';
 
@@ -24,11 +25,16 @@ function showError(message) {
 
 window.addEventListener('error', (e) => showError(`Error: ${e.message}`));
 
-// `io` is provided globally by the socket.io script tag in index.html. Gracefully
-// handle cases where it is missing to avoid a blank page.
-const socket = window.io ? window.io() : null;
-if (!socket) {
-  showError('Socket.IO failed to load. Ensure the server is running.');
+// `io` is provided globally by the socket.io script tag in index.html. Create a
+// socket when available and surface connection issues to the player.
+let socket = null;
+if (window.io) {
+  socket = window.io();
+  socket.on('connect', () => console.log('Connected to server'));
+  socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
+  socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
+} else {
+  showError('Socket.IO failed to load. Running offline.');
 }
 
 let tank, turret, camera, scene, renderer;
@@ -37,7 +43,8 @@ let freelook = false;
 let cameraDistance = 10;
 const keys = {};
 
-if (socket) init();
+// Always initialize scene so the client can operate even without networking.
+init();
 
 function init() {
   scene = new THREE.Scene();
@@ -98,8 +105,10 @@ function init() {
 
   animate();
 
-  // Join game with default tank
-  socket.emit('join', { name: 'Basic', br: 1 });
+  // Join game with default tank when networking is available
+  if (socket) {
+    socket.emit('join', { name: 'Basic', br: 1 });
+  }
 }
 
 function onMouseMove(e) {
@@ -120,14 +129,16 @@ function animate() {
   updateCamera();
   renderer.render(scene, camera);
 
-  // Send state to server
-  socket.emit('update', {
-    x: tank.position.x,
-    y: tank.position.y,
-    z: tank.position.z,
-    rot: tank.rotation.y,
-    turret: turret.rotation.y
-  });
+  // Send state to server when networking is available
+  if (socket) {
+    socket.emit('update', {
+      x: tank.position.x,
+      y: tank.position.y,
+      z: tank.position.z,
+      rot: tank.rotation.y,
+      turret: turret.rotation.y
+    });
+  }
 }
 
 function updateCamera() {
