@@ -1,0 +1,16 @@
+/* styles.css
+   Summary: Basic styling for Tanks for Nothing client and admin pages.
+   Structure: Layout, navbar, overlay instructions.
+   Usage: Included automatically by HTML pages. */
+body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+#navbar { position: fixed; top: 0; left: 0; right: 0; background: #222; color: #fff; padding: 8px; }
+#instructions { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 4px; font-size: 14px; }
+canvas { display: block; }
+
+/* Admin navbar profile menu */
+.profile-menu { position: relative; display: inline-block; float: right; }
+.profile-menu img { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
+.profile-menu-content { display: none; position: absolute; right: 0; background-color: #f9f9f9; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); }
+.profile-menu-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; }
+.profile-menu-content a:hover { background-color: #f1f1f1; }
+.profile-menu.show .profile-menu-content { display: block; }

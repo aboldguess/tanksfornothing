@@ -1,0 +1,21 @@
+{
+  "name": "tanksfornothing",
+  "version": "1.0.0",
+  "description": "Blocky multiplayer tank game",
+  "main": "index.js",
+  "scripts": {
+    "test": "node -e \"console.log('no tests yet')\"",
+    "start": "node tanksfornothing-server.js",
+    "dev": "node --watch tanksfornothing-server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "three": "^0.179.1"
+  }
+}
