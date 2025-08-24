@@ -13,6 +13,10 @@
   <nav id="navbar"><span>Tanks for Nothing</span></nav>
   <div id="instructions">WASD move | Mouse look | C freelook | V camera | Scroll zoom | 1-4 ammo</div>
   <script src="/socket.io/socket.io.js"></script>
-  <script type="module" src="tanksfornothing-client.js"></script>
+  <script
+    type="module"
+    src="tanksfornothing-client.js"
+    onerror="console.error('Failed to load client module');document.body.innerHTML='<div style=\'margin-top:2em;text-align:center;color:red\'>Failed to load game client.</div>'"
+  ></script>
 </body>
 </html>

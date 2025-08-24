@@ -24,6 +24,10 @@ function showError(message) {
 }
 
 window.addEventListener('error', (e) => showError(`Error: ${e.message}`));
+// Capture unhandled promise rejections to surface asynchronous errors.
+window.addEventListener('unhandledrejection', (e) => {
+  showError('Promise error: ' + e.reason);
+});
 
 // `io` is provided globally by the socket.io script tag in index.html. Create a
 // socket when available and surface connection issues to the player.
