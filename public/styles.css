@@ -10,7 +10,7 @@ canvas { display: block; }
 /* Admin navbar profile menu */
 .profile-menu { position: relative; display: inline-block; float: right; }
 .profile-menu img { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
-.profile-menu-content { display: none; position: absolute; right: 0; background-color: #f9f9f9; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); }
+.profile-menu-content { display: none; position: absolute; right: 0; background-color: #f9f9f9; min-width: 160px; box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2); /* subtle dropdown shadow for clarity */ }
 .profile-menu-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; }
 .profile-menu-content a:hover { background-color: #f1f1f1; }
 .profile-menu.show .profile-menu-content { display: block; }
