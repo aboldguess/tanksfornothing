@@ -1,0 +1,4 @@
+# .gitignore
+# Summary: Ignore directories and files not intended for version control.
+node_modules/
+.tmp

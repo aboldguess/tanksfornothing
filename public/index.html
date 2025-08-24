@@ -1,0 +1,18 @@
+<!-- index.html
+     Summary: Client entry page for Tanks for Nothing.
+     Structure: basic UI with canvas for Three.js rendering and overlay for controls.
+     Usage: Open in browser; click to capture mouse and play. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Tanks for Nothing</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav id="navbar"><span>Tanks for Nothing</span></nav>
+  <div id="instructions">WASD move | Mouse look | C freelook | V camera | Scroll zoom | 1-4 ammo</div>
+  <script src="/socket.io/socket.io.js"></script>
+  <script type="module" src="tanksfornothing-client.js"></script>
+</body>
+</html>
