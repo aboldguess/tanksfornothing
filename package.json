@@ -1,8 +1,13 @@
 {
+  "_comment": [
+    "Summary: Node package manifest for Tanks for Nothing, a minimal multiplayer tank demo.",
+    "Structure: defines npm scripts, module type, and runtime dependencies.",
+    "Usage: Run 'npm install' to install dependencies, then 'npm start' to launch the server."
+  ],
   "name": "tanksfornothing",
   "version": "1.0.0",
   "description": "Blocky multiplayer tank game",
-  "main": "index.js",
+  "main": "tanksfornothing-server.js",
   "scripts": {
     "test": "node -e \"console.log('no tests yet')\"",
     "start": "node tanksfornothing-server.js",
@@ -11,7 +16,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "type": "commonjs",
+  "type": "module",
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
