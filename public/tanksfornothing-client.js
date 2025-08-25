@@ -1,9 +1,10 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Provides lobby tank selection,
-//          renders 3D scene, handles user input, uses Cannon.js for simple
-//          collision physics and synchronizes state with a server via Socket.IO.
+//          renders 3D scene, handles user input and firing mechanics, uses
+//          Cannon.js for simple collision physics and synchronizes state with a
+//          server via Socket.IO.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
-//             animation loop -> optional networking.
+//             firing helpers -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
 //         loads Cannon.js from CDN for physics.
 // ---------------------------------------------------------------------------
@@ -36,15 +37,63 @@ window.addEventListener('unhandledrejection', (e) => {
   showError('Promise error: ' + e.reason);
 });
 
+// Render a brief explosion effect at the given world position for feedback
+function renderExplosion(position) {
+  if (!scene) return;
+  const geom = new THREE.SphereGeometry(1, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.copy(position);
+  scene.add(mesh);
+  setTimeout(() => {
+    scene.remove(mesh);
+    geom.dispose();
+    mat.dispose();
+  }, 500);
+}
+
 // `io` is provided globally by the socket.io script tag in index.html. Create a
 // socket when available and surface connection issues to the player.
 let socket = null;
+// Client-side ammo handling
+let ammoList = [];
+let selectedAmmo = null;
+const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
+let playerHealth = 100;
+
 if (window.io) {
   socket = window.io();
   socket.on('connect', () => console.log('Connected to server'));
   socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
   socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
   socket.on('terrain', (name) => buildTerrain(name));
+  socket.on('ammo', (list) => {
+    ammoList = Array.isArray(list) ? list : [];
+    selectedAmmo = ammoList[0] || null;
+    console.log('Ammo received', ammoList);
+  });
+  socket.on('projectile-fired', (p) => {
+    if (!scene) return;
+    const geom = new THREE.SphereGeometry(0.1, 8, 8);
+    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(p.x, p.y, p.z);
+    scene.add(mesh);
+    projectiles.set(p.id, { mesh, vx: p.vx, vy: p.vy, vz: p.vz });
+  });
+  socket.on('projectile-exploded', (p) => {
+    const proj = projectiles.get(p.id);
+    if (proj) {
+      scene.remove(proj.mesh);
+      proj.mesh.geometry.dispose();
+      proj.mesh.material.dispose();
+      projectiles.delete(p.id);
+    }
+    renderExplosion(new THREE.Vector3(p.x, p.y, p.z));
+  });
+  socket.on('tank-damaged', ({ id, health }) => {
+    if (id === socket.id) playerHealth = health;
+  });
   socket.on('restart', () => {
     // Reset graphics and physics state
     tank.position.set(0, 0, 0);
@@ -57,6 +106,7 @@ if (window.io) {
       chassisBody.quaternion.set(0, 0, 0, 1);
     }
     currentSpeed = 0;
+    playerHealth = 100;
   });
 } else {
   showError('Socket.IO failed to load. Running offline.');
@@ -314,6 +364,13 @@ function init() {
   window.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
     if (e.key === 'v') cameraMode = cameraMode === 'third' ? 'first' : 'third';
+    if (e.key >= '1' && e.key <= '9') {
+      const idx = parseInt(e.key, 10) - 1;
+      if (ammoList[idx]) {
+        selectedAmmo = ammoList[idx];
+        console.log('Selected ammo', selectedAmmo.name);
+      }
+    }
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
@@ -321,6 +378,10 @@ function init() {
 
   window.addEventListener('wheel', (e) => {
     cameraDistance = Math.min(Math.max(cameraDistance + e.deltaY * 0.01, 5), 20);
+  });
+
+  window.addEventListener('mousedown', () => {
+    if (socket && selectedAmmo) socket.emit('fire', selectedAmmo.name);
   });
 
   animate();
@@ -378,10 +439,17 @@ function animate() {
   tank.position.copy(chassisBody.position);
   tank.quaternion.copy(chassisBody.quaternion);
 
-  // Update HUD with current speed and chassis inclination
+  // Move client-side projectile meshes based on server-provided velocities
+  for (const proj of projectiles.values()) {
+    proj.mesh.position.x += proj.vx * delta;
+    proj.mesh.position.y += proj.vy * delta;
+    proj.mesh.position.z += proj.vz * delta;
+  }
+
+  // Update HUD with current speed, inclination and health
   const speedKmh = currentSpeed * 3.6;
   const inclination = THREE.MathUtils.radToDeg(tank.rotation.x);
-  updateHUD(speedKmh, inclination);
+  updateHUD(speedKmh, inclination, playerHealth);
 
   updateCamera();
   renderer.render(scene, camera);

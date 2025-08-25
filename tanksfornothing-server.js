@@ -1,9 +1,10 @@
 // tanksfornothing-server.js
 // Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
-// This script sets up an Express web server with Socket.IO for real-time tank position updates,
-// persists admin-defined tanks, nations and terrain details to disk and enforces Battle Rating
-// constraints when players join.
-// Structure: configuration -> express setup -> socket handlers -> in-memory stores -> persistence helpers -> server start.
+// This script sets up an Express web server with Socket.IO for real-time tank and projectile
+// updates, persists admin-defined tanks, nations and terrain details to disk and enforces
+// Battle Rating constraints when players join.
+// Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
+//            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
 // ---------------------------------------------------------------------------
 
@@ -24,7 +25,27 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 // In-memory stores (tanks and terrains persisted to disk)
 const players = new Map(); // socket.id -> player state
 let tanks = []; // CRUD via admin, loaded from JSON file
-const ammo = []; // CRUD via admin
+// Default ammo set; additional types may be added via admin API
+const ammo = [
+  {
+    name: 'AP',
+    type: 'AP',
+    speed: 200,
+    damage: 40,
+    penetration: 50,
+    explosion: 0
+  },
+  {
+    name: 'HE',
+    type: 'HE',
+    speed: 150,
+    damage: 20,
+    penetration: 10,
+    explosion: 50
+  }
+];
+// Active projectile list; each projectile contains position, velocity and metadata
+const projectiles = new Map(); // id -> projectile state
 // Terrains now include metadata so map listings can show thumbnails and size
 let terrains = [{ name: 'flat', type: 'default', size: { x: 1, y: 1 } }];
 let currentTerrain = 0; // index into terrains
@@ -373,7 +394,18 @@ io.on('connection', (socket) => {
       socket.emit('join-denied', 'Tank BR too high');
       return;
     }
-    players.set(socket.id, { ...tank, x: 0, y: 0, z: 0, rot: 0, turret: 0 });
+    // Initialize server-side player state with health and armor for damage calculations
+    players.set(socket.id, {
+      ...tank,
+      x: 0,
+      y: 0,
+      z: 0,
+      rot: 0,
+      turret: 0,
+      health: 100,
+      crew: tank.crew || 3,
+      armor: tank.armor || 20
+    });
     io.emit('player-joined', { id: socket.id, tank });
   });
 
@@ -384,6 +416,36 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('player-update', { id: socket.id, state: p });
   });
 
+  // Handle firing requests from clients. Validate ammo selection and
+  // compute projectile trajectory based on trusted server-side tank state.
+  socket.on('fire', (ammoName) => {
+    const shooter = players.get(socket.id);
+    if (!shooter) return;
+    const ammoDef = ammo.find((a) => a.name === ammoName);
+    if (!ammoDef) {
+      socket.emit('error', 'Invalid ammo selection');
+      return;
+    }
+    const angle = (shooter.rot || 0) + (shooter.turret || 0);
+    const dirX = Math.sin(angle);
+    const dirZ = Math.cos(angle);
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const projectile = {
+      id,
+      x: shooter.x,
+      y: shooter.y + 1,
+      z: shooter.z,
+      vx: -dirX * ammoDef.speed,
+      vy: 0,
+      vz: -dirZ * ammoDef.speed,
+      ammo: ammoDef.name,
+      shooter: socket.id,
+      life: 5
+    };
+    projectiles.set(id, projectile);
+    io.emit('projectile-fired', projectile);
+  });
+
   socket.on('disconnect', () => {
     console.log('player disconnected', socket.id);
     players.delete(socket.id);
@@ -391,5 +453,41 @@ io.on('connection', (socket) => {
     if (players.size === 0) baseBR = null; // reset BR when game empty
   });
 });
+
+// Basic projectile physics loop. Moves projectiles forward and checks for
+// simple spherical collisions with players, applying damage on impact.
+setInterval(() => {
+  const dt = 0.05; // 20 ticks per second
+  for (const [id, p] of projectiles) {
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.z += p.vz * dt;
+    for (const [pid, player] of players) {
+      if (pid === p.shooter) continue;
+      const dx = player.x - p.x;
+      const dy = player.y - p.y;
+      const dz = player.z - p.z;
+      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
+        const ammoDef = ammo.find((a) => a.name === p.ammo) || {};
+        const armor = player.armor || 0;
+        const dmg = ammoDef.damage || 10;
+        const pen = ammoDef.penetration || 0;
+        const explosion = ammoDef.explosion || 0;
+        let total = pen > armor ? dmg : dmg / 2;
+        total += explosion;
+        player.health = Math.max(0, (player.health ?? 100) - total);
+        io.emit('tank-damaged', { id: pid, health: player.health });
+        io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
+        projectiles.delete(id);
+        break;
+      }
+    }
+    p.life -= dt;
+    if (projectiles.has(id) && p.life <= 0) {
+      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
+      projectiles.delete(id);
+    }
+  }
+}, 50);
 
 server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
