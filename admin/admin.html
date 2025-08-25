@@ -13,14 +13,14 @@
   <nav id="navbar">
     <span>Admin Panel</span>
     <div class="profile-menu" id="profileMenu">
-      <img src="https://placehold.co/32" alt="profile" onclick="toggleMenu()" />
+      <img src="https://placehold.co/32" alt="profile" id="profilePic" />
       <div class="profile-menu-content" id="profileMenuContent">
         <a href="#">Manage Profiles</a>
         <a href="#">Learning Zone</a>
         <a href="#">My Details</a>
         <a href="#">Subscription Details</a>
         <a href="#">Manage Users</a>
-        <a href="#" onclick="signOut()">Sign out</a>
+        <a href="#" id="signOutLink">Sign out</a>
       </div>
     </div>
   </nav>
@@ -28,7 +28,7 @@
   <div id="login">
     <h2>Admin Login</h2>
     <input type="password" id="password" placeholder="Password">
-    <button onclick="login()">Login</button>
+    <button id="loginBtn">Login</button>
   </div>
 
   <div id="dashboard" style="display:none">
@@ -73,18 +73,18 @@
       <option value="Tank Destroyer">Tank Destroyer</option>
       <option value="SPAA">SPAA</option>
     </select>
-    <button onclick="addTank()">Add Tank</button>
+    <button id="addTankBtn">Add Tank</button>
 
     <h2>Ammo</h2>
     <div id="ammoList"></div>
     <input id="ammoName" placeholder="Name">
     <input id="ammoType" placeholder="Type">
-    <button onclick="addAmmo()">Add Ammo</button>
+    <button id="addAmmoBtn">Add Ammo</button>
 
     <h2>Terrain</h2>
     <div id="terrainName"></div>
     <input id="terrainInput" placeholder="Terrain name">
-    <button onclick="setTerrain()">Set Terrain</button>
+    <button id="setTerrainBtn">Set Terrain</button>
   </div>
 
 <script type="module" src="admin.js"></script>
