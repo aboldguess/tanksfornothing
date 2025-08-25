@@ -1,6 +1,7 @@
 // admin.js
 // Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain across
-//          separate admin pages linked by a sidebar.
+//          separate admin pages linked by a sidebar. Terrain management now uses a table with
+//          3D thumbnails and an in-page editor.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
@@ -91,19 +92,15 @@ async function loadData() {
     ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
   }
 
-  const terrainDiv = document.getElementById('terrainList');
-  if (terrainDiv) {
-    terrainDiv.innerHTML = terrainsCache.map((t, i) =>
-      `<div><input type="radio" name="terrainRadio" value="${i}" ${i == currentTerrainIndex ? 'checked' : ''}> ${t} <button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></div>`
-    ).join('');
-    terrainDiv.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => editTerrain(btn.dataset.i)));
-    terrainDiv.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
-  }
+  renderTerrainTable();
 
   if (document.getElementById('nationName')) clearNationForm();
   if (document.getElementById('tankName')) clearTankForm();
   if (document.getElementById('ammoName')) clearAmmoForm();
-  if (document.getElementById('terrainName')) clearTerrainForm();
+  if (document.getElementById('terrainName')) {
+    clearTerrainForm();
+    document.getElementById('editorCard').style.display = 'none';
+  }
   updateStats();
 }
 
@@ -271,10 +268,17 @@ function clearAmmoForm() {
 }
 
 function collectTerrainForm() {
-  return { name: document.getElementById('terrainName').value };
+  return {
+    name: document.getElementById('terrainName').value,
+    type: document.getElementById('terrainType').value,
+    size: {
+      x: parseFloat(document.getElementById('sizeX').value),
+      y: parseFloat(document.getElementById('sizeY').value)
+    }
+  };
 }
 
-async function addTerrain() {
+async function saveTerrain() {
   const payload = collectTerrainForm();
   const method = editingTerrainIndex === null ? 'POST' : 'PUT';
   const url = editingTerrainIndex === null ? '/api/terrains' : `/api/terrains/${editingTerrainIndex}`;
@@ -284,15 +288,27 @@ async function addTerrain() {
     body: JSON.stringify(payload)
   });
   editingTerrainIndex = null;
-  document.getElementById('addTerrainBtn').innerText = 'Add Terrain';
+  document.getElementById('editorCard').style.display = 'none';
   clearTerrainForm();
   loadData();
 }
 
-function editTerrain(i) {
-  document.getElementById('terrainName').value = terrainsCache[i];
-  editingTerrainIndex = i;
-  document.getElementById('addTerrainBtn').innerText = 'Update Terrain';
+function openTerrainEditor(i) {
+  const card = document.getElementById('editorCard');
+  card.style.display = 'flex';
+  if (i === undefined) {
+    editingTerrainIndex = null;
+    clearTerrainForm();
+    document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
+  } else {
+    editingTerrainIndex = Number(i);
+    const t = terrainsCache[editingTerrainIndex];
+    document.getElementById('terrainName').value = t.name;
+    document.getElementById('terrainType').value = t.type;
+    document.getElementById('sizeX').value = t.size.x;
+    document.getElementById('sizeY').value = t.size.y;
+    document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
+  }
 }
 
 async function deleteTerrain(i) {
@@ -302,20 +318,58 @@ async function deleteTerrain(i) {
 
 function clearTerrainForm() {
   document.getElementById('terrainName').value = '';
+  document.getElementById('terrainType').value = 'snow';
+  document.getElementById('sizeX').value = '1';
+  document.getElementById('sizeY').value = '1';
+}
+
+function setCurrentTerrain(i) {
+  currentTerrainIndex = Number(i);
+  renderTerrainTable();
 }
 
 async function restartGame() {
-  const sel = document.querySelector('input[name="terrainRadio"]:checked');
-  if (!sel) {
+  if (!terrainsCache[currentTerrainIndex]) {
     alert('Select a terrain first');
     return;
   }
   await fetch('/api/restart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ index: Number(sel.value) })
+    body: JSON.stringify({ index: currentTerrainIndex })
   });
   loadData();
+}
+
+function renderTerrainTable() {
+  const tbody = document.getElementById('terrainList');
+  if (!tbody) return;
+  tbody.innerHTML = terrainsCache.map((t, i) =>
+    `<tr class="${i == currentTerrainIndex ? 'current-row' : ''}">
+      <td><div id="thumb-${i}" class="terrain-thumb"></div></td>
+      <td>${t.type}</td>
+      <td>${t.size.x}x${t.size.y}</td>
+      <td>${t.name}</td>
+      <td><button data-i="${i}" class="use-terrain">Use</button><button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></td>
+    </tr>`
+  ).join('');
+  tbody.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => openTerrainEditor(btn.dataset.i)));
+  tbody.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
+  tbody.querySelectorAll('.use-terrain').forEach(btn => btn.addEventListener('click', () => setCurrentTerrain(btn.dataset.i)));
+  terrainsCache.forEach((t, i) => renderThumbnail(`thumb-${i}`, t));
+}
+
+function renderThumbnail(id, terrain) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const z = [
+    [0, 0],
+    [0, 0]
+  ];
+  Plotly.newPlot(el, [{ z, type: 'surface', showscale: false }], {
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    scene: { xaxis: { visible: false }, yaxis: { visible: false }, zaxis: { visible: false } }
+  }, { displayModeBar: false });
 }
 
 function updateStats() {
@@ -361,8 +415,15 @@ const addTankBtn = document.getElementById('addTankBtn');
 if (addTankBtn) addTankBtn.addEventListener('click', addTank);
 const addAmmoBtn = document.getElementById('addAmmoBtn');
 if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
-const addTerrainBtn = document.getElementById('addTerrainBtn');
-if (addTerrainBtn) addTerrainBtn.addEventListener('click', addTerrain);
+const newTerrainBtn = document.getElementById('newTerrainBtn');
+if (newTerrainBtn) newTerrainBtn.addEventListener('click', () => openTerrainEditor());
+const saveTerrainBtn = document.getElementById('saveTerrainBtn');
+if (saveTerrainBtn) saveTerrainBtn.addEventListener('click', saveTerrain);
+const cancelEditBtn = document.getElementById('cancelEditBtn');
+if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => {
+  editingTerrainIndex = null;
+  document.getElementById('editorCard').style.display = 'none';
+});
 const restartBtn = document.getElementById('restartBtn');
 if (restartBtn) restartBtn.addEventListener('click', restartGame);
 
