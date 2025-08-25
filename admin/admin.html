@@ -72,7 +72,8 @@
           <input id="tankCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('caliberVal').innerText=this.value">
           <span id="caliberVal"></span>
         </label>
-        <div>
+        <!-- Ammo type checkboxes displayed vertically -->
+        <div class="checkbox-group">
           <label><input type="checkbox" name="tankAmmo" value="HE"> HE</label>
           <label><input type="checkbox" name="tankAmmo" value="HEAT"> HEAT</label>
           <label><input type="checkbox" name="tankAmmo" value="AP"> AP</label>

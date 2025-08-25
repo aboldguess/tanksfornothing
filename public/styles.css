@@ -1,10 +1,40 @@
 /* styles.css
-   Summary: Basic styling for Tanks for Nothing client and admin pages.
+   Summary: Basic styling for Tanks for Nothing client and admin pages with a tank-inspired palette.
    Structure: Layout, navbar, overlay instructions.
    Usage: Included automatically by HTML pages. */
-body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
-#navbar { position: fixed; top: 0; left: 0; right: 0; background: #222; color: #fff; padding: 8px; }
-#instructions { position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: #fff; padding: 5px 10px; border-radius: 4px; font-size: 14px; }
+/* Global body and navbar styling with a dark, tank-inspired palette */
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: "Trebuchet MS", Arial, sans-serif;
+  background: #2b331f; /* muted military green */
+  color: #e0e0e0;
+}
+
+#navbar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #3e4b2e; /* darker green for contrast */
+  color: #fff;
+  padding: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+#instructions {
+  position: fixed;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(34,34,34,0.8);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  border: 1px solid #2b2b2b;
+}
+
 canvas { display: block; }
 
 /* Admin navbar profile menu */
