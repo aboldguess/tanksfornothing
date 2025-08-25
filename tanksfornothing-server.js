@@ -96,28 +96,30 @@ app.get('/admin/status', (req, res) => {
   res.status(401).json({ admin: false });
 });
 
-// Admin CRUD endpoints
-app.get('/api/tanks', (req, res) => res.json(tanks));
-app.post('/api/tanks', requireAdmin, async (req, res) => {
-  const t = req.body;
-  const classes = new Set(['Light', 'Medium', 'Heavy', 'Tank Destroyer', 'SPAA']);
-  if (typeof t.name !== 'string' || !t.name.trim()) return res.status(400).json({ error: 'name required' });
-  if (typeof t.nation !== 'string' || !t.nation.trim()) return res.status(400).json({ error: 'nation required' });
-  if (typeof t.br !== 'number' || t.br < 1 || t.br > 10) return res.status(400).json({ error: 'br out of range' });
-  if (typeof t.armor !== 'number' || t.armor < 0 || t.armor > 500) return res.status(400).json({ error: 'armor out of range' });
-  if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber <= 0) return res.status(400).json({ error: 'invalid caliber' });
-  if (!Array.isArray(t.ammo) || !t.ammo.every(a => typeof a === 'string')) return res.status(400).json({ error: 'invalid ammo list' });
-  if (!Number.isInteger(t.crew) || t.crew <= 0) return res.status(400).json({ error: 'invalid crew count' });
-  if (typeof t.engineHp !== 'number' || t.engineHp <= 0) return res.status(400).json({ error: 'invalid engine hp' });
-  if (typeof t.incline !== 'number' || t.incline < 0 || t.incline > 60) return res.status(400).json({ error: 'incline out of range' });
-  if (typeof t.bodyRotation !== 'number' || t.bodyRotation < 0) return res.status(400).json({ error: 'invalid body rotation' });
-  if (typeof t.turretRotation !== 'number' || t.turretRotation < 0) return res.status(400).json({ error: 'invalid turret rotation' });
-  if (typeof t.class !== 'string' || !classes.has(t.class)) return res.status(400).json({ error: 'invalid class' });
+// Admin CRUD endpoints with validation helpers
+const nations = new Set(['Germany', 'UK', 'USA']);
+const classes = new Set(['Light/Scout', 'Medium/MBT', 'Heavy']);
+const ammoChoices = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
+const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
-  const newTank = {
+function validateTank(t) {
+  if (typeof t.name !== 'string' || !t.name.trim()) return 'name required';
+  if (typeof t.nation !== 'string' || !nations.has(t.nation)) return 'invalid nation';
+  if (typeof t.br !== 'number' || t.br < 1 || t.br > 10) return 'br out of range';
+  if (typeof t.class !== 'string' || !classes.has(t.class)) return 'invalid class';
+  if (typeof t.armor !== 'number' || t.armor < 10 || t.armor > 150) return 'armor out of range';
+  if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber < 20 || t.cannonCaliber > 150) return 'caliber out of range';
+  if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
+  if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
+  if (typeof t.engineHp !== 'number' || t.engineHp < 100 || t.engineHp > 1000) return 'invalid engine hp';
+  if (typeof t.incline !== 'number' || t.incline < 2 || t.incline > 12) return 'incline out of range';
+  if (typeof t.bodyRotation !== 'number' || t.bodyRotation < 1 || t.bodyRotation > 60) return 'invalid body rotation';
+  if (typeof t.turretRotation !== 'number' || t.turretRotation < 1 || t.turretRotation > 60) return 'invalid turret rotation';
+  return {
     name: t.name.trim(),
-    nation: t.nation.trim(),
+    nation: t.nation,
     br: t.br,
+    class: t.class,
     armor: t.armor,
     cannonCaliber: t.cannonCaliber,
     ammo: t.ammo,
@@ -125,17 +127,73 @@ app.post('/api/tanks', requireAdmin, async (req, res) => {
     engineHp: t.engineHp,
     incline: t.incline,
     bodyRotation: t.bodyRotation,
-    turretRotation: t.turretRotation,
-    class: t.class
+    turretRotation: t.turretRotation
   };
-  tanks.push(newTank);
+}
+
+function validateAmmo(a) {
+  if (typeof a.name !== 'string' || !a.name.trim()) return 'name required';
+  if (typeof a.caliber !== 'number' || a.caliber < 20 || a.caliber > 150 || a.caliber % 10 !== 0) return 'caliber out of range';
+  if (typeof a.armorPen !== 'number' || a.armorPen < 20 || a.armorPen > 160 || a.armorPen % 10 !== 0) return 'armorPen out of range';
+  if (typeof a.type !== 'string' || !ammoTypes.has(a.type)) return 'invalid type';
+  if (typeof a.explosionRadius !== 'number' || a.explosionRadius < 0) return 'invalid radius';
+  if (typeof a.pen0 !== 'number' || a.pen0 < 20 || a.pen0 > 160 || a.pen0 % 10 !== 0) return 'pen0 out of range';
+  if (typeof a.pen100 !== 'number' || a.pen100 < 20 || a.pen100 > 160 || a.pen100 % 10 !== 0) return 'pen100 out of range';
+  return {
+    name: a.name.trim(),
+    caliber: a.caliber,
+    armorPen: a.armorPen,
+    type: a.type,
+    explosionRadius: a.explosionRadius,
+    pen0: a.pen0,
+    pen100: a.pen100
+  };
+}
+
+app.get('/api/tanks', (req, res) => res.json(tanks));
+app.post('/api/tanks', requireAdmin, async (req, res) => {
+  const valid = validateTank(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  tanks.push(valid);
+  await saveTanks();
+  res.json({ success: true });
+});
+app.put('/api/tanks/:idx', requireAdmin, async (req, res) => {
+  const idx = Number(req.params.idx);
+  if (!tanks[idx]) return res.status(404).json({ error: 'not found' });
+  const valid = validateTank(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  tanks[idx] = valid;
+  await saveTanks();
+  res.json({ success: true });
+});
+app.delete('/api/tanks/:idx', requireAdmin, async (req, res) => {
+  const idx = Number(req.params.idx);
+  if (idx < 0 || idx >= tanks.length) return res.status(404).json({ error: 'not found' });
+  tanks.splice(idx, 1);
   await saveTanks();
   res.json({ success: true });
 });
 
 app.get('/api/ammo', (req, res) => res.json(ammo));
 app.post('/api/ammo', requireAdmin, (req, res) => {
-  ammo.push(req.body);
+  const valid = validateAmmo(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  ammo.push(valid);
+  res.json({ success: true });
+});
+app.put('/api/ammo/:idx', requireAdmin, (req, res) => {
+  const idx = Number(req.params.idx);
+  if (!ammo[idx]) return res.status(404).json({ error: 'not found' });
+  const valid = validateAmmo(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  ammo[idx] = valid;
+  res.json({ success: true });
+});
+app.delete('/api/ammo/:idx', requireAdmin, (req, res) => {
+  const idx = Number(req.params.idx);
+  if (idx < 0 || idx >= ammo.length) return res.status(404).json({ error: 'not found' });
+  ammo.splice(idx, 1);
   res.json({ success: true });
 });
 
