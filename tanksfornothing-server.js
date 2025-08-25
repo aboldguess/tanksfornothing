@@ -25,12 +25,16 @@ let tanks = []; // CRUD via admin, loaded from JSON file
 const ammo = []; // CRUD via admin
 let terrain = 'flat';
 let baseBR = null; // Battle Rating of first player
+// Nations persisted separately; maintain array and Set for validation
+let nations = []; // CRUD via admin, loaded from JSON file
+let nationsSet = new Set();
 
-const DATA_FILE = new URL('./data/tanks.json', import.meta.url);
+const TANKS_FILE = new URL('./data/tanks.json', import.meta.url);
+const NATIONS_FILE = new URL('./data/nations.json', import.meta.url);
 
 async function loadTanks() {
   try {
-    const text = await fs.readFile(DATA_FILE, 'utf8');
+    const text = await fs.readFile(TANKS_FILE, 'utf8');
     const json = JSON.parse(text);
     if (Array.isArray(json.tanks)) tanks = json.tanks;
   } catch {
@@ -48,9 +52,37 @@ async function saveTanks() {
     ],
     tanks
   };
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2));
+  await fs.writeFile(TANKS_FILE, JSON.stringify(data, null, 2));
 }
 
+async function loadNations() {
+  try {
+    const text = await fs.readFile(NATIONS_FILE, 'utf8');
+    const json = JSON.parse(text);
+    if (Array.isArray(json.nations)) {
+      nations = json.nations;
+      nationsSet = new Set(nations);
+    }
+  } catch {
+    console.warn('No existing nation data, starting with empty list');
+  }
+}
+
+async function saveNations() {
+  await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
+  const data = {
+    _comment: [
+      'Summary: Persisted nation names for Tanks for Nothing.',
+      'Structure: JSON object with _comment array and nations list.',
+      'Usage: Managed automatically by server; do not edit manually.'
+    ],
+    nations
+  };
+  await fs.writeFile(NATIONS_FILE, JSON.stringify(data, null, 2));
+  nationsSet = new Set(nations);
+}
+
+await loadNations();
 await loadTanks();
 
 // Middleware
@@ -97,14 +129,18 @@ app.get('/admin/status', (req, res) => {
 });
 
 // Admin CRUD endpoints with validation helpers
-const nations = new Set(['Germany', 'UK', 'USA']);
 const classes = new Set(['Light/Scout', 'Medium/MBT', 'Heavy']);
 const ammoChoices = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
+function validateNation(n) {
+  if (!n || typeof n.name !== 'string' || !n.name.trim()) return 'name required';
+  return { name: n.name.trim() };
+}
+
 function validateTank(t) {
   if (typeof t.name !== 'string' || !t.name.trim()) return 'name required';
-  if (typeof t.nation !== 'string' || !nations.has(t.nation)) return 'invalid nation';
+  if (typeof t.nation !== 'string' || !nationsSet.has(t.nation)) return 'invalid nation';
   if (typeof t.br !== 'number' || t.br < 1 || t.br > 10) return 'br out of range';
   if (typeof t.class !== 'string' || !classes.has(t.class)) return 'invalid class';
   if (typeof t.armor !== 'number' || t.armor < 10 || t.armor > 150) return 'armor out of range';
@@ -133,6 +169,7 @@ function validateTank(t) {
 
 function validateAmmo(a) {
   if (typeof a.name !== 'string' || !a.name.trim()) return 'name required';
+  if (typeof a.nation !== 'string' || !nationsSet.has(a.nation)) return 'invalid nation';
   if (typeof a.caliber !== 'number' || a.caliber < 20 || a.caliber > 150 || a.caliber % 10 !== 0) return 'caliber out of range';
   if (typeof a.armorPen !== 'number' || a.armorPen < 20 || a.armorPen > 160 || a.armorPen % 10 !== 0) return 'armorPen out of range';
   if (typeof a.type !== 'string' || !ammoTypes.has(a.type)) return 'invalid type';
@@ -141,6 +178,7 @@ function validateAmmo(a) {
   if (typeof a.pen100 !== 'number' || a.pen100 < 20 || a.pen100 > 160 || a.pen100 % 10 !== 0) return 'pen100 out of range';
   return {
     name: a.name.trim(),
+    nation: a.nation,
     caliber: a.caliber,
     armorPen: a.armorPen,
     type: a.type,
@@ -149,6 +187,31 @@ function validateAmmo(a) {
     pen100: a.pen100
   };
 }
+
+app.get('/api/nations', (req, res) => res.json(nations));
+app.post('/api/nations', requireAdmin, async (req, res) => {
+  const valid = validateNation(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  nations.push(valid.name);
+  await saveNations();
+  res.json({ success: true });
+});
+app.put('/api/nations/:idx', requireAdmin, async (req, res) => {
+  const idx = Number(req.params.idx);
+  if (!nations[idx]) return res.status(404).json({ error: 'not found' });
+  const valid = validateNation(req.body);
+  if (typeof valid === 'string') return res.status(400).json({ error: valid });
+  nations[idx] = valid.name;
+  await saveNations();
+  res.json({ success: true });
+});
+app.delete('/api/nations/:idx', requireAdmin, async (req, res) => {
+  const idx = Number(req.params.idx);
+  if (idx < 0 || idx >= nations.length) return res.status(404).json({ error: 'not found' });
+  nations.splice(idx, 1);
+  await saveNations();
+  res.json({ success: true });
+});
 
 app.get('/api/tanks', (req, res) => res.json(tanks));
 app.post('/api/tanks', requireAdmin, async (req, res) => {
