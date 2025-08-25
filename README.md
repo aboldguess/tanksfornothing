@@ -3,7 +3,7 @@
 A minimal browser-based multiplayer tank demo built with Node.js, Express, Socket.IO and Three.js. Tanks are rendered as simple blocks with basic movement and turret controls.
 
 ## Features
-- WASD driving, mouse-look turret control
+- WASD driving, Space brake, mouse-look turret control
 - Hold `C` for freelook, `V` to toggle first/third person
 - Mouse wheel zoom
 - Modern admin dashboard with CRUD for nations, tanks, ammo and terrain plus live statistics
