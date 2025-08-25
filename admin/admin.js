@@ -34,49 +34,157 @@ function showDashboard() {
   loadData();
 }
 
+// In-memory caches for editing
+let tanksCache = [];
+let ammoCache = [];
+let editingTankIndex = null;
+let editingAmmoIndex = null;
+
 async function loadData() {
-  const tanks = await fetch('/api/tanks').then(r => r.json());
-  const ammo = await fetch('/api/ammo').then(r => r.json());
+  tanksCache = await fetch('/api/tanks').then(r => r.json());
+  ammoCache = await fetch('/api/ammo').then(r => r.json());
   const terrain = await fetch('/api/terrain').then(r => r.json());
-  document.getElementById('tankList').innerText = JSON.stringify(tanks);
-  document.getElementById('ammoList').innerText = JSON.stringify(ammo);
+
+  const tankDiv = document.getElementById('tankList');
+  tankDiv.innerHTML = tanksCache.map((t, i) =>
+    `<div>${t.name} (${t.nation}) BR ${t.br} <button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></div>`
+  ).join('');
+  tankDiv.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
+  tankDiv.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
+
+  const ammoDiv = document.getElementById('ammoList');
+  ammoDiv.innerHTML = ammoCache.map((a, i) =>
+    `<div>${a.name} (${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
+  ).join('');
+  ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
+  ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
+
   document.getElementById('terrainName').innerText = terrain.terrain;
-  const ammoDiv = document.getElementById('tankAmmoOptions');
-  ammoDiv.innerHTML = ammo.map(a => `<label><input type="checkbox" value="${a.name}">${a.name}</label>`).join('');
+}
+
+function collectTankForm() {
+  return {
+    name: document.getElementById('tankName').value,
+    nation: document.getElementById('tankNation').value,
+    br: parseFloat(document.getElementById('tankBR').value),
+    class: document.getElementById('tankClass').value,
+    armor: parseInt(document.getElementById('tankArmor').value, 10),
+    cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
+    ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
+    crew: parseInt(document.getElementById('tankCrew').value, 10),
+    engineHp: parseInt(document.getElementById('tankHP').value, 10),
+    incline: parseInt(document.getElementById('tankIncline').value, 10),
+    bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
+    turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10)
+  };
 }
 
 async function addTank() {
-  await fetch('/api/tanks', {
-    method: 'POST',
+  const payload = collectTankForm();
+  const method = editingTankIndex === null ? 'POST' : 'PUT';
+  const url = editingTankIndex === null ? '/api/tanks' : `/api/tanks/${editingTankIndex}`;
+  await fetch(url, {
+    method,
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: document.getElementById('tankName').value,
-      nation: document.getElementById('tankNation').value,
-      br: parseFloat(document.getElementById('tankBR').value),
-      armor: parseInt(document.getElementById('tankArmor').value, 10),
-      cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
-      ammo: Array.from(document.querySelectorAll('#tankAmmoOptions input:checked')).map(cb => cb.value),
-      crew: parseInt(document.getElementById('tankCrew').value, 10),
-      engineHp: parseInt(document.getElementById('tankHP').value, 10),
-      incline: parseInt(document.getElementById('tankIncline').value, 10),
-      bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
-      turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10),
-      class: document.getElementById('tankClass').value
-    })
+    body: JSON.stringify(payload)
   });
+  editingTankIndex = null;
+  document.getElementById('addTankBtn').innerText = 'Add Tank';
+  clearTankForm();
   loadData();
 }
 
-async function addAmmo() {
-  await fetch('/api/ammo', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      name: document.getElementById('ammoName').value,
-      type: document.getElementById('ammoType').value
-    })
-  });
+function editTank(i) {
+  const t = tanksCache[i];
+  document.getElementById('tankName').value = t.name;
+  document.getElementById('tankNation').value = t.nation;
+  document.getElementById('tankBR').value = t.br; document.getElementById('brVal').innerText = t.br;
+  document.getElementById('tankClass').value = t.class;
+  document.getElementById('tankArmor').value = t.armor; document.getElementById('armorVal').innerText = t.armor;
+  document.getElementById('tankCaliber').value = t.cannonCaliber; document.getElementById('caliberVal').innerText = t.cannonCaliber;
+  document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
+  document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
+  document.getElementById('tankHP').value = t.engineHp; document.getElementById('hpVal').innerText = t.engineHp;
+  document.getElementById('tankIncline').value = t.incline; document.getElementById('inclineVal').innerText = t.incline;
+  document.getElementById('tankBodyRot').value = t.bodyRotation; document.getElementById('bodyRotVal').innerText = t.bodyRotation;
+  document.getElementById('tankTurretRot').value = t.turretRotation; document.getElementById('turretRotVal').innerText = t.turretRotation;
+  editingTankIndex = i;
+  document.getElementById('addTankBtn').innerText = 'Update Tank';
+}
+
+async function deleteTank(i) {
+  await fetch(`/api/tanks/${i}`, { method: 'DELETE' });
   loadData();
+}
+
+function clearTankForm() {
+  document.getElementById('tankName').value = '';
+  document.getElementById('tankNation').value = 'Germany';
+  document.getElementById('tankBR').value = 1; document.getElementById('brVal').innerText = '';
+  document.getElementById('tankClass').value = 'Light/Scout';
+  document.getElementById('tankArmor').value = 10; document.getElementById('armorVal').innerText = '';
+  document.getElementById('tankCaliber').value = 20; document.getElementById('caliberVal').innerText = '';
+  document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = false; });
+  document.getElementById('tankCrew').value = 1; document.getElementById('crewVal').innerText = '';
+  document.getElementById('tankHP').value = 100; document.getElementById('hpVal').innerText = '';
+  document.getElementById('tankIncline').value = 2; document.getElementById('inclineVal').innerText = '';
+  document.getElementById('tankBodyRot').value = 1; document.getElementById('bodyRotVal').innerText = '';
+  document.getElementById('tankTurretRot').value = 1; document.getElementById('turretRotVal').innerText = '';
+}
+
+function collectAmmoForm() {
+  return {
+    name: document.getElementById('ammoName').value,
+    caliber: parseInt(document.getElementById('ammoCaliber').value, 10),
+    armorPen: parseInt(document.getElementById('ammoPen').value, 10),
+    type: document.getElementById('ammoType').value,
+    explosionRadius: parseInt(document.getElementById('ammoRadius').value, 10),
+    pen0: parseInt(document.getElementById('ammoPen0').value, 10),
+    pen100: parseInt(document.getElementById('ammoPen100').value, 10)
+  };
+}
+
+async function addAmmo() {
+  const payload = collectAmmoForm();
+  const method = editingAmmoIndex === null ? 'POST' : 'PUT';
+  const url = editingAmmoIndex === null ? '/api/ammo' : `/api/ammo/${editingAmmoIndex}`;
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  editingAmmoIndex = null;
+  document.getElementById('addAmmoBtn').innerText = 'Add Ammo';
+  clearAmmoForm();
+  loadData();
+}
+
+function editAmmo(i) {
+  const a = ammoCache[i];
+  document.getElementById('ammoName').value = a.name;
+  document.getElementById('ammoCaliber').value = a.caliber; document.getElementById('ammoCaliberVal').innerText = a.caliber;
+  document.getElementById('ammoPen').value = a.armorPen; document.getElementById('ammoPenVal').innerText = a.armorPen;
+  document.getElementById('ammoType').value = a.type;
+  document.getElementById('ammoRadius').value = a.explosionRadius; document.getElementById('ammoRadiusVal').innerText = a.explosionRadius;
+  document.getElementById('ammoPen0').value = a.pen0; document.getElementById('ammoPen0Val').innerText = a.pen0;
+  document.getElementById('ammoPen100').value = a.pen100; document.getElementById('ammoPen100Val').innerText = a.pen100;
+  editingAmmoIndex = i;
+  document.getElementById('addAmmoBtn').innerText = 'Update Ammo';
+}
+
+async function deleteAmmo(i) {
+  await fetch(`/api/ammo/${i}`, { method: 'DELETE' });
+  loadData();
+}
+
+function clearAmmoForm() {
+  document.getElementById('ammoName').value = '';
+  document.getElementById('ammoCaliber').value = 20; document.getElementById('ammoCaliberVal').innerText = '';
+  document.getElementById('ammoPen').value = 20; document.getElementById('ammoPenVal').innerText = '';
+  document.getElementById('ammoType').value = 'HE';
+  document.getElementById('ammoRadius').value = 0; document.getElementById('ammoRadiusVal').innerText = '';
+  document.getElementById('ammoPen0').value = 20; document.getElementById('ammoPen0Val').innerText = '';
+  document.getElementById('ammoPen100').value = 20; document.getElementById('ammoPen100Val').innerText = '';
 }
 
 async function setTerrain() {
