@@ -1,7 +1,8 @@
 // terrain-editor.js
 // Summary: Enhanced terrain editor with raised-cosine elevation brush and 3D preview.
 // Structure: state setup -> ground type management -> grid generation -> drawing -> raised-cosine painting -> 3D plot -> event wiring.
-// Usage: Imported by terrain.html; provides smooth terrain sculpting with adjustable X/Y size and peak height sliders.
+// Usage: Imported by terrain.html; provides smooth terrain sculpting with adjustable X/Y size and peak height sliders. Axes in the
+//         3D preview are measured in metres with a fixed 50 m grid spacing for clarity.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -18,7 +19,10 @@ let groundGrid = []; // 2D array storing ground type indices
 let elevationGrid = []; // 2D array storing elevation heights
 let gridWidth = 0; // in cells
 let gridHeight = 0; // in cells
+let mapWidthMeters = 0; // actual map width represented, in metres
+let mapHeightMeters = 0; // actual map height represented, in metres
 const cellPx = 10; // pixel size for each cell when drawing
+const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
 
 const canvas = document.getElementById('terrainCanvas');
@@ -71,14 +75,18 @@ function addGroundType() {
   renderGroundTypes();
 }
 
-// Generate grid based on map size in km (1 cell = 50m)
+// Generate grid based on map size in km (1 cell = 50 m)
 function generateGrid() {
   const type = document.getElementById('terrainType').value;
   const xKm = Number(document.getElementById('sizeX').value);
   const yKm = Number(document.getElementById('sizeY').value);
-  gridWidth = Math.max(1, Math.round((xKm * 1000) / 50));
-  gridHeight = Math.max(1, Math.round((yKm * 1000) / 50));
-  console.debug('Generating grid', { type, gridWidth, gridHeight });
+  const xMeters = xKm * 1000;
+  const yMeters = yKm * 1000;
+  gridWidth = Math.max(1, Math.round(xMeters / cellMeters));
+  gridHeight = Math.max(1, Math.round(yMeters / cellMeters));
+  mapWidthMeters = gridWidth * cellMeters;
+  mapHeightMeters = gridHeight * cellMeters;
+  console.debug('Generating grid', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
   canvas.width = gridWidth * cellPx;
@@ -174,7 +182,19 @@ function update3DPlot() {
     groundTypes.length === 1 ? 0 : i / (groundTypes.length - 1),
     g.color
   ]);
+  const xCoords = Array.from({ length: gridWidth }, (_, i) => i * cellMeters);
+  const yCoords = Array.from({ length: gridHeight }, (_, i) => i * cellMeters);
+  const layout = {
+    margin: { l: 0, r: 0, t: 0, b: 0 },
+    scene: {
+      xaxis: { title: 'X (m)', range: [0, mapWidthMeters], dtick: cellMeters },
+      yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters },
+      zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters }
+    }
+  };
   Plotly.newPlot('terrain3d', [{
+    x: xCoords,
+    y: yCoords,
     z: elevationGrid,
     surfacecolor: colorIndices,
     colorscale,
@@ -182,7 +202,7 @@ function update3DPlot() {
     cmax: groundTypes.length - 1,
     type: 'surface',
     showscale: false
-  }], { margin: { l: 0, r: 0, t: 0, b: 0 } });
+  }], layout);
 }
 
 // Event wiring
