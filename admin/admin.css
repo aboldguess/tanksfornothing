@@ -1,5 +1,5 @@
 /* admin.css
-   Summary: Styling for Tanks admin pages with tank-themed cards, forms and sidebar navigation.
+   Summary: Styling for Tanks admin pages with tank-themed cards, forms, sidebar navigation and terrain tables.
    Structure: flex layout with sidebar, reusable card styles and chart container for statistics.
    Usage: Linked by all files in /admin for admin panel styling. */
 
@@ -131,4 +131,25 @@ body {
   padding: 0 2px;
   border-radius: 50%;
   pointer-events: all;
+}
+
+/* Table listing of saved terrains with thumbnail previews */
+#terrainTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+#terrainTable th,
+#terrainTable td {
+  border: 1px solid #2b361e;
+  padding: 4px;
+  text-align: left;
+}
+.terrain-thumb {
+  width: 80px;
+  height: 60px;
+}
+.current-row {
+  outline: 2px solid #fff;
 }

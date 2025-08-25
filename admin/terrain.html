@@ -1,6 +1,7 @@
 <!-- terrain.html
      Summary: Admin page for managing terrain presets and interactive terrain editing.
-     Structure: login, navbar with profile menu, sidebar navigation, terrain CRUD card and a grid-based terrain editor.
+     Structure: login, navbar with profile menu, sidebar navigation, table of maps with thumbnails
+               and an expandable grid-based terrain editor.
      Usage: Visit /admin/terrain.html after logging in to manage terrains and design custom maps. -->
 <!DOCTYPE html>
 <html lang="en">
@@ -44,17 +45,23 @@
     <main id="mainContent">
       <section class="card">
         <h2>Terrain</h2>
-        <p class="instructions">Select a terrain then restart the game to apply.</p>
-        <div id="terrainList"></div>
-        <input id="terrainName" placeholder="Name">
-        <button id="addTerrainBtn">Add Terrain</button>
+        <p class="instructions">Manage saved maps. Click Add to create a new map or Edit to modify.</p>
+        <button id="newTerrainBtn">Add Map</button>
+        <table id="terrainTable">
+          <thead>
+            <tr><th>Preview</th><th>Type</th><th>Size (km)</th><th>Name</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="terrainList"></tbody>
+        </table>
         <button id="restartBtn">Restart Game</button>
       </section>
 
-      <section class="card" id="editorCard">
+      <section class="card" id="editorCard" style="display:none">
         <h2>Terrain Editor</h2>
-        <p class="instructions">Choose a terrain type and size then paint ground and elevation. Left click raises, right click lowers terrain.</p>
+        <p class="instructions">Fill in map details then paint ground and elevation. Left click raises, right click lowers terrain.</p>
         <div id="editorControls">
+          <label for="terrainName">Name</label>
+          <input id="terrainName" placeholder="Name">
           <label for="terrainType">Terrain Type</label>
           <select id="terrainType">
             <option value="snow">Snow</option>
@@ -93,6 +100,8 @@
           <label for="groundViscosity">Viscosity (0-1)</label>
           <input id="groundViscosity" type="number" step="0.1" min="0" max="1" value="0.5">
           <button id="addGroundBtn">Add Ground Type</button>
+          <button id="saveTerrainBtn">Save Map</button>
+          <button id="cancelEditBtn">Cancel</button>
         </div>
         <div id="editorViews">
           <canvas id="terrainCanvas" class="terrain-canvas"></canvas>
