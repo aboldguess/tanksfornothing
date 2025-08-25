@@ -1,7 +1,7 @@
 // terrain-editor.js
-// Summary: Provides a simple grid-based terrain editor for the admin panel.
-// Structure: state setup -> ground type management -> grid generation & drawing -> event wiring.
-// Usage: Imported by terrain.html; allows admins to set map size, manage ground types and paint them onto a 50m grid.
+// Summary: Enhanced terrain editor with elevation painting, brush tools and 3D preview.
+// Structure: state setup -> ground type management -> grid generation -> drawing -> 3D plot -> event wiring.
+// Usage: Imported by terrain.html; allows admins to craft terrain with ground types and height maps.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -14,14 +14,17 @@ const defaultGroundTypes = [
 
 let groundTypes = [...defaultGroundTypes];
 let currentGround = 0; // index into groundTypes currently selected for painting
-let grid = []; // 2D array storing ground type indices
+let groundGrid = []; // 2D array storing ground type indices
+let elevationGrid = []; // 2D array storing elevation heights
 let gridWidth = 0; // in cells
 let gridHeight = 0; // in cells
 const cellPx = 10; // pixel size for each cell when drawing
+const maxHeight = 100; // max elevation value used for shading
 
 const canvas = document.getElementById('terrainCanvas');
 const ctx = canvas.getContext('2d');
 
+// Render available ground types as selectable buttons
 function renderGroundTypes() {
   const list = document.getElementById('groundTypesList');
   list.innerHTML = '';
@@ -41,6 +44,7 @@ function renderGroundTypes() {
     btn.appendChild(del);
     list.appendChild(btn);
   });
+  update3DPlot();
 }
 
 function selectGroundType(i) {
@@ -67,6 +71,7 @@ function addGroundType() {
   renderGroundTypes();
 }
 
+// Generate grid based on map size in km (1 cell = 50m)
 function generateGrid() {
   const type = document.getElementById('terrainType').value;
   const xKm = Number(document.getElementById('sizeX').value);
@@ -74,12 +79,15 @@ function generateGrid() {
   gridWidth = Math.max(1, Math.round((xKm * 1000) / 50));
   gridHeight = Math.max(1, Math.round((yKm * 1000) / 50));
   console.debug('Generating grid', { type, gridWidth, gridHeight });
-  grid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
+  groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
+  elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
   canvas.width = gridWidth * cellPx;
   canvas.height = gridHeight * cellPx;
   drawGrid();
+  update3DPlot();
 }
 
+// Draw entire grid to canvas
 function drawGrid() {
   for (let y = 0; y < gridHeight; y++) {
     for (let x = 0; x < gridWidth; x++) {
@@ -88,28 +96,100 @@ function drawGrid() {
   }
 }
 
+// Lighten ground color based on elevation for quick visual feedback
+function shadeColor(hex, height) {
+  const num = parseInt(hex.slice(1), 16);
+  let r = num >> 16;
+  let g = (num >> 8) & 0xff;
+  let b = num & 0xff;
+  const factor = 0.5 + (height / (2 * maxHeight));
+  r = Math.min(255, Math.round(r * factor));
+  g = Math.min(255, Math.round(g * factor));
+  b = Math.min(255, Math.round(b * factor));
+  return `rgb(${r},${g},${b})`;
+}
+
 function drawCell(x, y) {
-  const gt = groundTypes[grid[y][x]];
-  ctx.fillStyle = gt.color;
+  const gt = groundTypes[groundGrid[y][x]];
+  ctx.fillStyle = shadeColor(gt.color, elevationGrid[y][x]);
   ctx.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
   ctx.strokeStyle = '#00000033';
   ctx.strokeRect(x * cellPx, y * cellPx, cellPx, cellPx);
 }
 
-function paint(e) {
+// Apply brush of given size and shape around centre cell
+function applyBrush(cx, cy, cb) {
+  const size = Number(document.getElementById('brushSize').value);
+  const shape = document.getElementById('brushShape').value;
+  for (let dy = -size + 1; dy < size; dy++) {
+    for (let dx = -size + 1; dx < size; dx++) {
+      const x = cx + dx;
+      const y = cy + dy;
+      if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) continue;
+      if (shape === 'circle' && dx * dx + dy * dy >= size * size) continue;
+      cb(x, y);
+    }
+  }
+}
+
+function handlePaint(e) {
   if (gridWidth === 0 || gridHeight === 0) return;
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX - rect.left) / cellPx);
-  const y = Math.floor((e.clientY - rect.top) / cellPx);
-  if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) return;
-  grid[y][x] = currentGround;
-  drawCell(x, y);
+  const cx = Math.floor((e.clientX - rect.left) / cellPx);
+  const cy = Math.floor((e.clientY - rect.top) / cellPx);
+  const mode = document.getElementById('mode').value;
+  const button = e.button;
+  applyBrush(cx, cy, (x, y) => {
+    if (mode === 'ground') {
+      groundGrid[y][x] = currentGround;
+    } else {
+      const delta = button === 2 ? -1 : 1;
+      elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, elevationGrid[y][x] + delta));
+    }
+    drawCell(x, y);
+  });
+  if (mode === 'elevation') update3DPlot();
+}
+
+// Fill elevation grid with random heights for quick terrain generation
+function randomizeTerrain() {
+  if (gridWidth === 0 || gridHeight === 0) return;
+  elevationGrid = Array.from({ length: gridHeight }, () =>
+    Array.from({ length: gridWidth }, () => Math.random() * maxHeight)
+  );
+  drawGrid();
+  update3DPlot();
+}
+
+// Render 3D surface using Plotly with ground type colors
+function update3DPlot() {
+  if (!window.Plotly || gridWidth === 0 || gridHeight === 0) return;
+  const colorIndices = groundGrid.map(row => row.map(i => i));
+  const colorscale = groundTypes.map((g, i) => [
+    groundTypes.length === 1 ? 0 : i / (groundTypes.length - 1),
+    g.color
+  ]);
+  Plotly.newPlot('terrain3d', [{
+    z: elevationGrid,
+    surfacecolor: colorIndices,
+    colorscale,
+    cmin: 0,
+    cmax: groundTypes.length - 1,
+    type: 'surface',
+    showscale: false
+  }], { margin: { l: 0, r: 0, t: 0, b: 0 } });
 }
 
 // Event wiring
 renderGroundTypes();
-
 document.getElementById('addGroundBtn').addEventListener('click', addGroundType);
 document.getElementById('generateBtn').addEventListener('click', generateGrid);
-canvas.addEventListener('mousedown', paint);
+document.getElementById('randomizeBtn').addEventListener('click', randomizeTerrain);
+
+let mouseDown = false;
+canvas.addEventListener('mousedown', (e) => { mouseDown = true; handlePaint(e); });
+canvas.addEventListener('mousemove', (e) => { if (mouseDown) handlePaint(e); });
+canvas.addEventListener('mouseup', () => { mouseDown = false; });
+canvas.addEventListener('mouseleave', () => { mouseDown = false; });
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 

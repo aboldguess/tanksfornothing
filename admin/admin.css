@@ -6,6 +6,11 @@
 /* Admin pages use a clean flex layout with a sidebar and card-style forms.
    Each form element is block-level for clarity and vertical alignment. */
 
+/* Allow admin pages to scroll while the game view remains fixed */
+body {
+  overflow: auto;
+}
+
 #app {
   padding-top: 60px;
   display: flex;
@@ -73,6 +78,33 @@
   border: 1px solid #2b361e;
   margin-top: 10px;
   cursor: crosshair;
+}
+
+/* Layout for terrain editor controls and previews */
+#editorCard {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+#editorControls {
+  flex: 1;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+#editorViews {
+  flex: 2;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#editorViews canvas,
+#editorViews #terrain3d {
+  width: 100%;
+  height: 300px;
 }
 
 .ground-types button {
