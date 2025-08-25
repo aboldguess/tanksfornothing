@@ -1,26 +1,55 @@
 /* admin.css
-   Summary: Styling for Tanks admin dashboard.
+   Summary: Styling for Tanks admin dashboard with tank-themed cards and forms.
    Structure: grid layout, cards and chart container for statistics.
    Usage: Linked by admin.html for admin panel styling. */
+
+/* The admin dashboard is laid out with a grid of cards on a themed
+   military background. Cards host the CRUD forms; each form element is
+   block-level for clarity and vertical alignment. */
 
 #dashboard {
   padding: 60px 20px 20px;
 }
+
 .dashboard-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 20px;
 }
+
 .card {
-  background: #fff;
+  background: #3e4b2e; /* dark olive befitting tank theme */
+  color: #f5f5f5;
   padding: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+  border: 1px solid #2b361e;
 }
+
 .instructions {
   margin-bottom: 20px;
 }
+
 .chart-container {
   position: relative;
   height: 200px;
+}
+
+/* Ensure each form control sits on its own line for readability */
+
+.card input:not([type="checkbox"]),
+.card select,
+.card button,
+.card label,
+.card .checkbox-group {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+/* Checkbox groups list ammo types vertically */
+.card .checkbox-group label {
+  display: block;
+  width: auto;
+  margin-bottom: 4px;
 }
