@@ -58,7 +58,7 @@
 
       <section class="card" id="editorCard" style="display:none">
         <h2>Terrain Editor</h2>
-        <p class="instructions">Fill in map details then paint ground and elevation. Left click raises, right click lowers terrain.</p>
+
         <div id="editorControls">
           <label for="terrainName">Name</label>
           <input id="terrainName" placeholder="Name">
@@ -80,13 +80,12 @@
             <option value="ground">Ground</option>
             <option value="elevation">Elevation</option>
           </select>
-          <label for="brushSize">Brush Size (cells)</label>
-          <input type="number" id="brushSize" min="1" max="10" value="1">
-          <label for="brushShape">Brush Shape</label>
-          <select id="brushShape">
-            <option value="square">Square</option>
-            <option value="circle">Circle</option>
-          </select>
+          <label for="brushSizeX">Brush Size X (cells)</label>
+          <input type="range" id="brushSizeX" min="1" max="10" value="2">
+          <label for="brushSizeY">Brush Size Y (cells)</label>
+          <input type="range" id="brushSizeY" min="1" max="10" value="2">
+          <label for="brushSizeZ">Brush Height</label>
+          <input type="range" id="brushSizeZ" min="1" max="20" value="5">
           <button id="randomizeBtn">Randomize Terrain</button>
 
           <h3>Ground Types</h3>

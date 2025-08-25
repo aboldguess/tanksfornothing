@@ -1,7 +1,7 @@
 // terrain-editor.js
-// Summary: Enhanced terrain editor with elevation painting, brush tools and 3D preview.
-// Structure: state setup -> ground type management -> grid generation -> drawing -> 3D plot -> event wiring.
-// Usage: Imported by terrain.html; allows admins to craft terrain with ground types and height maps.
+// Summary: Enhanced terrain editor with raised-cosine elevation brush and 3D preview.
+// Structure: state setup -> ground type management -> grid generation -> drawing -> raised-cosine painting -> 3D plot -> event wiring.
+// Usage: Imported by terrain.html; provides smooth terrain sculpting with adjustable X/Y size and peak height sliders.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -117,17 +117,21 @@ function drawCell(x, y) {
   ctx.strokeRect(x * cellPx, y * cellPx, cellPx, cellPx);
 }
 
-// Apply brush of given size and shape around centre cell
-function applyBrush(cx, cy, cb) {
-  const size = Number(document.getElementById('brushSize').value);
-  const shape = document.getElementById('brushShape').value;
-  for (let dy = -size + 1; dy < size; dy++) {
-    for (let dx = -size + 1; dx < size; dx++) {
+// Apply raised-cosine brush using X/Y size sliders and peak height
+function applyRaisedCosineBrush(cx, cy, cb) {
+  const rx = Number(document.getElementById('brushSizeX').value);
+  const ry = Number(document.getElementById('brushSizeY').value);
+  const peak = Number(document.getElementById('brushSizeZ').value);
+  console.debug('Brush params', { cx, cy, rx, ry, peak });
+  for (let dy = -ry; dy <= ry; dy++) {
+    for (let dx = -rx; dx <= rx; dx++) {
       const x = cx + dx;
       const y = cy + dy;
       if (x < 0 || y < 0 || x >= gridWidth || y >= gridHeight) continue;
-      if (shape === 'circle' && dx * dx + dy * dy >= size * size) continue;
-      cb(x, y);
+      const dist = Math.sqrt((dx / rx) ** 2 + (dy / ry) ** 2);
+      if (dist > 1) continue; // outside ellipse
+      const influence = peak * 0.5 * (1 + Math.cos(Math.PI * dist));
+      cb(x, y, influence);
     }
   }
 }
@@ -139,12 +143,13 @@ function handlePaint(e) {
   const cy = Math.floor((e.clientY - rect.top) / cellPx);
   const mode = document.getElementById('mode').value;
   const button = e.button;
-  applyBrush(cx, cy, (x, y) => {
+  applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
     if (mode === 'ground') {
       groundGrid[y][x] = currentGround;
     } else {
-      const delta = button === 2 ? -1 : 1;
-      elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, elevationGrid[y][x] + delta));
+      const sign = button === 2 ? -1 : 1;
+      const newHeight = elevationGrid[y][x] + sign * influence;
+      elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
     }
     drawCell(x, y);
   });
