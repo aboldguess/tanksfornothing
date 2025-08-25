@@ -1,10 +1,11 @@
 // terrain-editor.js
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
-//          perspective control, shading, Perlin-noise-based terrain generation and capture-the-flag
-//          position placement.
+//          perspective control, shading, Perlin-noise-based terrain generation (with adjustable scale
+//          and amplitude controls) and capture-the-flag position placement.
 // Structure: state setup -> ground type management -> terrain initialization -> raised-cosine painting ->
 //            Perlin noise generation -> 3D plot with camera controls -> event wiring.
-// Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and camera settings are user configurable.
+// Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and
+//        camera settings are user configurable.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -218,14 +219,17 @@ class PerlinNoise {
 function generatePerlinTerrain() {
   if (gridWidth === 0 || gridHeight === 0) return;
   const noise = new PerlinNoise();
-  const scale = 10; // larger values flatten the terrain
+  const scaleInput = Number(document.getElementById('perlinScale').value);
+  const amplitudeInput = Number(document.getElementById('perlinAmplitude').value);
+  const scale = Math.max(1, scaleInput || 10);
+  const amplitude = Math.max(1, Math.min(maxHeight, amplitudeInput || maxHeight));
   elevationGrid = Array.from({ length: gridHeight }, (_, y) =>
     Array.from({ length: gridWidth }, (_, x) => {
       const value = noise.noise(x / scale, y / scale, 0);
-      return ((value + 1) / 2) * maxHeight; // normalize to [0, maxHeight]
+      return ((value + 1) / 2) * amplitude; // normalize to [0, amplitude]
     })
   );
-  console.debug('Perlin terrain generated', { gridWidth, gridHeight });
+  console.debug('Perlin terrain generated', { gridWidth, gridHeight, scale, amplitude });
   update3DPlot();
 }
 
