@@ -89,8 +89,11 @@ function generateGrid() {
   console.debug('Generating grid', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+  // Set drawing buffer dimensions and mirror them as CSS sizes so grid cells remain square
   canvas.width = gridWidth * cellPx;
   canvas.height = gridHeight * cellPx;
+  canvas.style.width = `${canvas.width}px`;
+  canvas.style.height = `${canvas.height}px`;
   drawGrid();
   update3DPlot();
 }
@@ -147,8 +150,11 @@ function applyRaisedCosineBrush(cx, cy, cb) {
 function handlePaint(e) {
   if (gridWidth === 0 || gridHeight === 0) return;
   const rect = canvas.getBoundingClientRect();
-  const cx = Math.floor((e.clientX - rect.left) / cellPx);
-  const cy = Math.floor((e.clientY - rect.top) / cellPx);
+  // Account for potential CSS scaling so clicks map to the correct cell
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const cx = Math.floor(((e.clientX - rect.left) * scaleX) / cellPx);
+  const cy = Math.floor(((e.clientY - rect.top) * scaleY) / cellPx);
   const mode = document.getElementById('mode').value;
   const button = e.button;
   applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
@@ -217,9 +223,24 @@ document.getElementById('randomizeBtn').addEventListener('click', randomizeTerra
 document.getElementById('showAxes').addEventListener('change', update3DPlot);
 
 let mouseDown = false;
-canvas.addEventListener('mousedown', (e) => { mouseDown = true; handlePaint(e); });
-canvas.addEventListener('mousemove', (e) => { if (mouseDown) handlePaint(e); });
-canvas.addEventListener('mouseup', () => { mouseDown = false; });
+canvas.addEventListener('mousedown', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  mouseDown = true;
+  handlePaint(e);
+});
+canvas.addEventListener('mousemove', (e) => {
+  if (mouseDown) {
+    e.preventDefault();
+    e.stopPropagation();
+    handlePaint(e);
+  }
+});
+canvas.addEventListener('mouseup', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  mouseDown = false;
+});
 canvas.addEventListener('mouseleave', () => { mouseDown = false; });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
