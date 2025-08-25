@@ -349,8 +349,12 @@ function init() {
   // Build HUD overlay to display runtime metrics
   initHUD();
 
+  // Only engage pointer lock once the lobby is hidden so menu interactions
+  // don't immediately start controlling the tank.
   document.body.addEventListener('click', () => {
-    document.body.requestPointerLock();
+    if (lobby.style.display === 'none' && !document.pointerLockElement) {
+      document.body.requestPointerLock();
+    }
   });
 
   document.addEventListener('pointerlockchange', () => {
@@ -380,8 +384,11 @@ function init() {
     cameraDistance = Math.min(Math.max(cameraDistance + e.deltaY * 0.01, 5), 20);
   });
 
+  // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
-    if (socket && selectedAmmo) socket.emit('fire', selectedAmmo.name);
+    if (document.pointerLockElement && socket && selectedAmmo) {
+      socket.emit('fire', selectedAmmo.name);
+    }
   });
 
   animate();
