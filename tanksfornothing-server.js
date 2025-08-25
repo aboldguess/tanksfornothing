@@ -1,7 +1,7 @@
 // tanksfornothing-server.js
 // Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
 // This script sets up an Express web server with Socket.IO for real-time tank position updates and persists admin-defined tanks,
-// nations and terrain selections to disk.
+// nations and terrain details to disk.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores -> persistence helpers -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
 // ---------------------------------------------------------------------------
@@ -24,7 +24,8 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 const players = new Map(); // socket.id -> player state
 let tanks = []; // CRUD via admin, loaded from JSON file
 const ammo = []; // CRUD via admin
-let terrains = ['flat']; // CRUD via admin, loaded from JSON file
+// Terrains now include metadata so map listings can show thumbnails and size
+let terrains = [{ name: 'flat', type: 'default', size: { x: 1, y: 1 } }];
 let currentTerrain = 0; // index into terrains
 let terrain = 'flat'; // currently active terrain name
 let baseBR = null; // Battle Rating of first player
@@ -90,20 +91,24 @@ async function loadTerrains() {
   try {
     const text = await fs.readFile(TERRAIN_FILE, 'utf8');
     const json = JSON.parse(text);
-    if (Array.isArray(json.terrains)) terrains = json.terrains;
+    if (Array.isArray(json.terrains)) {
+      terrains = json.terrains.map(t =>
+        typeof t === 'string' ? { name: t, type: 'default', size: { x: 1, y: 1 } } : t
+      );
+    }
     if (typeof json.current === 'number') currentTerrain = json.current;
   } catch {
     console.warn('No existing terrain data, starting with default');
   }
-  terrain = terrains[currentTerrain] || 'flat';
+  terrain = terrains[currentTerrain]?.name || 'flat';
 }
 
 async function saveTerrains() {
   await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
   const data = {
     _comment: [
-      'Summary: Persisted terrain names and selected index for Tanks for Nothing.',
-      'Structure: JSON object with _comment array, current index and terrains list.',
+      'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
+      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size}.',
       'Usage: Managed automatically by server; do not edit manually.'
     ],
     current: currentTerrain,
@@ -294,8 +299,14 @@ app.delete('/api/ammo/:idx', requireAdmin, (req, res) => {
 app.get('/api/terrains', (req, res) => res.json({ terrains, current: currentTerrain }));
 app.post('/api/terrains', requireAdmin, async (req, res) => {
   const name = (req.body.name || '').trim();
+  const type = (req.body.type || '').trim();
+  const size = req.body.size;
   if (!name) return res.status(400).json({ error: 'invalid name' });
-  terrains.push(name);
+  if (!type) return res.status(400).json({ error: 'invalid type' });
+  if (!size || typeof size.x !== 'number' || typeof size.y !== 'number') {
+    return res.status(400).json({ error: 'invalid size' });
+  }
+  terrains.push({ name, type, size });
   await saveTerrains();
   res.json({ success: true });
 });
@@ -303,8 +314,12 @@ app.put('/api/terrains/:idx', requireAdmin, async (req, res) => {
   const idx = Number(req.params.idx);
   if (!terrains[idx]) return res.status(404).json({ error: 'not found' });
   const name = (req.body.name || '').trim();
-  if (!name) return res.status(400).json({ error: 'invalid name' });
-  terrains[idx] = name;
+  const type = (req.body.type || '').trim();
+  const size = req.body.size;
+  if (!name || !type || typeof size?.x !== 'number' || typeof size?.y !== 'number') {
+    return res.status(400).json({ error: 'invalid data' });
+  }
+  terrains[idx] = { name, type, size };
   await saveTerrains();
   res.json({ success: true });
 });
@@ -313,7 +328,7 @@ app.delete('/api/terrains/:idx', requireAdmin, async (req, res) => {
   if (idx < 0 || idx >= terrains.length) return res.status(404).json({ error: 'not found' });
   terrains.splice(idx, 1);
   if (currentTerrain >= terrains.length) currentTerrain = 0;
-  terrain = terrains[currentTerrain] || 'flat';
+  terrain = terrains[currentTerrain]?.name || 'flat';
   await saveTerrains();
   res.json({ success: true });
 });
@@ -322,7 +337,7 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
   const idx = Number(req.body.index);
   if (!terrains[idx]) return res.status(404).json({ error: 'not found' });
   currentTerrain = idx;
-  terrain = terrains[currentTerrain];
+  terrain = terrains[currentTerrain].name;
   await saveTerrains();
   players.clear();
   baseBR = null;
