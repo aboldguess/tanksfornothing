@@ -78,9 +78,10 @@ const defaultTank = {
 const MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 const MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 const ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+// Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
+const ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
-let freelook = false;
 let cameraDistance = 10;
 const keys = {};
 
@@ -244,11 +245,9 @@ function init() {
   window.addEventListener('keydown', (e) => {
     keys[e.key.toLowerCase()] = true;
     if (e.key === 'v') cameraMode = cameraMode === 'third' ? 'first' : 'third';
-    if (e.key.toLowerCase() === 'c') freelook = true;
   });
   window.addEventListener('keyup', (e) => {
     keys[e.key.toLowerCase()] = false;
-    if (e.key.toLowerCase() === 'c') freelook = false;
   });
 
   window.addEventListener('wheel', (e) => {
@@ -265,8 +264,7 @@ function init() {
 
 function onMouseMove(e) {
   const sensitivity = 0.002;
-  tank.rotation.y -= e.movementX * sensitivity;
-  if (!freelook) turret.rotation.y -= e.movementX * sensitivity;
+  turret.rotation.y -= e.movementX * sensitivity;
   turret.rotation.x = THREE.MathUtils.clamp(
     turret.rotation.x - e.movementY * sensitivity,
     -0.5,
@@ -276,18 +274,27 @@ function onMouseMove(e) {
 function animate() {
   requestAnimationFrame(animate);
 
-  // Determine desired forward speed in m/s based on input
-  let targetSpeed = 0;
-  if (keys['w']) targetSpeed = MAX_SPEED;
-  else if (keys['s']) targetSpeed = -MAX_REVERSE_SPEED;
-  if (keys[' ']) targetSpeed = 0; // brake
+  // Frame timing used for physics and acceleration integration
+  const delta = clock.getDelta();
 
-  // Smoothly approach the target speed for simple acceleration
-  currentSpeed += (targetSpeed - currentSpeed) * 0.1;
+  // Determine acceleration based on key input. When no key is pressed,
+  // apply a small opposing acceleration to simulate friction.
+  let accel = 0;
+  if (keys['w']) accel = ACCELERATION;
+  else if (keys['s']) accel = -ACCELERATION;
+  else if (currentSpeed > 0) accel = -ACCELERATION;
+  else if (currentSpeed < 0) accel = ACCELERATION;
 
-  // Apply linear velocity along tank's forward vector
-  const yaw = tank.rotation.y;
-  const forward = new CANNON.Vec3(Math.sin(yaw), 0, -Math.cos(yaw));
+  currentSpeed = THREE.MathUtils.clamp(
+    currentSpeed + accel * delta,
+    -MAX_REVERSE_SPEED,
+    MAX_SPEED
+  );
+  if (keys[' ']) currentSpeed = 0; // instant brake
+
+  // Apply linear velocity along the chassis body's forward vector
+  const forward = new CANNON.Vec3(0, 0, -1);
+  chassisBody.quaternion.vmult(forward, forward);
   const vy = chassisBody.velocity.y;
   chassisBody.velocity.set(forward.x * currentSpeed, vy, forward.z * currentSpeed);
 
@@ -301,7 +308,6 @@ function animate() {
   }
 
   // Step physics world with fixed timestep
-  const delta = clock.getDelta();
   world.step(1 / 60, delta, 3);
 
   // Sync Three.js mesh with physics body
