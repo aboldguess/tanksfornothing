@@ -40,6 +40,8 @@ async function loadData() {
   document.getElementById('tankList').innerText = JSON.stringify(tanks);
   document.getElementById('ammoList').innerText = JSON.stringify(ammo);
   document.getElementById('terrainName').innerText = terrain.terrain;
+  const ammoDiv = document.getElementById('tankAmmoOptions');
+  ammoDiv.innerHTML = ammo.map(a => `<label><input type="checkbox" value="${a.name}">${a.name}</label>`).join('');
 }
 
 async function addTank() {
@@ -49,7 +51,16 @@ async function addTank() {
     body: JSON.stringify({
       name: document.getElementById('tankName').value,
       nation: document.getElementById('tankNation').value,
-      br: parseFloat(document.getElementById('tankBR').value)
+      br: parseFloat(document.getElementById('tankBR').value),
+      armor: parseInt(document.getElementById('tankArmor').value, 10),
+      cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
+      ammo: Array.from(document.querySelectorAll('#tankAmmoOptions input:checked')).map(cb => cb.value),
+      crew: parseInt(document.getElementById('tankCrew').value, 10),
+      engineHp: parseInt(document.getElementById('tankHP').value, 10),
+      incline: parseInt(document.getElementById('tankIncline').value, 10),
+      bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
+      turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10),
+      class: document.getElementById('tankClass').value
     })
   });
   loadData();
