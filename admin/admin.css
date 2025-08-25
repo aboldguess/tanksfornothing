@@ -1,5 +1,5 @@
 /* admin.css
-   Summary: Styling for Tanks admin pages with tank-themed cards, forms, sidebar navigation and terrain tables.
+   Summary: Styling for Tanks admin pages with tank-themed cards, forms, sidebar navigation, terrain tables and 3D terrain editor layout.
    Structure: flex layout with sidebar, reusable card styles and chart container for statistics.
    Usage: Linked by all files in /admin for admin panel styling. */
 
@@ -73,13 +73,6 @@ body {
   margin-bottom: 4px;
 }
 
-/* Terrain editor specific styling */
-.terrain-canvas {
-  border: 1px solid #2b361e;
-  margin-top: 10px;
-  cursor: crosshair;
-}
-
 /* Layout for terrain editor controls and previews */
 #editorCard {
   display: flex;
@@ -99,11 +92,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-#editorViews canvas {
-  /* allow JS to control exact pixel size; prevent blurriness */
-  image-rendering: pixelated;
 }
 #editorViews #terrain3d {
   width: 100%;

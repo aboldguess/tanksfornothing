@@ -1,8 +1,8 @@
 // terrain-editor.js
-// Summary: Enhanced terrain editor with raised-cosine elevation brush, proportional 3D preview and axis toggle.
-// Structure: state setup -> ground type management -> grid generation -> drawing -> raised-cosine painting -> 3D plot -> event wiring.
-// Usage: Imported by terrain.html; provides smooth terrain sculpting with adjustable X/Y size and peak height sliders. Axes in the
-//         3D preview are measured in metres with a fixed 50 m grid spacing and can be hidden for a clean view.
+// Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
+//          perspective control and shading.
+// Structure: state setup -> ground type management -> grid generation -> raised-cosine painting -> 3D plot with camera controls -> event wiring.
+// Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and camera settings are user configurable.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -21,12 +21,8 @@ let gridWidth = 0; // in cells
 let gridHeight = 0; // in cells
 let mapWidthMeters = 0; // actual map width represented, in metres
 let mapHeightMeters = 0; // actual map height represented, in metres
-const cellPx = 10; // pixel size for each cell when drawing
 const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
-
-const canvas = document.getElementById('terrainCanvas');
-const ctx = canvas.getContext('2d');
 
 // Render available ground types as selectable buttons
 function renderGroundTypes() {
@@ -61,7 +57,6 @@ function deleteGroundType(i) {
   groundTypes.splice(i, 1);
   if (currentGround >= groundTypes.length) currentGround = 0;
   renderGroundTypes();
-  drawGrid();
 }
 
 function addGroundType() {
@@ -89,43 +84,7 @@ function generateGrid() {
   console.debug('Generating grid', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
-  // Set drawing buffer dimensions and mirror them as CSS sizes so grid cells remain square
-  canvas.width = gridWidth * cellPx;
-  canvas.height = gridHeight * cellPx;
-  canvas.style.width = `${canvas.width}px`;
-  canvas.style.height = `${canvas.height}px`;
-  drawGrid();
   update3DPlot();
-}
-
-// Draw entire grid to canvas
-function drawGrid() {
-  for (let y = 0; y < gridHeight; y++) {
-    for (let x = 0; x < gridWidth; x++) {
-      drawCell(x, y);
-    }
-  }
-}
-
-// Lighten ground color based on elevation for quick visual feedback
-function shadeColor(hex, height) {
-  const num = parseInt(hex.slice(1), 16);
-  let r = num >> 16;
-  let g = (num >> 8) & 0xff;
-  let b = num & 0xff;
-  const factor = 0.5 + (height / (2 * maxHeight));
-  r = Math.min(255, Math.round(r * factor));
-  g = Math.min(255, Math.round(g * factor));
-  b = Math.min(255, Math.round(b * factor));
-  return `rgb(${r},${g},${b})`;
-}
-
-function drawCell(x, y) {
-  const gt = groundTypes[groundGrid[y][x]];
-  ctx.fillStyle = shadeColor(gt.color, elevationGrid[y][x]);
-  ctx.fillRect(x * cellPx, y * cellPx, cellPx, cellPx);
-  ctx.strokeStyle = '#00000033';
-  ctx.strokeRect(x * cellPx, y * cellPx, cellPx, cellPx);
 }
 
 // Apply raised-cosine brush using X/Y size sliders and peak height
@@ -147,16 +106,14 @@ function applyRaisedCosineBrush(cx, cy, cb) {
   }
 }
 
-function handlePaint(e) {
+function handlePlotPaint(e) {
   if (gridWidth === 0 || gridHeight === 0) return;
-  const rect = canvas.getBoundingClientRect();
-  // Account for potential CSS scaling so clicks map to the correct cell
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-  const cx = Math.floor(((e.clientX - rect.left) * scaleX) / cellPx);
-  const cy = Math.floor(((e.clientY - rect.top) * scaleY) / cellPx);
+  const point = e.points?.[0];
+  if (!point) return;
+  const cx = Math.floor(point.x / cellMeters);
+  const cy = Math.floor(point.y / cellMeters);
   const mode = document.getElementById('mode').value;
-  const button = e.button;
+  const button = e.event.button;
   applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
     if (mode === 'ground') {
       groundGrid[y][x] = currentGround;
@@ -165,9 +122,8 @@ function handlePaint(e) {
       const newHeight = elevationGrid[y][x] + sign * influence;
       elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
     }
-    drawCell(x, y);
   });
-  if (mode === 'elevation') update3DPlot();
+  update3DPlot();
 }
 
 // Fill elevation grid with random heights for quick terrain generation
@@ -176,7 +132,6 @@ function randomizeTerrain() {
   elevationGrid = Array.from({ length: gridHeight }, () =>
     Array.from({ length: gridWidth }, () => Math.random() * maxHeight)
   );
-  drawGrid();
   update3DPlot();
 }
 
@@ -191,15 +146,32 @@ function update3DPlot() {
   const xCoords = Array.from({ length: gridWidth }, (_, i) => i * cellMeters);
   const yCoords = Array.from({ length: gridHeight }, (_, i) => i * cellMeters);
   const showAxes = document.getElementById('showAxes').checked; // user toggle for axis visibility
+  const view = document.getElementById('viewSelect').value;
+  const projection = document.getElementById('projectionType').value;
+  const lockCamera = document.getElementById('lockCamera').checked;
+  let eye;
+  switch (view) {
+    case 'top':
+      eye = { x: 0, y: 0, z: 2 };
+      break;
+    case 'front':
+      eye = { x: 0, y: 2, z: 0.1 };
+      break;
+    case 'side':
+      eye = { x: 2, y: 0, z: 0.1 };
+      break;
+    default:
+      eye = { x: 1.25, y: 1.25, z: 1.25 };
+  }
   const layout = {
     margin: { l: 0, r: 0, t: 0, b: 0 },
     scene: {
-      // Axes use metres so setting aspectmode:'data' keeps proportions realistic
       xaxis: { title: 'X (m)', range: [0, mapWidthMeters], dtick: cellMeters, visible: showAxes },
       yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters, visible: showAxes },
       zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters, visible: showAxes },
       aspectmode: 'data',
-      camera: { eye: { x: 0, y: 0, z: 2 }, projection: { type: 'orthographic' } }
+      dragmode: lockCamera ? false : 'turntable',
+      camera: { eye, projection: { type: projection } }
     }
   };
   Plotly.newPlot('terrain3d', [{
@@ -211,8 +183,10 @@ function update3DPlot() {
     cmin: 0,
     cmax: groundTypes.length - 1,
     type: 'surface',
-    showscale: false
-  }], layout);
+    showscale: false,
+    lighting: { ambient: 0.4, diffuse: 0.6, specular: 0.2, roughness: 0.5, fresnel: 0.2 },
+    lightposition: { x: 100, y: 200, z: 400 }
+  }], layout, { responsive: true });
 }
 
 // Event wiring
@@ -221,26 +195,15 @@ document.getElementById('addGroundBtn').addEventListener('click', addGroundType)
 document.getElementById('generateBtn').addEventListener('click', generateGrid);
 document.getElementById('randomizeBtn').addEventListener('click', randomizeTerrain);
 document.getElementById('showAxes').addEventListener('change', update3DPlot);
+document.getElementById('viewSelect').addEventListener('change', update3DPlot);
+document.getElementById('projectionType').addEventListener('change', update3DPlot);
+document.getElementById('lockCamera').addEventListener('change', update3DPlot);
 
+const plot = document.getElementById('terrain3d');
 let mouseDown = false;
-canvas.addEventListener('mousedown', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  mouseDown = true;
-  handlePaint(e);
-});
-canvas.addEventListener('mousemove', (e) => {
-  if (mouseDown) {
-    e.preventDefault();
-    e.stopPropagation();
-    handlePaint(e);
-  }
-});
-canvas.addEventListener('mouseup', (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  mouseDown = false;
-});
-canvas.addEventListener('mouseleave', () => { mouseDown = false; });
-canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+plot.addEventListener('mousedown', () => { mouseDown = true; });
+document.addEventListener('mouseup', () => { mouseDown = false; });
+plot.addEventListener('contextmenu', (e) => e.preventDefault());
+plot.on('plotly_click', handlePlotPaint);
+plot.on('plotly_hover', (e) => { if (mouseDown) handlePlotPaint(e); });
 
