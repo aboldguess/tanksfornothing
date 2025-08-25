@@ -11,6 +11,7 @@ import * as THREE from './libs/three.module.js';
 // cannon-es provides lightweight rigid body physics with vehicle helpers.
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
+import { initHUD, updateHUD } from './hud.js';
 
 // Utility: render fatal errors directly on screen for easier debugging.
 function showError(message) {
@@ -230,6 +231,9 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
+  // Build HUD overlay to display runtime metrics
+  initHUD();
+
   document.body.addEventListener('click', () => {
     document.body.requestPointerLock();
   });
@@ -313,6 +317,11 @@ function animate() {
   // Sync Three.js mesh with physics body
   tank.position.copy(chassisBody.position);
   tank.quaternion.copy(chassisBody.quaternion);
+
+  // Update HUD with current speed and chassis inclination
+  const speedKmh = currentSpeed * 3.6;
+  const inclination = THREE.MathUtils.radToDeg(tank.rotation.x);
+  updateHUD(speedKmh, inclination);
 
   updateCamera();
   renderer.render(scene, camera);
