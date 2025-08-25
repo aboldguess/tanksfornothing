@@ -1,5 +1,5 @@
 // admin.js
-// Summary: Handles admin login and CRUD actions for Tanks for Nothing.
+// Summary: Handles admin login and CRUD actions for nations, tanks and ammo.
 // Uses secure httpOnly cookie set by server and provides logout endpoint.
 // Structure: auth helpers -> data loaders -> CRUD functions -> UI handlers.
 // Usage: Included by admin.html.
@@ -35,15 +35,31 @@ function showDashboard() {
 }
 
 // In-memory caches for editing
+let nationsCache = [];
 let tanksCache = [];
 let ammoCache = [];
+let editingNationIndex = null;
 let editingTankIndex = null;
 let editingAmmoIndex = null;
 
 async function loadData() {
+  nationsCache = await fetch('/api/nations').then(r => r.json());
   tanksCache = await fetch('/api/tanks').then(r => r.json());
   ammoCache = await fetch('/api/ammo').then(r => r.json());
   const terrain = await fetch('/api/terrain').then(r => r.json());
+
+  // Populate nation selects for tank and ammo forms
+  const nationOptions = nationsCache.map(n => `<option value="${n}">${n}</option>`).join('');
+  document.getElementById('tankNation').innerHTML = nationOptions;
+  document.getElementById('ammoNation').innerHTML = nationOptions;
+
+  // Render nation list
+  const nationDiv = document.getElementById('nationList');
+  nationDiv.innerHTML = nationsCache.map((n, i) =>
+    `<div>${n} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
+  ).join('');
+  nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
+  nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
 
   const tankDiv = document.getElementById('tankList');
   tankDiv.innerHTML = tanksCache.map((t, i) =>
@@ -54,12 +70,50 @@ async function loadData() {
 
   const ammoDiv = document.getElementById('ammoList');
   ammoDiv.innerHTML = ammoCache.map((a, i) =>
-    `<div>${a.name} (${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
+    `<div>${a.name} (${a.nation} - ${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
   ).join('');
   ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
   ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
 
   document.getElementById('terrainName').innerText = terrain.terrain;
+  clearNationForm();
+  clearTankForm();
+  clearAmmoForm();
+}
+
+function collectNationForm() {
+  return { name: document.getElementById('nationName').value };
+}
+
+async function addNation() {
+  const payload = collectNationForm();
+  const method = editingNationIndex === null ? 'POST' : 'PUT';
+  const url = editingNationIndex === null ? '/api/nations' : `/api/nations/${editingNationIndex}`;
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  editingNationIndex = null;
+  document.getElementById('addNationBtn').innerText = 'Add Nation';
+  clearNationForm();
+  loadData();
+}
+
+function editNation(i) {
+  const n = nationsCache[i];
+  document.getElementById('nationName').value = n;
+  editingNationIndex = i;
+  document.getElementById('addNationBtn').innerText = 'Update Nation';
+}
+
+async function deleteNation(i) {
+  await fetch(`/api/nations/${i}`, { method: 'DELETE' });
+  loadData();
+}
+
+function clearNationForm() {
+  document.getElementById('nationName').value = '';
 }
 
 function collectTankForm() {
@@ -119,7 +173,7 @@ async function deleteTank(i) {
 
 function clearTankForm() {
   document.getElementById('tankName').value = '';
-  document.getElementById('tankNation').value = 'Germany';
+  document.getElementById('tankNation').value = nationsCache[0] || '';
   document.getElementById('tankBR').value = 1; document.getElementById('brVal').innerText = '';
   document.getElementById('tankClass').value = 'Light/Scout';
   document.getElementById('tankArmor').value = 10; document.getElementById('armorVal').innerText = '';
@@ -135,6 +189,7 @@ function clearTankForm() {
 function collectAmmoForm() {
   return {
     name: document.getElementById('ammoName').value,
+    nation: document.getElementById('ammoNation').value,
     caliber: parseInt(document.getElementById('ammoCaliber').value, 10),
     armorPen: parseInt(document.getElementById('ammoPen').value, 10),
     type: document.getElementById('ammoType').value,
@@ -162,6 +217,7 @@ async function addAmmo() {
 function editAmmo(i) {
   const a = ammoCache[i];
   document.getElementById('ammoName').value = a.name;
+  document.getElementById('ammoNation').value = a.nation;
   document.getElementById('ammoCaliber').value = a.caliber; document.getElementById('ammoCaliberVal').innerText = a.caliber;
   document.getElementById('ammoPen').value = a.armorPen; document.getElementById('ammoPenVal').innerText = a.armorPen;
   document.getElementById('ammoType').value = a.type;
@@ -179,6 +235,7 @@ async function deleteAmmo(i) {
 
 function clearAmmoForm() {
   document.getElementById('ammoName').value = '';
+  document.getElementById('ammoNation').value = nationsCache[0] || '';
   document.getElementById('ammoCaliber').value = 20; document.getElementById('ammoCaliberVal').innerText = '';
   document.getElementById('ammoPen').value = 20; document.getElementById('ammoPenVal').innerText = '';
   document.getElementById('ammoType').value = 'HE';
@@ -203,6 +260,7 @@ document.getElementById('signOutLink').addEventListener('click', (e) => {
   signOut();
 });
 document.getElementById('loginBtn').addEventListener('click', login);
+document.getElementById('addNationBtn').addEventListener('click', addNation);
 document.getElementById('addTankBtn').addEventListener('click', addTank);
 document.getElementById('addAmmoBtn').addEventListener('click', addAmmo);
 document.getElementById('setTerrainBtn').addEventListener('click', setTerrain);

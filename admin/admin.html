@@ -1,6 +1,6 @@
 <!-- admin.html
      Summary: Admin dashboard for Tanks for Nothing.
-     Structure: login view and CRUD forms for tanks, ammo, terrain.
+     Structure: login view and CRUD forms for nations, tanks, ammo, terrain.
      Usage: Navigate to /admin/admin.html in browser. -->
 <!DOCTYPE html>
 <html lang="en">
@@ -32,14 +32,15 @@
   </div>
 
   <div id="dashboard" style="display:none">
+    <h2>Nations</h2>
+    <div id="nationList"></div>
+    <input id="nationName" placeholder="Name">
+    <button id="addNationBtn">Add Nation</button>
+
     <h2>Tanks</h2>
     <div id="tankList"></div>
     <input id="tankName" placeholder="Name">
-    <select id="tankNation">
-      <option value="Germany">Germany</option>
-      <option value="UK">UK</option>
-      <option value="USA">USA</option>
-    </select>
+    <select id="tankNation"></select>
     <label>Battle Rating
       <input id="tankBR" type="range" min="1" max="10" step="0.1" oninput="document.getElementById('brVal').innerText=this.value">
       <span id="brVal"></span>
@@ -88,6 +89,7 @@
     <h2>Ammo</h2>
     <div id="ammoList"></div>
     <input id="ammoName" placeholder="Name">
+    <select id="ammoNation"></select>
     <label>Caliber (mm)
       <input id="ammoCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('ammoCaliberVal').innerText=this.value">
       <span id="ammoCaliberVal"></span>
