@@ -1,7 +1,7 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Renders 3D scene, handles user input,
-//          simulates basic vehicle physics via Cannon.js and synchronizes state with
-//          a server through Socket.IO.
+//          uses Cannon.js for simple collision physics and tank movement based on
+//          per-tank speed settings, and synchronizes state with a server via Socket.IO.
 // Structure: scene setup -> physics setup -> input handling -> animation loop ->
 //             optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -55,6 +55,7 @@ if (window.io) {
       chassisBody.angularVelocity.set(0, 0, 0);
       chassisBody.quaternion.set(0, 0, 0, 1);
     }
+    currentSpeed = 0;
   });
 } else {
   showError('Socket.IO failed to load. Running offline.');
@@ -62,12 +63,22 @@ if (window.io) {
 
 let tank, turret, camera, scene, renderer, ground;
 // Physics objects
-let world, vehicle, chassisBody, groundBody;
-// Default tank stats mapped to physics parameters
-const defaultTank = { name: 'Basic', br: 1, mass: 30000, horsepower: 500 };
-// Precompute engine/brake forces based on tank stats
-const ENGINE_FORCE = defaultTank.horsepower * 5; // simple hp -> force mapping
-const BRAKE_FORCE = defaultTank.mass * 0.5; // mass based braking force
+let world, chassisBody, groundBody;
+// Default tank stats used for movement and rotation
+const defaultTank = {
+  name: 'Basic',
+  br: 1,
+  mass: 30000,
+  horsepower: 500,
+  maxSpeed: 40, // km/h
+  maxReverseSpeed: 15, // km/h
+  bodyRotation: 20 // seconds for full rotation
+};
+// Movement coefficients derived from tank stats
+const MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
+const MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
+const ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
 let freelook = false;
 let cameraDistance = 10;
@@ -213,37 +224,6 @@ function init() {
   chassisBody.position.set(0, 1, 0);
   world.addBody(chassisBody);
 
-  // RaycastVehicle provides suspension and wheel-ground interaction
-  vehicle = new CANNON.RaycastVehicle({
-    chassisBody,
-    indexRightAxis: 0,
-    indexUpAxis: 1,
-    indexForwardAxis: 2
-  });
-  const wheelOptions = {
-    radius: 0.5,
-    directionLocal: new CANNON.Vec3(0, -1, 0),
-    suspensionStiffness: 30,
-    suspensionRestLength: 0.3,
-    axleLocal: new CANNON.Vec3(1, 0, 0),
-    frictionSlip: 5,
-    dampingRelaxation: 2.3,
-    dampingCompression: 4.4,
-    maxSuspensionForce: 1e4,
-    rollInfluence: 0.01
-  };
-  const wheelPositions = [
-    new CANNON.Vec3(-1, 0, 1.5),
-    new CANNON.Vec3(1, 0, 1.5),
-    new CANNON.Vec3(-1, 0, -1.5),
-    new CANNON.Vec3(1, 0, -1.5)
-  ];
-  wheelPositions.forEach((pos) => {
-    wheelOptions.chassisConnectionPointLocal = pos.clone();
-    vehicle.addWheel(wheelOptions);
-  });
-  vehicle.addToWorld(world);
-
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   renderer = new THREE.WebGLRenderer();
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -296,22 +276,28 @@ function onMouseMove(e) {
 function animate() {
   requestAnimationFrame(animate);
 
-  // Handle input -> engine/brake/torque
-  let leftForce = 0;
-  let rightForce = 0;
-  if (keys['w']) { leftForce += ENGINE_FORCE; rightForce += ENGINE_FORCE; }
-  if (keys['s']) { leftForce -= ENGINE_FORCE; rightForce -= ENGINE_FORCE; }
-  if (keys['a']) { leftForce -= ENGINE_FORCE * 0.5; rightForce += ENGINE_FORCE * 0.5; }
-  if (keys['d']) { leftForce += ENGINE_FORCE * 0.5; rightForce -= ENGINE_FORCE * 0.5; }
-  vehicle.applyEngineForce(leftForce, 0);
-  vehicle.applyEngineForce(leftForce, 2);
-  vehicle.applyEngineForce(rightForce, 1);
-  vehicle.applyEngineForce(rightForce, 3);
+  // Determine desired forward speed in m/s based on input
+  let targetSpeed = 0;
+  if (keys['w']) targetSpeed = MAX_SPEED;
+  else if (keys['s']) targetSpeed = -MAX_REVERSE_SPEED;
+  if (keys[' ']) targetSpeed = 0; // brake
 
-  if (keys[' ']) {
-    for (let i = 0; i < 4; i++) vehicle.setBrake(BRAKE_FORCE, i);
+  // Smoothly approach the target speed for simple acceleration
+  currentSpeed += (targetSpeed - currentSpeed) * 0.1;
+
+  // Apply linear velocity along tank's forward vector
+  const yaw = tank.rotation.y;
+  const forward = new CANNON.Vec3(Math.sin(yaw), 0, -Math.cos(yaw));
+  const vy = chassisBody.velocity.y;
+  chassisBody.velocity.set(forward.x * currentSpeed, vy, forward.z * currentSpeed);
+
+  // Apply angular velocity for turning
+  if (keys['a']) {
+    chassisBody.angularVelocity.set(0, ROT_SPEED, 0);
+  } else if (keys['d']) {
+    chassisBody.angularVelocity.set(0, -ROT_SPEED, 0);
   } else {
-    for (let i = 0; i < 4; i++) vehicle.setBrake(0, i);
+    chassisBody.angularVelocity.set(0, 0, 0);
   }
 
   // Step physics world with fixed timestep

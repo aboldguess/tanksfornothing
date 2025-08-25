@@ -150,6 +150,8 @@ function collectTankForm() {
     ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
     crew: parseInt(document.getElementById('tankCrew').value, 10),
     engineHp: parseInt(document.getElementById('tankHP').value, 10),
+    maxSpeed: parseInt(document.getElementById('tankMaxSpeed').value, 10),
+    maxReverseSpeed: parseFloat(document.getElementById('tankMaxReverse').value),
     incline: parseInt(document.getElementById('tankIncline').value, 10),
     bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
     turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10)
@@ -182,6 +184,8 @@ function editTank(i) {
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
   document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
   document.getElementById('tankHP').value = t.engineHp; document.getElementById('hpVal').innerText = t.engineHp;
+  document.getElementById('tankMaxSpeed').value = t.maxSpeed ?? 10; document.getElementById('maxSpeedVal').innerText = t.maxSpeed ?? 10;
+  document.getElementById('tankMaxReverse').value = t.maxReverseSpeed ?? 0; document.getElementById('maxReverseVal').innerText = t.maxReverseSpeed ?? 0;
   document.getElementById('tankIncline').value = t.incline; document.getElementById('inclineVal').innerText = t.incline;
   document.getElementById('tankBodyRot').value = t.bodyRotation; document.getElementById('bodyRotVal').innerText = t.bodyRotation;
   document.getElementById('tankTurretRot').value = t.turretRotation; document.getElementById('turretRotVal').innerText = t.turretRotation;
@@ -204,6 +208,8 @@ function clearTankForm() {
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = false; });
   document.getElementById('tankCrew').value = 1; document.getElementById('crewVal').innerText = '';
   document.getElementById('tankHP').value = 100; document.getElementById('hpVal').innerText = '';
+  document.getElementById('tankMaxSpeed').value = 10; document.getElementById('maxSpeedVal').innerText = '';
+  document.getElementById('tankMaxReverse').value = 0; document.getElementById('maxReverseVal').innerText = '';
   document.getElementById('tankIncline').value = 2; document.getElementById('inclineVal').innerText = '';
   document.getElementById('tankBodyRot').value = 1; document.getElementById('bodyRotVal').innerText = '';
   document.getElementById('tankTurretRot').value = 1; document.getElementById('turretRotVal').innerText = '';
