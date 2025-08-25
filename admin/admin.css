@@ -101,7 +101,10 @@ body {
   gap: 10px;
 }
 
-#editorViews canvas,
+#editorViews canvas {
+  /* allow JS to control exact pixel size; prevent blurriness */
+  image-rendering: pixelated;
+}
 #editorViews #terrain3d {
   width: 100%;
   /* enlarged 3D preview for better terrain detail */
