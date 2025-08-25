@@ -20,6 +20,11 @@ async function handleSignup(e) {
   e.preventDefault();
   const username = document.getElementById('signupUser').value;
   const password = document.getElementById('signupPass').value;
+  if (password.length < 6) {
+    const msg = document.getElementById('authError');
+    msg.textContent = 'Password must be at least 6 characters';
+    return;
+  }
   const res = await fetch('/api/signup', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

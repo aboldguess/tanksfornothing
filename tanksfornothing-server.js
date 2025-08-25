@@ -254,6 +254,7 @@ await loadUsers();
 app.use(express.static('public'));
 app.use('/admin', express.static('admin'));
 app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // support classic form posts
 app.use(cookieParser());
 
 // Admin authentication middleware
@@ -291,6 +292,12 @@ app.post('/admin/logout', (req, res) => {
 app.get('/admin/status', (req, res) => {
   if (req.cookies && req.cookies.admin === 'true') return res.json({ admin: true });
   res.status(401).json({ admin: false });
+});
+
+// Return all user statistics for admin dashboard
+app.get('/api/users', requireAdmin, (req, res) => {
+  const list = Array.from(users, ([username, u]) => ({ username, stats: u.stats }));
+  res.json(list);
 });
 
 // User signup endpoint with bcrypt password hashing
