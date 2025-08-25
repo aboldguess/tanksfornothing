@@ -37,6 +37,18 @@ body {
 
 canvas { display: block; }
 
+#hud {
+  position: fixed;
+  bottom: 10px;
+  left: 10px;
+  background: rgba(34, 34, 34, 0.8);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  border: 1px solid #2b2b2b;
+}
+
 /* Admin navbar profile menu */
 .profile-menu { position: relative; display: inline-block; float: right; }
 .profile-menu img { width: 32px; height: 32px; border-radius: 50%; cursor: pointer; }
