@@ -1,0 +1,37 @@
+{
+  "_comment": [
+    "Summary: Persisted ammunition definitions for Tanks for Nothing.",
+    "Structure: JSON object with _comment array and ammo list.",
+    "Usage: Managed automatically by server; do not edit manually."
+  ],
+  "ammo": [
+    {
+      "name": "AP",
+      "nation": "Neutral",
+      "caliber": 40,
+      "armorPen": 50,
+      "type": "AP",
+      "explosionRadius": 0,
+      "pen0": 50,
+      "pen100": 30,
+      "speed": 200,
+      "damage": 40,
+      "penetration": 50,
+      "explosion": 0
+    },
+    {
+      "name": "HE",
+      "nation": "Neutral",
+      "caliber": 100,
+      "armorPen": 10,
+      "type": "HE",
+      "explosionRadius": 50,
+      "pen0": 10,
+      "pen100": 5,
+      "speed": 150,
+      "damage": 20,
+      "penetration": 10,
+      "explosion": 50
+    }
+  ]
+}
