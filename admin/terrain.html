@@ -1,7 +1,7 @@
 <!-- terrain.html
-     Summary: Admin page for managing terrain presets and restarting the game.
-     Structure: login, navbar with profile menu, sidebar navigation and terrain CRUD card.
-     Usage: Visit /admin/terrain.html after logging in. -->
+     Summary: Admin page for managing terrain presets and interactive terrain editing.
+     Structure: login, navbar with profile menu, sidebar navigation, terrain CRUD card and a grid-based terrain editor.
+     Usage: Visit /admin/terrain.html after logging in to manage terrains and design custom maps. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -50,9 +50,40 @@
         <button id="addTerrainBtn">Add Terrain</button>
         <button id="restartBtn">Restart Game</button>
       </section>
+
+      <section class="card" id="editorCard">
+        <h2>Terrain Editor</h2>
+        <p class="instructions">Choose a terrain type and size then paint ground types on the grid.</p>
+        <label for="terrainType">Terrain Type</label>
+        <select id="terrainType">
+          <option value="snow">Snow</option>
+          <option value="jungle">Jungle</option>
+          <option value="desert">Desert</option>
+          <option value="fields">Fields</option>
+        </select>
+        <label for="sizeX">Map width (km)</label>
+        <input type="number" id="sizeX" min="0.1" step="0.1" value="1">
+        <label for="sizeY">Map height (km)</label>
+        <input type="number" id="sizeY" min="0.1" step="0.1" value="1">
+        <button id="generateBtn">Generate Grid</button>
+        <canvas id="terrainCanvas" class="terrain-canvas"></canvas>
+
+        <h3>Ground Types</h3>
+        <div id="groundTypesList" class="ground-types"></div>
+        <label for="groundName">Name</label>
+        <input id="groundName" placeholder="e.g. gravel">
+        <label for="groundColor">Color</label>
+        <input id="groundColor" type="color" value="#777777">
+        <label for="groundTraction">Traction (0-1)</label>
+        <input id="groundTraction" type="number" step="0.1" min="0" max="1" value="0.5">
+        <label for="groundViscosity">Viscosity (0-1)</label>
+        <input id="groundViscosity" type="number" step="0.1" min="0" max="1" value="0.5">
+        <button id="addGroundBtn">Add Ground Type</button>
+      </section>
     </main>
   </div>
 
   <script type="module" src="admin.js"></script>
+  <script type="module" src="terrain-editor.js"></script>
 </body>
 </html>
