@@ -79,6 +79,14 @@
           <input id="tankHP" type="range" min="100" max="1000" step="50" oninput="document.getElementById('hpVal').innerText=this.value">
           <span id="hpVal"></span>
         </label>
+        <label>Max Speed (km/h)
+          <input id="tankMaxSpeed" type="range" min="10" max="100" step="1" oninput="document.getElementById('maxSpeedVal').innerText=this.value">
+          <span id="maxSpeedVal"></span>
+        </label>
+        <label>Max Reverse Speed (km/h)
+          <input id="tankMaxReverse" type="range" min="0" max="50" step="0.5" oninput="document.getElementById('maxReverseVal').innerText=this.value">
+          <span id="maxReverseVal"></span>
+        </label>
         <label>Max Incline (%)
           <input id="tankIncline" type="range" min="2" max="12" step="1" oninput="document.getElementById('inclineVal').innerText=this.value">
           <span id="inclineVal"></span>

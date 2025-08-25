@@ -44,7 +44,7 @@ Set `ADMIN_PASSWORD` to change the admin login password (default `adminpass`).
 - Visit `http://localhost:3000/admin/admin.html` for the admin dashboard. A sidebar links to dedicated pages for Nations, Tanks,
   Ammo, Terrain and Game Settings. Manage nations, then create tanks and ammo tied to those nations. The tank form provides class
   dropdowns, a BR slider, armour and cannon caliber sliders, checkboxes for HE/HEAT/AP/Smoke ammo types, crew and engine
-  horsepower sliders, and controls for incline and rotation times. The ammo form captures name, nation, caliber, armor
+  horsepower sliders, separate sliders for maximum forward and reverse speeds, and controls for incline and rotation times. The ammo form captures name, nation, caliber, armor
   penetration, type, explosion radius and penetration at 0m/100m. Data persists across restarts.
 
 ## Debugging
