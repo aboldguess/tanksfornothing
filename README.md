@@ -12,10 +12,13 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Node.js 18+ and npm
 
 ## Setup
+Run these commands from a terminal (PowerShell on Windows):
+
 ### Linux / macOS / Raspberry Pi
 ```bash
 cd tanksfornothing
 npm install
+npm run setup   # create data/tanks.json
 npm start
 ```
 
@@ -23,6 +26,7 @@ npm start
 ```powershell
 cd tanksfornothing
 npm install
+npm run setup   # create data/tanks.json
 npm start
 ```
 
@@ -30,13 +34,15 @@ The server listens on port **3000** by default. Use the `PORT` environment varia
 ```bash
 PORT=8080 npm start
 ```
+Set `NODE_ENV=production` when deploying to enable secure cookies.
 
 Set `ADMIN_PASSWORD` to change the admin login password (default `adminpass`).
 
 ## Usage
 - Open `http://localhost:3000` in a modern browser.
 - Click the screen to capture the mouse and drive the tank.
-- Visit `http://localhost:3000/admin/admin.html` for the admin panel.
+- Visit `http://localhost:3000/admin/admin.html` for the admin panel. The tank form now includes sliders for armor, caliber, crew,
+  engine power, incline and rotation speeds, ammo checkboxes, and a class dropdown. Tanks persist across restarts.
 
 ## Debugging
 The server logs player connections and updates to the console. Use `npm run dev` to auto-restart on changes.

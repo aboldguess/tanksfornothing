@@ -37,6 +37,42 @@
     <input id="tankName" placeholder="Name">
     <input id="tankNation" placeholder="Nation">
     <input id="tankBR" type="number" min="1" max="10" step="0.1" placeholder="BR">
+    <label>Armor (mm)
+      <input id="tankArmor" type="range" min="0" max="500" step="10" oninput="document.getElementById('armorVal').innerText=this.value">
+      <span id="armorVal"></span>
+    </label>
+    <label>Cannon Caliber (mm)
+      <input id="tankCaliber" type="range" min="20" max="200" step="5" oninput="document.getElementById('caliberVal').innerText=this.value">
+      <span id="caliberVal"></span>
+    </label>
+    <div id="tankAmmoOptions"></div>
+    <label>Crew Count
+      <input id="tankCrew" type="range" min="1" max="10" step="1" oninput="document.getElementById('crewVal').innerText=this.value">
+      <span id="crewVal"></span>
+    </label>
+    <label>Engine Horsepower
+      <input id="tankHP" type="range" min="50" max="2000" step="50" oninput="document.getElementById('hpVal').innerText=this.value">
+      <span id="hpVal"></span>
+    </label>
+    <label>Max Incline (°)
+      <input id="tankIncline" type="range" min="0" max="60" step="1" oninput="document.getElementById('inclineVal').innerText=this.value">
+      <span id="inclineVal"></span>
+    </label>
+    <label>Body Rotation Speed (°/s)
+      <input id="tankBodyRot" type="range" min="0" max="60" step="1" oninput="document.getElementById('bodyRotVal').innerText=this.value">
+      <span id="bodyRotVal"></span>
+    </label>
+    <label>Turret Rotation Speed (°/s)
+      <input id="tankTurretRot" type="range" min="0" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
+      <span id="turretRotVal"></span>
+    </label>
+    <select id="tankClass">
+      <option value="Light">Light</option>
+      <option value="Medium">Medium</option>
+      <option value="Heavy">Heavy</option>
+      <option value="Tank Destroyer">Tank Destroyer</option>
+      <option value="SPAA">SPAA</option>
+    </select>
     <button onclick="addTank()">Add Tank</button>
 
     <h2>Ammo</h2>

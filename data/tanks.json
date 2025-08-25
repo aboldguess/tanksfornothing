@@ -1,0 +1,8 @@
+{
+  "_comment": [
+    "Summary: Persisted tank definitions for Tanks for Nothing.",
+    "Structure: JSON object with _comment array and tanks list.",
+    "Usage: Managed automatically by server; do not edit manually."
+  ],
+  "tanks": []
+}
