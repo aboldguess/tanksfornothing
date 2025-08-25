@@ -73,6 +73,11 @@ let freelook = false;
 let cameraDistance = 10;
 const keys = {};
 
+// Timing and networking helpers
+const clock = new THREE.Clock(); // tracks frame timing for physics updates
+let lastNetwork = 0;
+let lastState = { x: 0, y: 0, z: 0, rot: 0, turret: 0 };
+
 // Always initialize scene so the client can operate even without networking.
 init();
 
@@ -282,12 +287,12 @@ function onMouseMove(e) {
   const sensitivity = 0.002;
   tank.rotation.y -= e.movementX * sensitivity;
   if (!freelook) turret.rotation.y -= e.movementX * sensitivity;
-  turret.rotation.x = THREE.MathUtils.clamp(turret.rotation.x - e.movementY * sensitivity, -0.5, 0.5);
+  turret.rotation.x = THREE.MathUtils.clamp(
+    turret.rotation.x - e.movementY * sensitivity,
+    -0.5,
+    0.5
+  );
 }
-
-const clock = new THREE.Clock();
-let lastNetwork = 0;
-let lastState = { x: 0, y: 0, z: 0, rot: 0, turret: 0 };
 function animate() {
   requestAnimationFrame(animate);
 
