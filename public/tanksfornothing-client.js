@@ -349,8 +349,15 @@ function init() {
   // Build HUD overlay to display runtime metrics
   initHUD();
 
+  // Request pointer lock on user click to capture the mouse for camera control.
+  // In modern browsers the call returns a Promise which rejects with a
+  // `SecurityError` if the user exits the lock before it completes. Catching the
+  // rejection prevents it from surfacing as an unhandled promise error.
   document.body.addEventListener('click', () => {
-    document.body.requestPointerLock();
+    const lockPromise = document.body.requestPointerLock();
+    if (lockPromise && typeof lockPromise.catch === 'function') {
+      lockPromise.catch(err => console.warn('Pointer lock request denied', err));
+    }
   });
 
   document.addEventListener('pointerlockchange', () => {
