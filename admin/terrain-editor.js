@@ -1,8 +1,8 @@
 // terrain-editor.js
-// Summary: Enhanced terrain editor with raised-cosine elevation brush and 3D preview.
+// Summary: Enhanced terrain editor with raised-cosine elevation brush, proportional 3D preview and axis toggle.
 // Structure: state setup -> ground type management -> grid generation -> drawing -> raised-cosine painting -> 3D plot -> event wiring.
 // Usage: Imported by terrain.html; provides smooth terrain sculpting with adjustable X/Y size and peak height sliders. Axes in the
-//         3D preview are measured in metres with a fixed 50 m grid spacing for clarity.
+//         3D preview are measured in metres with a fixed 50 m grid spacing and can be hidden for a clean view.
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
@@ -184,12 +184,16 @@ function update3DPlot() {
   ]);
   const xCoords = Array.from({ length: gridWidth }, (_, i) => i * cellMeters);
   const yCoords = Array.from({ length: gridHeight }, (_, i) => i * cellMeters);
+  const showAxes = document.getElementById('showAxes').checked; // user toggle for axis visibility
   const layout = {
     margin: { l: 0, r: 0, t: 0, b: 0 },
     scene: {
-      xaxis: { title: 'X (m)', range: [0, mapWidthMeters], dtick: cellMeters },
-      yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters },
-      zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters }
+      // Axes use metres so setting aspectmode:'data' keeps proportions realistic
+      xaxis: { title: 'X (m)', range: [0, mapWidthMeters], dtick: cellMeters, visible: showAxes },
+      yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters, visible: showAxes },
+      zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters, visible: showAxes },
+      aspectmode: 'data',
+      camera: { eye: { x: 0, y: 0, z: 2 }, projection: { type: 'orthographic' } }
     }
   };
   Plotly.newPlot('terrain3d', [{
@@ -210,6 +214,7 @@ renderGroundTypes();
 document.getElementById('addGroundBtn').addEventListener('click', addGroundType);
 document.getElementById('generateBtn').addEventListener('click', generateGrid);
 document.getElementById('randomizeBtn').addEventListener('click', randomizeTerrain);
+document.getElementById('showAxes').addEventListener('change', update3DPlot);
 
 let mouseDown = false;
 canvas.addEventListener('mousedown', (e) => { mouseDown = true; handlePaint(e); });
