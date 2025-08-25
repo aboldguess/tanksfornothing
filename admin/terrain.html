@@ -1,6 +1,7 @@
 <!-- terrain.html
      Summary: Admin page for managing terrain presets with a direct 3D terrain editor that allows
-              clicking on the surface to sculpt ground types and elevation. The 3D view renders
+              clicking on the surface to sculpt ground types and elevation. Includes a Perlin-noise
+              generator for quickly creating natural-looking landscapes. The 3D view renders
               automatically whenever a map is created or its size/type is changed.
      Structure: login, navbar with profile menu, sidebar navigation, table of maps with thumbnails
                and an expandable 3D editor featuring camera controls and shading.
@@ -88,7 +89,7 @@
           <input type="range" id="brushSizeY" min="1" max="10" value="2">
           <label for="brushSizeZ">Brush Height</label>
           <input type="range" id="brushSizeZ" min="1" max="20" value="5">
-          <button id="randomizeBtn">Randomize Terrain</button>
+          <button id="perlinBtn">Generate Perlin Terrain</button>
 
           <label for="showAxes">Show Axes</label>
           <input type="checkbox" id="showAxes" checked>
