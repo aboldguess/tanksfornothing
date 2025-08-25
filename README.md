@@ -7,6 +7,7 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Hold `C` for freelook, `V` to toggle first/third person
 - Mouse wheel zoom
 - Modern admin dashboard with CRUD for nations, tanks, ammo and terrain plus live statistics
+- Player signup/login with persistent tracking of games, kills and deaths
 
 ## Requirements
 - Node.js 18+ and npm
@@ -18,7 +19,7 @@ Run these commands from a terminal (PowerShell on Windows):
 ```bash
 cd tanksfornothing
 npm install
-npm run setup   # create data/tanks.json and nations.json
+npm run setup   # create data files including players.json
 npm start
 ```
 
@@ -26,7 +27,7 @@ npm start
 ```powershell
 cd tanksfornothing
 npm install
-npm run setup   # create data/tanks.json and nations.json
+npm run setup   # create data files including players.json
 npm start
 ```
 
@@ -35,11 +36,13 @@ The server listens on port **3000** by default. Use the `PORT` environment varia
 PORT=8080 npm start
 ```
 Set `NODE_ENV=production` when deploying to enable secure cookies.
+Set `SESSION_SECRET` to override the default session signing secret.
 
 Set `ADMIN_PASSWORD` to change the admin login password (default `adminpass`).
 
 ## Usage
 - Open `http://localhost:3000` in a modern browser.
+- Sign up or log in, select a nation and tank, then click Join.
 - Click the screen to capture the mouse and drive the tank.
 - Visit `http://localhost:3000/admin/admin.html` for the admin dashboard. A sidebar links to dedicated pages for Nations, Tanks,
   Ammo, Terrain and Game Settings. Manage nations, then create tanks and ammo tied to those nations. The tank form provides class

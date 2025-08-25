@@ -1,6 +1,6 @@
 // init-data.js
-// Summary: Ensures data directory plus tanks.json and nations.json exist for persistence.
-// Structure: create data folder -> write default tanks.json and nations.json if missing.
+// Summary: Ensures data directory plus tanks.json, nations.json and players.json exist for persistence.
+// Structure: create data folder -> write default tanks.json, nations.json and players.json if missing.
 // Usage: Run with `node scripts/init-data.js` prior to starting server.
 // ---------------------------------------------------------------------------
 
@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 const dataDir = new URL('../data/', import.meta.url);
 const tanksFile = new URL('tanks.json', dataDir);
 const nationsFile = new URL('nations.json', dataDir);
+const playersFile = new URL('players.json', dataDir);
 
 async function init() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -43,6 +44,23 @@ async function init() {
     };
     await fs.writeFile(nationsFile, JSON.stringify(nationsData, null, 2));
     console.log('Created data/nations.json');
+  }
+
+  // Ensure players.json exists
+  try {
+    await fs.access(playersFile);
+    console.log('players.json already exists');
+  } catch {
+    const playersData = {
+      _comment: [
+        'Summary: Persisted player accounts and statistics for Tanks for Nothing.',
+        'Structure: JSON object with _comment array and players list containing username, password hash and stats.',
+        'Usage: Managed automatically by server; do not edit manually.'
+      ],
+      players: []
+    };
+    await fs.writeFile(playersFile, JSON.stringify(playersData, null, 2));
+    console.log('Created data/players.json');
   }
 }
 

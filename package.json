@@ -21,7 +21,9 @@
   "dependencies": {
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",
+    "express-session": "^1.17.3",
     "socket.io": "^4.8.1",
-    "three": "^0.179.1"
+    "three": "^0.179.1",
+    "bcrypt": "^5.1.1"
   }
 }

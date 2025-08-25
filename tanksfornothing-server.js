@@ -1,10 +1,11 @@
 // tanksfornothing-server.js
-// Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
+// Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game
+// with secure player signup/login and stat tracking.
 // This script sets up an Express web server with Socket.IO for real-time tank and projectile
-// updates, persists admin-defined tanks, nations and terrain details to disk and enforces
-// Battle Rating constraints when players join.
-// Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
-//            persistence helpers -> projectile physics loop -> server start.
+// updates, persists admin-defined tanks, nations, terrain and player accounts to disk and
+// enforces Battle Rating constraints when players join.
+// Structure: configuration -> express/session setup -> REST auth routes -> socket handlers ->
+//            in-memory stores -> persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
 // ---------------------------------------------------------------------------
 
@@ -12,6 +13,8 @@ import express from 'express';
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cookieParser from 'cookie-parser';
+import session from 'express-session';
+import bcrypt from 'bcrypt';
 import { promises as fs } from 'fs';
 
 const app = express();
@@ -54,10 +57,12 @@ let baseBR = null; // Battle Rating of first player
 // Nations persisted separately; maintain array and Set for validation
 let nations = []; // CRUD via admin, loaded from JSON file
 let nationsSet = new Set();
+let accounts = new Map(); // username -> {username, password, games, kills, deaths}
 
 const TANKS_FILE = new URL('./data/tanks.json', import.meta.url);
 const NATIONS_FILE = new URL('./data/nations.json', import.meta.url);
 const TERRAIN_FILE = new URL('./data/terrains.json', import.meta.url);
+const PLAYERS_FILE = new URL('./data/players.json', import.meta.url);
 
 async function loadTanks() {
   try {
@@ -125,6 +130,31 @@ async function loadTerrains() {
   terrain = terrains[currentTerrain]?.name || 'flat';
 }
 
+async function loadPlayers() {
+  try {
+    const text = await fs.readFile(PLAYERS_FILE, 'utf8');
+    const json = JSON.parse(text);
+    if (Array.isArray(json.players)) {
+      accounts = new Map(json.players.map((p) => [p.username, p]));
+    }
+  } catch {
+    console.warn('No existing player data, starting with empty list');
+  }
+}
+
+async function savePlayers() {
+  await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
+  const data = {
+    _comment: [
+      'Summary: Persisted player accounts and statistics for Tanks for Nothing.',
+      'Structure: JSON object with _comment array and players list containing username, password hash and stats.',
+      'Usage: Managed automatically by server; do not edit manually.'
+    ],
+    players: Array.from(accounts.values())
+  };
+  await fs.writeFile(PLAYERS_FILE, JSON.stringify(data, null, 2));
+}
+
 async function saveTerrains() {
   await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
   const data = {
@@ -142,12 +172,24 @@ async function saveTerrains() {
 await loadNations();
 await loadTanks();
 await loadTerrains();
+await loadPlayers();
 
 // Middleware
+const sessionMiddleware = session({
+  secret: process.env.SESSION_SECRET || 'change-me',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: process.env.NODE_ENV === 'production'
+  }
+});
+
 app.use(express.static('public'));
 app.use('/admin', express.static('admin'));
 app.use(express.json());
 app.use(cookieParser());
+app.use(sessionMiddleware);
+io.engine.use(sessionMiddleware);
 
 // Admin authentication middleware
 function requireAdmin(req, res, next) {
@@ -184,6 +226,41 @@ app.post('/admin/logout', (req, res) => {
 app.get('/admin/status', (req, res) => {
   if (req.cookies && req.cookies.admin === 'true') return res.json({ admin: true });
   res.status(401).json({ admin: false });
+});
+
+// Player authentication routes
+app.post('/api/signup', async (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'missing credentials' });
+  if (accounts.has(username)) return res.status(409).json({ error: 'user exists' });
+  const hash = await bcrypt.hash(password, 10);
+  const account = { username, password: hash, games: 0, kills: 0, deaths: 0 };
+  accounts.set(username, account);
+  await savePlayers();
+  console.log(`Created account for ${username}`);
+  res.json({ success: true });
+});
+
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body;
+  const account = accounts.get(username);
+  if (!account) return res.status(401).json({ error: 'invalid user' });
+  const ok = await bcrypt.compare(password, account.password);
+  if (!ok) return res.status(401).json({ error: 'invalid password' });
+  req.session.username = username;
+  res.json({ username, games: account.games, kills: account.kills, deaths: account.deaths });
+});
+
+app.post('/api/logout', (req, res) => {
+  req.session.destroy(() => res.json({ success: true }));
+});
+
+app.get('/api/me', (req, res) => {
+  const username = req.session.username;
+  if (!username) return res.status(401).json({ error: 'not logged in' });
+  const account = accounts.get(username);
+  if (!account) return res.status(404).json({ error: 'missing account' });
+  res.json({ username, games: account.games, kills: account.kills, deaths: account.deaths });
 });
 
 // Admin CRUD endpoints with validation helpers
@@ -374,12 +451,18 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
 
 // Socket.IO connections
 io.on('connection', (socket) => {
-  console.log('player connected', socket.id);
+  const username = socket.request.session?.username;
+  console.log('player connected', socket.id, username);
   socket.emit('tanks', tanks);
   socket.emit('ammo', ammo);
   socket.emit('terrain', terrain);
 
   socket.on('join', (clientTank) => {
+    const user = socket.request.session?.username;
+    if (!user) {
+      socket.emit('join-denied', 'Login required');
+      return;
+    }
     // Validate client-sent tank against server list to prevent tampering
     const tank = tanks.find(
       (t) => t.name === clientTank.name && t.nation === clientTank.nation
@@ -396,6 +479,7 @@ io.on('connection', (socket) => {
     }
     // Initialize server-side player state with health and armor for damage calculations
     players.set(socket.id, {
+      username: user,
       ...tank,
       x: 0,
       y: 0,
@@ -406,7 +490,12 @@ io.on('connection', (socket) => {
       crew: tank.crew || 3,
       armor: tank.armor || 20
     });
-    io.emit('player-joined', { id: socket.id, tank });
+    const account = accounts.get(user);
+    if (account) {
+      account.games++;
+      savePlayers();
+    }
+    io.emit('player-joined', { id: socket.id, tank, username: user });
   });
 
   socket.on('update', (state) => {
@@ -447,7 +536,8 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    console.log('player disconnected', socket.id);
+    const p = players.get(socket.id);
+    console.log('player disconnected', socket.id, p?.username);
     players.delete(socket.id);
     io.emit('player-left', socket.id);
     if (players.size === 0) baseBR = null; // reset BR when game empty
@@ -478,6 +568,16 @@ setInterval(() => {
         player.health = Math.max(0, (player.health ?? 100) - total);
         io.emit('tank-damaged', { id: pid, health: player.health });
         io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
+        if (player.health <= 0) {
+          const shooter = players.get(p.shooter);
+          const victim = players.get(pid);
+          const shooterAcc = shooter && accounts.get(shooter.username);
+          const victimAcc = victim && accounts.get(victim.username);
+          if (shooterAcc) shooterAcc.kills++;
+          if (victimAcc) victimAcc.deaths++;
+          savePlayers();
+          io.emit('player-killed', { id: pid, by: p.shooter });
+        }
         projectiles.delete(id);
         break;
       }

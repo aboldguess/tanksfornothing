@@ -22,6 +22,8 @@ body {
   box-shadow: 0 2px 4px rgba(0,0,0,0.5);
 }
 
+#stats { float: left; margin-left: 10px; }
+
 #lobby {
   position: fixed;
   top: 50%;
@@ -33,6 +35,22 @@ body {
   text-align: center;
   z-index: 1000;
 }
+
+#auth {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(34,34,34,0.9);
+  padding: 20px;
+  border-radius: 6px;
+  text-align: center;
+  z-index: 1000;
+}
+
+#auth form { margin: 10px 0; }
+#auth input { margin: 5px; }
+#authError { color: #ff8080; }
 
 #lobby select,
 #lobby button {

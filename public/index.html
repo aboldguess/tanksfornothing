@@ -11,8 +11,37 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <nav id="navbar"><span>Tanks for Nothing</span></nav>
-  <div id="lobby">
+  <nav id="navbar" style="display:none"><span>Tanks for Nothing</span>
+    <div class="profile-menu" id="profileMenu">
+      <img src="https://via.placeholder.com/32" id="profileBtn" alt="profile" />
+      <div class="profile-menu-content">
+        <a href="#">Manage Profiles</a>
+        <a href="#">Learning Zone</a>
+        <a href="#">My Details</a>
+        <a href="#">Subscription Details</a>
+        <a href="#">Manage Users</a>
+        <a href="#" id="logoutLink">Sign out</a>
+      </div>
+    </div>
+    <span id="stats"></span>
+  </nav>
+  <div id="auth">
+    <p>Create an account or log in to track your battles.</p>
+    <form id="signupForm">
+      <h3>Sign up</h3>
+      <input name="username" placeholder="Username" required />
+      <input name="password" type="password" placeholder="Password" required />
+      <button type="submit">Create Account</button>
+    </form>
+    <form id="loginForm">
+      <h3>Log in</h3>
+      <input name="username" placeholder="Username" required />
+      <input name="password" type="password" placeholder="Password" required />
+      <button type="submit">Log in</button>
+    </form>
+    <div id="authError"></div>
+  </div>
+  <div id="lobby" style="display:none">
     <p>Select your nation and tank to join the battle.</p>
     <label for="nationSelect">Nation:</label>
     <select id="nationSelect"></select>
@@ -23,6 +52,7 @@
   </div>
   <div id="instructions" style="display:none">WASD move | Space brake | Mouse look | C freelook | V camera | Scroll zoom | 1-4 ammo</div>
   <script src="/socket.io/socket.io.js"></script>
+  <script src="player-auth-client.js"></script>
   <script
     type="module"
     src="tanksfornothing-client.js"
