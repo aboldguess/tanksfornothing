@@ -78,3 +78,21 @@ canvas { display: block; }
 .profile-menu-content a { color: black; padding: 12px 16px; text-decoration: none; display: block; }
 .profile-menu-content a:hover { background-color: #f1f1f1; }
 .profile-menu.show .profile-menu-content { display: block; }
+
+/* Authentication form container */
+#authContainer {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(34,34,34,0.9);
+  padding: 20px;
+  border-radius: 6px;
+  text-align: center;
+  z-index: 1000;
+}
+#authContainer input {
+  margin: 5px;
+  padding: 5px;
+}
+#authError { color: #ff8080; margin-top: 5px; }

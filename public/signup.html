@@ -1,0 +1,39 @@
+<!-- signup.html
+     Summary: Player registration page for Tanks for Nothing.
+     Structure: navbar with profile menu then signup form and guidance.
+     Usage: Visit to create a new account. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Sign Up - Tanks for Nothing</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <nav id="navbar">
+    <span>Tanks for Nothing</span>
+    <div class="profile-menu">
+      <img id="profilePic" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAQAAADZc7J/AAAADUlEQVR42mP8/5+hHgAHggJ/lvE9GAAAAABJRU5ErkJggg==" alt="profile" />
+      <div class="profile-menu-content" id="profileMenuContent">
+        <a href="#">Manage Profiles</a>
+        <a href="#">Learning Zone</a>
+        <a href="#">My Details</a>
+        <a href="#">Subscription Details</a>
+        <a href="#">Manage Users</a>
+        <a href="#" id="signOut">Sign out</a>
+      </div>
+    </div>
+  </nav>
+  <div id="authContainer">
+    <h2>Create your account</h2>
+    <form id="signupForm">
+      <input type="text" id="signupUser" placeholder="Username" required />
+      <input type="password" id="signupPass" placeholder="Password" required />
+      <button type="submit">Sign up</button>
+    </form>
+    <p>Already have an account? <a href="/login.html">Log in</a></p>
+    <div id="authError"></div>
+  </div>
+  <script type="module" src="auth.js"></script>
+</body>
+</html>

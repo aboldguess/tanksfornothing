@@ -10,6 +10,7 @@ const tanksFile = new URL('tanks.json', dataDir);
 const nationsFile = new URL('nations.json', dataDir);
 const ammoFile = new URL('ammo.json', dataDir);
 const terrainFile = new URL('terrains.json', dataDir);
+const usersFile = new URL('users.json', dataDir);
 
 async function init() {
   await fs.mkdir(dataDir, { recursive: true });
@@ -111,6 +112,23 @@ async function init() {
     };
     await fs.writeFile(terrainFile, JSON.stringify(terrainData, null, 2));
     console.log('Created data/terrains.json');
+  }
+
+  // Ensure users.json exists
+  try {
+    await fs.access(usersFile);
+    console.log('users.json already exists');
+  } catch {
+    const usersData = {
+      _comment: [
+        'Summary: Persisted user accounts for Tanks for Nothing.',
+        'Structure: JSON object with _comment array and users list of {username,passwordHash,stats}.',
+        'Usage: Managed automatically by server; do not edit manually.'
+      ],
+      users: []
+    };
+    await fs.writeFile(usersFile, JSON.stringify(usersData, null, 2));
+    console.log('Created data/users.json');
   }
 }
 
