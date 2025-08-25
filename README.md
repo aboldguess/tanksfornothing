@@ -7,6 +7,7 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Hold `C` for freelook, `V` to toggle first/third person
 - Mouse wheel zoom
 - Modern admin dashboard with CRUD for nations, tanks, ammo and terrain plus live statistics
+- Map editor supports placing capture-the-flag points (A-D for red and blue teams)
 
 ## Requirements
 - Node.js 18+ and npm

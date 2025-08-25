@@ -82,6 +82,7 @@
           <select id="mode">
             <option value="ground">Ground</option>
             <option value="elevation">Elevation</option>
+            <option value="flag">Capture Flags</option>
           </select>
           <label for="brushSizeX">Brush Size X (cells)</label>
           <input type="range" id="brushSizeX" min="1" max="10" value="2">
@@ -90,6 +91,24 @@
           <label for="brushSizeZ">Brush Height</label>
           <input type="range" id="brushSizeZ" min="1" max="20" value="5">
           <button id="perlinBtn">Generate Perlin Terrain</button>
+
+          <div id="flagControls" style="display:none">
+            <h3>Capture Flags</h3>
+            <label for="flagTeam">Team</label>
+            <select id="flagTeam">
+              <option value="red">Red</option>
+              <option value="blue">Blue</option>
+            </select>
+            <label for="flagPoint">Point</label>
+            <select id="flagPoint">
+              <option value="a">A</option>
+              <option value="b">B</option>
+              <option value="c">C</option>
+              <option value="d">D</option>
+            </select>
+            <button id="clearFlagBtn">Clear Selected</button>
+            <div id="flagPositions" class="flag-positions"></div>
+          </div>
 
           <label for="showAxes">Show Axes</label>
           <input type="checkbox" id="showAxes" checked>

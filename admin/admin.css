@@ -125,6 +125,12 @@ body {
   pointer-events: all;
 }
 
+/* Capture flag coordinate list styling */
+.flag-positions div {
+  margin-bottom: 4px;
+  font-size: 0.9em;
+}
+
 /* Table listing of saved terrains with thumbnail previews */
 #terrainTable {
   width: 100%;

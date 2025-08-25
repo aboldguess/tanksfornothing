@@ -280,7 +280,8 @@ function collectTerrainForm() {
     size: {
       x: parseFloat(document.getElementById('sizeX').value),
       y: parseFloat(document.getElementById('sizeY').value)
-    }
+    },
+    flags: window.getFlags ? window.getFlags() : undefined
   };
 }
 
@@ -302,13 +303,14 @@ async function saveTerrain() {
 function openTerrainEditor(i) {
   const card = document.getElementById('editorCard');
   card.style.display = 'flex';
+  let t = null;
   if (i === undefined) {
     editingTerrainIndex = null;
     clearTerrainForm();
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
-    const t = terrainsCache[editingTerrainIndex];
+    t = terrainsCache[editingTerrainIndex];
     document.getElementById('terrainName').value = t.name;
     document.getElementById('terrainType').value = t.type;
     document.getElementById('sizeX').value = t.size.x;
@@ -316,6 +318,10 @@ function openTerrainEditor(i) {
     document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
   }
   document.dispatchEvent(new Event('terrain-editor-opened'));
+  if (window.setFlags) {
+    if (t) window.setFlags(t.flags);
+    else window.setFlags();
+  }
 }
 
 async function deleteTerrain(i) {

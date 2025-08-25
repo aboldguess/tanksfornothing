@@ -25,6 +25,17 @@ let mapHeightMeters = 0; // actual map height represented, in metres
 const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
 
+// Default capture flag placeholders for red and blue teams
+const defaultFlags = {
+  red: { a: null, b: null, c: null, d: null },
+  blue: { a: null, b: null, c: null, d: null }
+};
+let flags = JSON.parse(JSON.stringify(defaultFlags));
+
+function resetFlags() {
+  flags = JSON.parse(JSON.stringify(defaultFlags));
+}
+
 // Render available ground types as selectable buttons
 function renderGroundTypes() {
   const list = document.getElementById('groundTypesList');
@@ -85,6 +96,8 @@ function initializeTerrain() {
   console.debug('Initializing terrain', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+  resetFlags();
+  updateFlagDisplay();
   update3DPlot();
 }
 
@@ -111,9 +124,19 @@ function handlePlotPaint(e) {
   if (gridWidth === 0 || gridHeight === 0) return;
   const point = e.points?.[0];
   if (!point) return;
+  const mode = document.getElementById('mode').value;
+  if (mode === 'flag') {
+    const team = document.getElementById('flagTeam').value;
+    const flag = document.getElementById('flagPoint').value;
+    const x = Math.max(0, Math.min(point.x, mapWidthMeters));
+    const y = Math.max(0, Math.min(point.y, mapHeightMeters));
+    flags[team][flag] = { x, y };
+    updateFlagDisplay();
+    update3DPlot();
+    return;
+  }
   const cx = Math.floor(point.x / cellMeters);
   const cy = Math.floor(point.y / cellMeters);
-  const mode = document.getElementById('mode').value;
   const button = e.event.button;
   applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
     if (mode === 'ground') {
@@ -208,6 +231,44 @@ function generatePerlinTerrain() {
   update3DPlot();
 }
 
+// Display current capture flag coordinates in the sidebar
+function updateFlagDisplay() {
+  const container = document.getElementById('flagPositions');
+  if (!container) return;
+  const lines = [];
+  ['red', 'blue'].forEach(team => {
+    ['a', 'b', 'c', 'd'].forEach(flag => {
+      const pos = flags[team][flag];
+      const txt = pos ? `${Math.round(pos.x)},${Math.round(pos.y)}` : 'unset';
+      lines.push(`<div>${team} ${flag.toUpperCase()}: ${txt}</div>`);
+    });
+  });
+  container.innerHTML = lines.join('');
+}
+
+// Clear currently selected flag
+function clearFlag() {
+  const team = document.getElementById('flagTeam').value;
+  const flag = document.getElementById('flagPoint').value;
+  flags[team][flag] = null;
+  updateFlagDisplay();
+  update3DPlot();
+}
+
+// Accessors for admin.js
+function getFlags() {
+  return JSON.parse(JSON.stringify(flags));
+}
+
+function setFlags(f) {
+  flags = JSON.parse(JSON.stringify(f || defaultFlags));
+  updateFlagDisplay();
+  update3DPlot();
+}
+
+window.getFlags = getFlags;
+window.setFlags = setFlags;
+
 // Render 3D surface using Plotly with ground type colors
 function update3DPlot() {
   if (!window.Plotly || gridWidth === 0 || gridHeight === 0) return;
@@ -246,7 +307,7 @@ function update3DPlot() {
       camera: { eye, projection: { type: projection } }
     }
   };
-  Plotly.newPlot('terrain3d', [{
+  const traces = [{
     x: xCoords,
     y: yCoords,
     z: elevationGrid,
@@ -258,7 +319,36 @@ function update3DPlot() {
     showscale: false,
     lighting: { ambient: 0.4, diffuse: 0.6, specular: 0.2, roughness: 0.5, fresnel: 0.2 },
     lightposition: { x: 100, y: 200, z: 400 }
-  }], layout, { responsive: true });
+  }];
+
+  const addFlagTrace = (team) => {
+    const xs = [], ys = [], zs = [], texts = [];
+    ['a', 'b', 'c', 'd'].forEach(k => {
+      const p = flags[team][k];
+      if (p) {
+        xs.push(p.x);
+        ys.push(p.y);
+        const gx = Math.floor(p.x / cellMeters);
+        const gy = Math.floor(p.y / cellMeters);
+        zs.push(elevationGrid[gy]?.[gx] ?? 0);
+        texts.push(k.toUpperCase());
+      }
+    });
+    if (xs.length) traces.push({
+      x: xs,
+      y: ys,
+      z: zs,
+      mode: 'markers+text',
+      type: 'scatter3d',
+      marker: { color: team === 'red' ? '#ff4444' : '#4444ff', size: 5 },
+      text: texts,
+      textposition: 'top center'
+    });
+  };
+  addFlagTrace('red');
+  addFlagTrace('blue');
+
+  Plotly.newPlot('terrain3d', traces, layout, { responsive: true });
   applyCameraLock();
 }
 
@@ -284,6 +374,11 @@ document.getElementById('showAxes').addEventListener('change', update3DPlot);
 document.getElementById('viewSelect').addEventListener('change', update3DPlot);
 document.getElementById('projectionType').addEventListener('change', update3DPlot);
 document.getElementById('lockCamera').addEventListener('change', applyCameraLock);
+document.getElementById('mode').addEventListener('change', () => {
+  const show = document.getElementById('mode').value === 'flag';
+  document.getElementById('flagControls').style.display = show ? 'block' : 'none';
+});
+document.getElementById('clearFlagBtn').addEventListener('click', clearFlag);
 ['sizeX','sizeY','terrainType'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('change', initializeTerrain);
@@ -297,4 +392,6 @@ document.addEventListener('mouseup', () => { mouseDown = false; });
 plot.addEventListener('contextmenu', (e) => e.preventDefault());
 plot.on('plotly_click', handlePlotPaint);
 plot.on('plotly_hover', (e) => { if (mouseDown) handlePlotPaint(e); });
+
+updateFlagDisplay();
 

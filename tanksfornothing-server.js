@@ -46,8 +46,13 @@ const ammo = [
 ];
 // Active projectile list; each projectile contains position, velocity and metadata
 const projectiles = new Map(); // id -> projectile state
+// Default capture flag structure reused for terrains
+const defaultFlags = {
+  red: { a: null, b: null, c: null, d: null },
+  blue: { a: null, b: null, c: null, d: null }
+};
 // Terrains now include metadata so map listings can show thumbnails and size
-let terrains = [{ name: 'flat', type: 'default', size: { x: 1, y: 1 } }];
+let terrains = [{ name: 'flat', type: 'default', size: { x: 1, y: 1 }, flags: JSON.parse(JSON.stringify(defaultFlags)) }];
 let currentTerrain = 0; // index into terrains
 let terrain = 'flat'; // currently active terrain name
 let baseBR = null; // Battle Rating of first player
@@ -114,9 +119,13 @@ async function loadTerrains() {
     const text = await fs.readFile(TERRAIN_FILE, 'utf8');
     const json = JSON.parse(text);
     if (Array.isArray(json.terrains)) {
-      terrains = json.terrains.map(t =>
-        typeof t === 'string' ? { name: t, type: 'default', size: { x: 1, y: 1 } } : t
-      );
+      terrains = json.terrains.map(t => {
+        const obj = typeof t === 'string'
+          ? { name: t, type: 'default', size: { x: 1, y: 1 }, flags: JSON.parse(JSON.stringify(defaultFlags)) }
+          : t;
+        obj.flags = validateFlags(obj.flags);
+        return obj;
+      });
     }
     if (typeof json.current === 'number') currentTerrain = json.current;
   } catch {
@@ -130,7 +139,7 @@ async function saveTerrains() {
   const data = {
     _comment: [
       'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
-      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size}.',
+      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags}.',
       'Usage: Managed automatically by server; do not edit manually.'
     ],
     current: currentTerrain,
@@ -250,6 +259,21 @@ function validateAmmo(a) {
   };
 }
 
+function validateFlags(f) {
+  const result = JSON.parse(JSON.stringify(defaultFlags));
+  ['red', 'blue'].forEach(team => {
+    if (f && typeof f[team] === 'object') {
+      ['a', 'b', 'c', 'd'].forEach(k => {
+        const p = f[team][k];
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          result[team][k] = { x: p.x, y: p.y };
+        }
+      });
+    }
+  });
+  return result;
+}
+
 app.get('/api/nations', (req, res) => res.json(nations));
 app.post('/api/nations', requireAdmin, async (req, res) => {
   const valid = validateNation(req.body);
@@ -327,12 +351,13 @@ app.post('/api/terrains', requireAdmin, async (req, res) => {
   const name = (req.body.name || '').trim();
   const type = (req.body.type || '').trim();
   const size = req.body.size;
+  const flags = validateFlags(req.body.flags);
   if (!name) return res.status(400).json({ error: 'invalid name' });
   if (!type) return res.status(400).json({ error: 'invalid type' });
   if (!size || typeof size.x !== 'number' || typeof size.y !== 'number') {
     return res.status(400).json({ error: 'invalid size' });
   }
-  terrains.push({ name, type, size });
+  terrains.push({ name, type, size, flags });
   await saveTerrains();
   res.json({ success: true });
 });
@@ -342,10 +367,11 @@ app.put('/api/terrains/:idx', requireAdmin, async (req, res) => {
   const name = (req.body.name || '').trim();
   const type = (req.body.type || '').trim();
   const size = req.body.size;
+  const flags = validateFlags(req.body.flags);
   if (!name || !type || typeof size?.x !== 'number' || typeof size?.y !== 'number') {
     return res.status(400).json({ error: 'invalid data' });
   }
-  terrains[idx] = { name, type, size };
+  terrains[idx] = { name, type, size, flags };
   await saveTerrains();
   res.json({ success: true });
 });
