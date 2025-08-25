@@ -22,14 +22,20 @@ const io = new SocketIOServer(server);
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 
-// In-memory stores (tanks and terrains persisted to disk)
+// In-memory stores (tanks/ammo/terrains persisted to disk)
 const players = new Map(); // socket.id -> player state
 let tanks = []; // CRUD via admin, loaded from JSON file
-// Default ammo set; additional types may be added via admin API
-const ammo = [
+let ammo = []; // CRUD via admin, loaded from JSON file
+const defaultAmmo = [
   {
     name: 'AP',
+    nation: 'Neutral',
+    caliber: 40,
+    armorPen: 50,
     type: 'AP',
+    explosionRadius: 0,
+    pen0: 50,
+    pen100: 30,
     speed: 200,
     damage: 40,
     penetration: 50,
@@ -37,7 +43,13 @@ const ammo = [
   },
   {
     name: 'HE',
+    nation: 'Neutral',
+    caliber: 100,
+    armorPen: 10,
     type: 'HE',
+    explosionRadius: 50,
+    pen0: 10,
+    pen100: 5,
     speed: 150,
     damage: 20,
     penetration: 10,
@@ -58,19 +70,53 @@ let nationsSet = new Set();
 const TANKS_FILE = new URL('./data/tanks.json', import.meta.url);
 const NATIONS_FILE = new URL('./data/nations.json', import.meta.url);
 const TERRAIN_FILE = new URL('./data/terrains.json', import.meta.url);
+const AMMO_FILE = new URL('./data/ammo.json', import.meta.url);
 
-async function loadTanks() {
+// Generic JSON helpers with backup handling to guard against corruption
+async function safeReadJson(file, defaults) {
   try {
-    const text = await fs.readFile(TANKS_FILE, 'utf8');
-    const json = JSON.parse(text);
-    if (Array.isArray(json.tanks)) tanks = json.tanks;
-  } catch {
-    console.warn('No existing tank data, starting with empty list');
+    const text = await fs.readFile(file, 'utf8');
+    return JSON.parse(text);
+  } catch (err) {
+    console.error(`Failed to read ${file.pathname}:`, err.message);
+    const bak = new URL(file.href + '.bak');
+    try {
+      const backup = await fs.readFile(bak, 'utf8');
+      console.warn(`Recovered ${file.pathname} from backup`);
+      try { await fs.copyFile(bak, file); } catch {}
+      return JSON.parse(backup);
+    } catch {
+      console.warn(`No usable data for ${file.pathname}, using defaults`);
+      return defaults;
+    }
   }
 }
 
+async function safeWriteJson(file, data) {
+  const dir = new URL('.', file);
+  const tmp = new URL(file.href + '.tmp');
+  const bak = new URL(file.href + '.bak');
+  await fs.mkdir(dir, { recursive: true });
+  const json = JSON.stringify(data, null, 2);
+  await fs.writeFile(tmp, json);
+  try {
+    await fs.rename(file, bak);
+  } catch {}
+  try {
+    await fs.rename(tmp, file);
+  } catch (err) {
+    console.error(`Failed to write ${file.pathname}:`, err.message);
+    try { await fs.rename(bak, file); } catch {}
+    throw err;
+  }
+}
+
+async function loadTanks() {
+  const data = await safeReadJson(TANKS_FILE, { tanks: [] });
+  if (Array.isArray(data.tanks)) tanks = data.tanks;
+}
+
 async function saveTanks() {
-  await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
   const data = {
     _comment: [
       'Summary: Persisted tank definitions for Tanks for Nothing.',
@@ -79,24 +125,18 @@ async function saveTanks() {
     ],
     tanks
   };
-  await fs.writeFile(TANKS_FILE, JSON.stringify(data, null, 2));
+  await safeWriteJson(TANKS_FILE, data);
 }
 
 async function loadNations() {
-  try {
-    const text = await fs.readFile(NATIONS_FILE, 'utf8');
-    const json = JSON.parse(text);
-    if (Array.isArray(json.nations)) {
-      nations = json.nations;
-      nationsSet = new Set(nations);
-    }
-  } catch {
-    console.warn('No existing nation data, starting with empty list');
+  const data = await safeReadJson(NATIONS_FILE, { nations: [] });
+  if (Array.isArray(data.nations)) {
+    nations = data.nations;
+    nationsSet = new Set(nations);
   }
 }
 
 async function saveNations() {
-  await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
   const data = {
     _comment: [
       'Summary: Persisted nation names for Tanks for Nothing.',
@@ -105,28 +145,26 @@ async function saveNations() {
     ],
     nations
   };
-  await fs.writeFile(NATIONS_FILE, JSON.stringify(data, null, 2));
+  await safeWriteJson(NATIONS_FILE, data);
   nationsSet = new Set(nations);
 }
 
 async function loadTerrains() {
-  try {
-    const text = await fs.readFile(TERRAIN_FILE, 'utf8');
-    const json = JSON.parse(text);
-    if (Array.isArray(json.terrains)) {
-      terrains = json.terrains.map(t =>
-        typeof t === 'string' ? { name: t, type: 'default', size: { x: 1, y: 1 } } : t
-      );
-    }
-    if (typeof json.current === 'number') currentTerrain = json.current;
-  } catch {
-    console.warn('No existing terrain data, starting with default');
+  const defaults = {
+    current: 0,
+    terrains: [{ name: 'flat', type: 'default', size: { x: 1, y: 1 } }]
+  };
+  const data = await safeReadJson(TERRAIN_FILE, defaults);
+  if (Array.isArray(data.terrains)) {
+    terrains = data.terrains.map(t =>
+      typeof t === 'string' ? { name: t, type: 'default', size: { x: 1, y: 1 } } : t
+    );
   }
+  if (typeof data.current === 'number') currentTerrain = data.current;
   terrain = terrains[currentTerrain]?.name || 'flat';
 }
 
 async function saveTerrains() {
-  await fs.mkdir(new URL('./data', import.meta.url), { recursive: true });
   const data = {
     _comment: [
       'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
@@ -136,11 +174,29 @@ async function saveTerrains() {
     current: currentTerrain,
     terrains
   };
-  await fs.writeFile(TERRAIN_FILE, JSON.stringify(data, null, 2));
+  await safeWriteJson(TERRAIN_FILE, data);
+}
+
+async function loadAmmo() {
+  const data = await safeReadJson(AMMO_FILE, { ammo: defaultAmmo });
+  if (Array.isArray(data.ammo)) ammo = data.ammo;
+}
+
+async function saveAmmo() {
+  const data = {
+    _comment: [
+      'Summary: Persisted ammunition definitions for Tanks for Nothing.',
+      'Structure: JSON object with _comment array and ammo list.',
+      'Usage: Managed automatically by server; do not edit manually.'
+    ],
+    ammo
+  };
+  await safeWriteJson(AMMO_FILE, data);
 }
 
 await loadNations();
 await loadTanks();
+await loadAmmo();
 await loadTerrains();
 
 // Middleware
@@ -246,7 +302,12 @@ function validateAmmo(a) {
     type: a.type,
     explosionRadius: a.explosionRadius,
     pen0: a.pen0,
-    pen100: a.pen100
+    pen100: a.pen100,
+    // Derived gameplay fields so firing logic has required values
+    speed: a.caliber * 10,
+    damage: a.armorPen,
+    penetration: a.pen0,
+    explosion: a.explosionRadius
   };
 }
 
@@ -301,24 +362,27 @@ app.delete('/api/tanks/:idx', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/ammo', (req, res) => res.json(ammo));
-app.post('/api/ammo', requireAdmin, (req, res) => {
+app.post('/api/ammo', requireAdmin, async (req, res) => {
   const valid = validateAmmo(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   ammo.push(valid);
+  await saveAmmo();
   res.json({ success: true });
 });
-app.put('/api/ammo/:idx', requireAdmin, (req, res) => {
+app.put('/api/ammo/:idx', requireAdmin, async (req, res) => {
   const idx = Number(req.params.idx);
   if (!ammo[idx]) return res.status(404).json({ error: 'not found' });
   const valid = validateAmmo(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   ammo[idx] = valid;
+  await saveAmmo();
   res.json({ success: true });
 });
-app.delete('/api/ammo/:idx', requireAdmin, (req, res) => {
+app.delete('/api/ammo/:idx', requireAdmin, async (req, res) => {
   const idx = Number(req.params.idx);
   if (idx < 0 || idx >= ammo.length) return res.status(404).json({ error: 'not found' });
   ammo.splice(idx, 1);
+  await saveAmmo();
   res.json({ success: true });
 });
 
@@ -430,14 +494,15 @@ io.on('connection', (socket) => {
     const dirX = Math.sin(angle);
     const dirZ = Math.cos(angle);
     const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const speed = ammoDef.speed ?? 200;
     const projectile = {
       id,
       x: shooter.x,
       y: shooter.y + 1,
       z: shooter.z,
-      vx: -dirX * ammoDef.speed,
+      vx: -dirX * speed,
       vy: 0,
-      vz: -dirZ * ammoDef.speed,
+      vz: -dirZ * speed,
       ammo: ammoDef.name,
       shooter: socket.id,
       life: 5
@@ -470,9 +535,9 @@ setInterval(() => {
       if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
         const ammoDef = ammo.find((a) => a.name === p.ammo) || {};
         const armor = player.armor || 0;
-        const dmg = ammoDef.damage || 10;
-        const pen = ammoDef.penetration || 0;
-        const explosion = ammoDef.explosion || 0;
+        const dmg = ammoDef.damage ?? ammoDef.armorPen ?? 10;
+        const pen = ammoDef.penetration ?? ammoDef.pen0 ?? 0;
+        const explosion = ammoDef.explosion ?? ammoDef.explosionRadius ?? 0;
         let total = pen > armor ? dmg : dmg / 2;
         total += explosion;
         player.health = Math.max(0, (player.health ?? 100) - total);
