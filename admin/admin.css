@@ -104,7 +104,8 @@ body {
 #editorViews canvas,
 #editorViews #terrain3d {
   width: 100%;
-  height: 300px;
+  /* enlarged 3D preview for better terrain detail */
+  height: 400px;
 }
 
 .ground-types button {
