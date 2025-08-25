@@ -1,6 +1,6 @@
 <!-- admin.html
-     Summary: Admin dashboard for Tanks for Nothing.
-     Structure: login view and CRUD forms for nations, tanks, ammo, terrain.
+     Summary: Admin dashboard for Tanks for Nothing with management forms and game restart controls.
+     Structure: login view and CRUD forms for nations, tanks, ammo and terrain, plus restart button.
      Usage: Navigate to /admin/admin.html in browser. -->
 <!DOCTYPE html>
 <html lang="en">
@@ -138,9 +138,11 @@
 
       <section class="card">
         <h2>Terrain</h2>
-        <div id="terrainName"></div>
-        <input id="terrainInput" placeholder="Terrain name">
-        <button id="setTerrainBtn">Set Terrain</button>
+        <p class="instructions">Select a terrain then restart the game to apply.</p>
+        <div id="terrainList"></div>
+        <input id="terrainName" placeholder="Name">
+        <button id="addTerrainBtn">Add Terrain</button>
+        <button id="restartBtn">Restart Game</button>
       </section>
     </div>
   </div>

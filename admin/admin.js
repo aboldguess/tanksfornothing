@@ -1,7 +1,7 @@
 // admin.js
-// Summary: Handles admin login and CRUD actions for nations, tanks and ammo.
-// Uses secure httpOnly cookie set by server and provides logout endpoint.
-// Structure: auth helpers -> data loaders -> CRUD functions -> UI handlers.
+// Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain.
+// Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
+// Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by admin.html.
 // ---------------------------------------------------------------------------
 
@@ -38,16 +38,21 @@ function showDashboard() {
 let nationsCache = [];
 let tanksCache = [];
 let ammoCache = [];
+let terrainsCache = [];
 let editingNationIndex = null;
 let editingTankIndex = null;
 let editingAmmoIndex = null;
+let editingTerrainIndex = null;
+let currentTerrainIndex = 0;
 let tankNationChart = null;
 
 async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
   tanksCache = await fetch('/api/tanks').then(r => r.json());
   ammoCache = await fetch('/api/ammo').then(r => r.json());
-  const terrain = await fetch('/api/terrain').then(r => r.json());
+  const terrainData = await fetch('/api/terrains').then(r => r.json());
+  terrainsCache = terrainData.terrains;
+  currentTerrainIndex = terrainData.current ?? 0;
 
   // Populate nation selects for tank and ammo forms
   const nationOptions = nationsCache.map(n => `<option value="${n}">${n}</option>`).join('');
@@ -76,10 +81,17 @@ async function loadData() {
   ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
   ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
 
-  document.getElementById('terrainName').innerText = terrain.terrain;
+  const terrainDiv = document.getElementById('terrainList');
+  terrainDiv.innerHTML = terrainsCache.map((t, i) =>
+    `<div><input type="radio" name="terrainRadio" value="${i}" ${i == currentTerrainIndex ? 'checked' : ''}> ${t} <button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></div>`
+  ).join('');
+  terrainDiv.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => editTerrain(btn.dataset.i)));
+  terrainDiv.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
+
   clearNationForm();
   clearTankForm();
   clearAmmoForm();
+  clearTerrainForm();
   updateStats();
 }
 
@@ -246,11 +258,50 @@ function clearAmmoForm() {
   document.getElementById('ammoPen100').value = 20; document.getElementById('ammoPen100Val').innerText = '';
 }
 
-async function setTerrain() {
-  await fetch('/api/terrain', {
+function collectTerrainForm() {
+  return { name: document.getElementById('terrainName').value };
+}
+
+async function addTerrain() {
+  const payload = collectTerrainForm();
+  const method = editingTerrainIndex === null ? 'POST' : 'PUT';
+  const url = editingTerrainIndex === null ? '/api/terrains' : `/api/terrains/${editingTerrainIndex}`;
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  editingTerrainIndex = null;
+  document.getElementById('addTerrainBtn').innerText = 'Add Terrain';
+  clearTerrainForm();
+  loadData();
+}
+
+function editTerrain(i) {
+  document.getElementById('terrainName').value = terrainsCache[i];
+  editingTerrainIndex = i;
+  document.getElementById('addTerrainBtn').innerText = 'Update Terrain';
+}
+
+async function deleteTerrain(i) {
+  await fetch(`/api/terrains/${i}`, { method: 'DELETE' });
+  loadData();
+}
+
+function clearTerrainForm() {
+  document.getElementById('terrainName').value = '';
+}
+
+async function restartGame() {
+  const sel = document.querySelector('input[name="terrainRadio"]:checked');
+  if (!sel) {
+    alert('Select a terrain first');
+    return;
+  }
+  await fetch('/api/restart', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ terrain: document.getElementById('terrainInput').value })
+    body: JSON.stringify({ index: Number(sel.value) })
   });
   loadData();
 }
@@ -289,7 +340,8 @@ document.getElementById('loginBtn').addEventListener('click', login);
 document.getElementById('addNationBtn').addEventListener('click', addNation);
 document.getElementById('addTankBtn').addEventListener('click', addTank);
 document.getElementById('addAmmoBtn').addEventListener('click', addAmmo);
-document.getElementById('setTerrainBtn').addEventListener('click', setTerrain);
+document.getElementById('addTerrainBtn').addEventListener('click', addTerrain);
+document.getElementById('restartBtn').addEventListener('click', restartGame);
 
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {

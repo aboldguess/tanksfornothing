@@ -1,0 +1,9 @@
+{
+  "_comment": [
+    "Summary: Persisted terrain names and selected index for Tanks for Nothing.",
+    "Structure: JSON object with _comment array, current index and terrains list.",
+    "Usage: Managed automatically by server; do not edit manually."
+  ],
+  "current": 0,
+  "terrains": ["flat"]
+}
