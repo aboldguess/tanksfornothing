@@ -1,8 +1,9 @@
 // admin.js
-// Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain.
+// Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain across
+//          separate admin pages linked by a sidebar.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
-// Usage: Included by admin.html.
+// Usage: Included by all files in /admin.
 // ---------------------------------------------------------------------------
 
 function toggleMenu() {
@@ -23,14 +24,15 @@ async function login() {
   });
   console.debug('Admin login response', res.status);
   if (res.ok) {
-    // Cookie is set server-side; simply render dashboard
-    showDashboard();
+    // Cookie is set server-side; render the page
+    showApp();
   } else alert('Login failed');
 }
 
-function showDashboard() {
+function showApp() {
   document.getElementById('login').style.display = 'none';
-  document.getElementById('dashboard').style.display = 'block';
+  const app = document.getElementById('app');
+  if (app) app.style.display = 'flex';
   loadData();
 }
 
@@ -56,42 +58,52 @@ async function loadData() {
 
   // Populate nation selects for tank and ammo forms
   const nationOptions = nationsCache.map(n => `<option value="${n}">${n}</option>`).join('');
-  document.getElementById('tankNation').innerHTML = nationOptions;
-  document.getElementById('ammoNation').innerHTML = nationOptions;
+  const tankNation = document.getElementById('tankNation');
+  if (tankNation) tankNation.innerHTML = nationOptions;
+  const ammoNation = document.getElementById('ammoNation');
+  if (ammoNation) ammoNation.innerHTML = nationOptions;
 
   // Render nation list
   const nationDiv = document.getElementById('nationList');
-  nationDiv.innerHTML = nationsCache.map((n, i) =>
-    `<div>${n} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
-  ).join('');
-  nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
-  nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
+  if (nationDiv) {
+    nationDiv.innerHTML = nationsCache.map((n, i) =>
+      `<div>${n} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
+    ).join('');
+    nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
+    nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
+  }
 
   const tankDiv = document.getElementById('tankList');
-  tankDiv.innerHTML = tanksCache.map((t, i) =>
-    `<div>${t.name} (${t.nation}) BR ${t.br} <button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></div>`
-  ).join('');
-  tankDiv.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
-  tankDiv.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
+  if (tankDiv) {
+    tankDiv.innerHTML = tanksCache.map((t, i) =>
+      `<div>${t.name} (${t.nation}) BR ${t.br} <button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></div>`
+    ).join('');
+    tankDiv.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
+    tankDiv.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
+  }
 
   const ammoDiv = document.getElementById('ammoList');
-  ammoDiv.innerHTML = ammoCache.map((a, i) =>
-    `<div>${a.name} (${a.nation} - ${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
-  ).join('');
-  ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
-  ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
+  if (ammoDiv) {
+    ammoDiv.innerHTML = ammoCache.map((a, i) =>
+      `<div>${a.name} (${a.nation} - ${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
+    ).join('');
+    ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
+    ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
+  }
 
   const terrainDiv = document.getElementById('terrainList');
-  terrainDiv.innerHTML = terrainsCache.map((t, i) =>
-    `<div><input type="radio" name="terrainRadio" value="${i}" ${i == currentTerrainIndex ? 'checked' : ''}> ${t} <button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></div>`
-  ).join('');
-  terrainDiv.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => editTerrain(btn.dataset.i)));
-  terrainDiv.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
+  if (terrainDiv) {
+    terrainDiv.innerHTML = terrainsCache.map((t, i) =>
+      `<div><input type="radio" name="terrainRadio" value="${i}" ${i == currentTerrainIndex ? 'checked' : ''}> ${t} <button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></div>`
+    ).join('');
+    terrainDiv.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => editTerrain(btn.dataset.i)));
+    terrainDiv.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
+  }
 
-  clearNationForm();
-  clearTankForm();
-  clearAmmoForm();
-  clearTerrainForm();
+  if (document.getElementById('nationName')) clearNationForm();
+  if (document.getElementById('tankName')) clearTankForm();
+  if (document.getElementById('ammoName')) clearAmmoForm();
+  if (document.getElementById('terrainName')) clearTerrainForm();
   updateStats();
 }
 
@@ -307,10 +319,13 @@ async function restartGame() {
 }
 
 function updateStats() {
+  const summary = document.getElementById('summaryStats');
+  const chartEl = document.getElementById('tankNationChart');
+  if (!summary || !chartEl) return; // not on dashboard page
   const totalNations = nationsCache.length;
   const totalTanks = tanksCache.length;
-  document.getElementById('summaryStats').innerText = `${totalNations} nations, ${totalTanks} tanks`;
-  const ctx = document.getElementById('tankNationChart').getContext('2d');
+  summary.innerText = `${totalNations} nations, ${totalTanks} tanks`;
+  const ctx = chartEl.getContext('2d');
   const counts = nationsCache.map(n => tanksCache.filter(t => t.nation === n).length);
   if (tankNationChart) tankNationChart.destroy();
   tankNationChart = new Chart(ctx, {
@@ -330,22 +345,30 @@ function updateStats() {
   });
 }
 
-// Attach event listeners to expose functions in module scope
-document.getElementById('profilePic').addEventListener('click', toggleMenu);
-document.getElementById('signOutLink').addEventListener('click', (e) => {
+// Attach event listeners conditionally so pages without elements do not error
+const profilePic = document.getElementById('profilePic');
+if (profilePic) profilePic.addEventListener('click', toggleMenu);
+const signOutLink = document.getElementById('signOutLink');
+if (signOutLink) signOutLink.addEventListener('click', (e) => {
   e.preventDefault();
   signOut();
 });
-document.getElementById('loginBtn').addEventListener('click', login);
-document.getElementById('addNationBtn').addEventListener('click', addNation);
-document.getElementById('addTankBtn').addEventListener('click', addTank);
-document.getElementById('addAmmoBtn').addEventListener('click', addAmmo);
-document.getElementById('addTerrainBtn').addEventListener('click', addTerrain);
-document.getElementById('restartBtn').addEventListener('click', restartGame);
+const loginBtn = document.getElementById('loginBtn');
+if (loginBtn) loginBtn.addEventListener('click', login);
+const addNationBtn = document.getElementById('addNationBtn');
+if (addNationBtn) addNationBtn.addEventListener('click', addNation);
+const addTankBtn = document.getElementById('addTankBtn');
+if (addTankBtn) addTankBtn.addEventListener('click', addTank);
+const addAmmoBtn = document.getElementById('addAmmoBtn');
+if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
+const addTerrainBtn = document.getElementById('addTerrainBtn');
+if (addTerrainBtn) addTerrainBtn.addEventListener('click', addTerrain);
+const restartBtn = document.getElementById('restartBtn');
+if (restartBtn) restartBtn.addEventListener('click', restartGame);
 
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {
   const res = await fetch('/admin/status');
-  if (res.ok) showDashboard();
+  if (res.ok) showApp();
 }
 checkAdmin();

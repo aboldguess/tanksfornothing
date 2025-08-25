@@ -1,12 +1,12 @@
-<!-- admin.html
-     Summary: Admin dashboard showing overall statistics with sidebar navigation.
-     Structure: login form, persistent navbar with profile menu, sidebar links and dashboard stats card.
-     Usage: Visit /admin/admin.html after login to view statistics. Use sidebar for other admin pages. -->
+<!-- terrain.html
+     Summary: Admin page for managing terrain presets and restarting the game.
+     Structure: login, navbar with profile menu, sidebar navigation and terrain CRUD card.
+     Usage: Visit /admin/terrain.html after logging in. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Tanks Admin Dashboard</title>
+  <title>Manage Terrain</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="admin.css">
 </head>
@@ -42,18 +42,17 @@
       <a href="settings.html">Game Settings</a>
     </aside>
     <main id="mainContent">
-      <p class="instructions">Statistics update automatically.</p>
       <section class="card">
-        <h2>Statistics</h2>
-        <p id="summaryStats"></p>
-        <div class="chart-container">
-          <canvas id="tankNationChart" aria-label="Tanks per nation chart"></canvas>
-        </div>
+        <h2>Terrain</h2>
+        <p class="instructions">Select a terrain then restart the game to apply.</p>
+        <div id="terrainList"></div>
+        <input id="terrainName" placeholder="Name">
+        <button id="addTerrainBtn">Add Terrain</button>
+        <button id="restartBtn">Restart Game</button>
       </section>
     </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <script type="module" src="admin.js"></script>
 </body>
 </html>

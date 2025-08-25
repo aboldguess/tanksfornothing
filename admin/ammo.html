@@ -1,0 +1,84 @@
+<!-- ammo.html
+     Summary: Admin page for creating and editing ammunition.
+     Structure: login, navbar with profile menu, sidebar navigation and ammo CRUD card.
+     Usage: Visit /admin/ammo.html after logging in. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Manage Ammo</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <nav id="navbar">
+    <span>Admin Panel</span>
+    <div class="profile-menu" id="profileMenu">
+      <img src="https://placehold.co/32" alt="profile" id="profilePic" />
+      <div class="profile-menu-content" id="profileMenuContent">
+        <a href="#">Manage Profiles</a>
+        <a href="#">Learning Zone</a>
+        <a href="#">My Details</a>
+        <a href="#">Subscription Details</a>
+        <a href="#">Manage Users</a>
+        <a href="#" id="signOutLink">Sign out</a>
+      </div>
+    </div>
+  </nav>
+
+  <div id="login">
+    <h2>Admin Login</h2>
+    <input type="password" id="password" placeholder="Password">
+    <button id="loginBtn">Login</button>
+  </div>
+
+  <div id="app" style="display:none">
+    <aside id="sidebar">
+      <a href="admin.html">Dashboard</a>
+      <a href="nations.html">Nations</a>
+      <a href="tanks.html">Tanks</a>
+      <a href="ammo.html">Ammo</a>
+      <a href="terrain.html">Terrain</a>
+      <a href="settings.html">Game Settings</a>
+    </aside>
+    <main id="mainContent">
+      <section class="card">
+        <h2>Ammo</h2>
+        <p class="instructions">Manage ammunition statistics.</p>
+        <div id="ammoList"></div>
+        <input id="ammoName" placeholder="Name">
+        <select id="ammoNation"></select>
+        <label>Caliber (mm)
+          <input id="ammoCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('ammoCaliberVal').innerText=this.value">
+          <span id="ammoCaliberVal"></span>
+        </label>
+        <label>Armor Penetration (mm)
+          <input id="ammoPen" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPenVal').innerText=this.value">
+          <span id="ammoPenVal"></span>
+        </label>
+        <select id="ammoType">
+          <option value="HE">HE</option>
+          <option value="HEAT">HEAT</option>
+          <option value="AP">AP</option>
+          <option value="Smoke">Smoke</option>
+        </select>
+        <label>Explosion Radius (m)
+          <input id="ammoRadius" type="range" min="0" max="20" step="1" oninput="document.getElementById('ammoRadiusVal').innerText=this.value">
+          <span id="ammoRadiusVal"></span>
+        </label>
+        <label>Explosion Penetration 0m (mm)
+          <input id="ammoPen0" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen0Val').innerText=this.value">
+          <span id="ammoPen0Val"></span>
+        </label>
+        <label>Explosion Penetration 100m (mm)
+          <input id="ammoPen100" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen100Val').innerText=this.value">
+          <span id="ammoPen100Val"></span>
+        </label>
+        <button id="addAmmoBtn">Add Ammo</button>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="admin.js"></script>
+</body>
+</html>
