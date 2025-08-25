@@ -1,6 +1,6 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Renders 3D scene, handles user input,
-//          and optionally synchronizes with a server via Socket.IO.
+//          synchronizes with a server via Socket.IO and rebuilds terrain on demand.
 // Structure: scene setup -> input handling -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO only for multiplayer networking.
 // ---------------------------------------------------------------------------
@@ -37,11 +37,17 @@ if (window.io) {
   socket.on('connect', () => console.log('Connected to server'));
   socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
   socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
+  socket.on('terrain', (name) => buildTerrain(name));
+  socket.on('restart', () => {
+    tank.position.set(0, 0, 0);
+    tank.rotation.set(0, 0, 0);
+    turret.rotation.set(0, 0, 0);
+  });
 } else {
   showError('Socket.IO failed to load. Running offline.');
 }
 
-let tank, turret, camera, scene, renderer;
+let tank, turret, camera, scene, renderer, ground;
 let cameraMode = 'third'; // 'first' or 'third'
 let freelook = false;
 let cameraDistance = 10;
@@ -50,6 +56,57 @@ const keys = {};
 // Always initialize scene so the client can operate even without networking.
 init();
 
+// Build ground mesh based on terrain name.
+function buildTerrain(name) {
+  if (!scene) return;
+  if (ground) {
+    ground.geometry.dispose();
+    ground.material.dispose();
+    scene.remove(ground);
+  }
+  switch (name) {
+    case 'hill': {
+      ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0x228822 })
+      );
+      const pos = ground.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const dist = Math.sqrt(x * x + y * y);
+        const height = Math.max(0, 10 - dist / 5);
+        pos.setZ(i, height);
+      }
+      ground.geometry.computeVertexNormals();
+      break;
+    }
+    case 'valley': {
+      ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200, 10, 10),
+        new THREE.MeshStandardMaterial({ color: 0x228822 })
+      );
+      const pos = ground.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i);
+        const y = pos.getY(i);
+        const dist = Math.sqrt(x * x + y * y);
+        const height = -Math.max(0, 10 - dist / 5);
+        pos.setZ(i, height);
+      }
+      ground.geometry.computeVertexNormals();
+      break;
+    }
+    default:
+      ground = new THREE.Mesh(
+        new THREE.PlaneGeometry(200, 200),
+        new THREE.MeshStandardMaterial({ color: 0x228822 })
+      );
+  }
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+}
+
 function init() {
   scene = new THREE.Scene();
   scene.background = new THREE.Color(0xa0d0ff);
@@ -57,10 +114,7 @@ function init() {
   const light = new THREE.HemisphereLight(0xffffff, 0x444444);
   light.position.set(0, 20, 0);
   scene.add(light);
-
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200), new THREE.MeshStandardMaterial({ color: 0x228822 }));
-  ground.rotation.x = -Math.PI / 2;
-  scene.add(ground);
+  buildTerrain('flat');
 
   // Tank body
   const body = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 4), new THREE.MeshStandardMaterial({ color: 0x555555 }));
