@@ -42,6 +42,7 @@ let nationsCache = [];
 let tanksCache = [];
 let ammoCache = [];
 let terrainsCache = [];
+let usersCache = [];
 let editingNationIndex = null;
 let editingTankIndex = null;
 let editingAmmoIndex = null;
@@ -53,6 +54,7 @@ async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
   tanksCache = await fetch('/api/tanks').then(r => r.json());
   ammoCache = await fetch('/api/ammo').then(r => r.json());
+  usersCache = await fetch('/api/users').then(r => r.json());
   const terrainData = await fetch('/api/terrains').then(r => r.json());
   terrainsCache = terrainData.terrains;
   currentTerrainIndex = terrainData.current ?? 0;
@@ -90,6 +92,14 @@ async function loadData() {
     ).join('');
     ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
     ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
+  }
+
+  // Populate user stats table when on Users page
+  const userTable = document.getElementById('userTableBody');
+  if (userTable) {
+    userTable.innerHTML = usersCache.map(u =>
+      `<tr><td>${u.username}</td><td>${u.stats.games}</td><td>${u.stats.kills}</td><td>${u.stats.deaths}</td></tr>`
+    ).join('');
   }
 
   renderTerrainTable();

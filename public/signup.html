@@ -28,9 +28,10 @@
     <h2>Create your account</h2>
     <form id="signupForm">
       <input type="text" id="signupUser" placeholder="Username" required />
-      <input type="password" id="signupPass" placeholder="Password" required />
+      <input type="password" id="signupPass" placeholder="Password" minlength="6" required />
       <button type="submit">Sign up</button>
     </form>
+    <p class="instructions">Password must be at least 6 characters.</p>
     <p>Already have an account? <a href="/login.html">Log in</a></p>
     <div id="authError"></div>
   </div>

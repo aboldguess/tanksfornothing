@@ -1,12 +1,12 @@
-<!-- settings.html
-     Summary: Placeholder admin page for future game settings.
-     Structure: login, navbar with profile menu, sidebar navigation and settings card.
-     Usage: Visit /admin/settings.html after logging in. -->
+<!-- users.html
+     Summary: Admin page listing registered users and their statistics.
+     Structure: login, navbar with profile menu, sidebar navigation and user stats table.
+     Usage: Visit /admin/users.html after logging in to review player metrics. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Game Settings</title>
+  <title>User Stats</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="admin.css">
 </head>
@@ -44,8 +44,14 @@
     </aside>
     <main id="mainContent">
       <section class="card">
-        <h2>Game Settings</h2>
-        <p>Additional configuration options will appear here.</p>
+        <h2>Users</h2>
+        <p class="instructions">Registered users and their stats.</p>
+        <table>
+          <thead>
+            <tr><th>Username</th><th>Games</th><th>Kills</th><th>Deaths</th></tr>
+          </thead>
+          <tbody id="userTableBody"></tbody>
+        </table>
       </section>
     </main>
   </div>
