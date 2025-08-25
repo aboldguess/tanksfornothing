@@ -280,7 +280,8 @@ function collectTerrainForm() {
     size: {
       x: parseFloat(document.getElementById('sizeX').value),
       y: parseFloat(document.getElementById('sizeY').value)
-    }
+    },
+    flags: window.getTerrainFlags ? window.getTerrainFlags() : null
   };
 }
 
@@ -305,6 +306,7 @@ function openTerrainEditor(i) {
   if (i === undefined) {
     editingTerrainIndex = null;
     clearTerrainForm();
+    window.existingFlags = null;
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
@@ -313,6 +315,7 @@ function openTerrainEditor(i) {
     document.getElementById('terrainType').value = t.type;
     document.getElementById('sizeX').value = t.size.x;
     document.getElementById('sizeY').value = t.size.y;
+    window.existingFlags = t.flags || null;
     document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
   }
   document.dispatchEvent(new Event('terrain-editor-opened'));
@@ -328,6 +331,7 @@ function clearTerrainForm() {
   document.getElementById('terrainType').value = 'snow';
   document.getElementById('sizeX').value = '1';
   document.getElementById('sizeY').value = '1';
+  window.existingFlags = null;
 }
 
 function setCurrentTerrain(i) {

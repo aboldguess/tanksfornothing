@@ -1,6 +1,7 @@
 // terrain-editor.js
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
-//          perspective control, shading and Perlin-noise-based terrain generation.
+//          perspective control, shading, Perlin-noise-based terrain generation and capture-the-flag
+//          position placement.
 // Structure: state setup -> ground type management -> terrain initialization -> raised-cosine painting ->
 //            Perlin noise generation -> 3D plot with camera controls -> event wiring.
 // Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and camera settings are user configurable.
@@ -24,6 +25,16 @@ let mapWidthMeters = 0; // actual map width represented, in metres
 let mapHeightMeters = 0; // actual map height represented, in metres
 const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
+
+// Capture-the-flag positions for red and blue teams (a-d each)
+function defaultFlags() {
+  return {
+    red: { a: null, b: null, c: null, d: null },
+    blue: { a: null, b: null, c: null, d: null }
+  };
+}
+let flags = defaultFlags();
+window.getTerrainFlags = () => flags; // exposed for admin.js persistence
 
 // Render available ground types as selectable buttons
 function renderGroundTypes() {
@@ -85,6 +96,7 @@ function initializeTerrain() {
   console.debug('Initializing terrain', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+  flags = window.existingFlags ? JSON.parse(JSON.stringify(window.existingFlags)) : defaultFlags();
   update3DPlot();
 }
 
@@ -115,15 +127,24 @@ function handlePlotPaint(e) {
   const cy = Math.floor(point.y / cellMeters);
   const mode = document.getElementById('mode').value;
   const button = e.event.button;
-  applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
-    if (mode === 'ground') {
-      groundGrid[y][x] = currentGround;
-    } else {
-      const sign = button === 2 ? -1 : 1;
-      const newHeight = elevationGrid[y][x] + sign * influence;
-      elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
-    }
-  });
+  if (mode === 'flags') {
+    const [team, letter] = document.getElementById('flagSelect').value.split('-');
+    flags[team][letter] = {
+      x: cx * cellMeters + cellMeters / 2,
+      y: cy * cellMeters + cellMeters / 2
+    };
+    console.debug('Set flag', { team, letter, position: flags[team][letter] });
+  } else {
+    applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
+      if (mode === 'ground') {
+        groundGrid[y][x] = currentGround;
+      } else {
+        const sign = button === 2 ? -1 : 1;
+        const newHeight = elevationGrid[y][x] + sign * influence;
+        elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
+      }
+    });
+  }
   update3DPlot();
 }
 
@@ -246,7 +267,7 @@ function update3DPlot() {
       camera: { eye, projection: { type: projection } }
     }
   };
-  Plotly.newPlot('terrain3d', [{
+  const traces = [{
     x: xCoords,
     y: yCoords,
     z: elevationGrid,
@@ -258,7 +279,26 @@ function update3DPlot() {
     showscale: false,
     lighting: { ambient: 0.4, diffuse: 0.6, specular: 0.2, roughness: 0.5, fresnel: 0.2 },
     lightposition: { x: 100, y: 200, z: 400 }
-  }], layout, { responsive: true });
+  }];
+  const flagColors = { red: 'red', blue: 'blue' };
+  ['red', 'blue'].forEach(team => {
+    ['a', 'b', 'c', 'd'].forEach(letter => {
+      const pos = flags[team][letter];
+      if (pos) {
+        traces.push({
+          x: [pos.x],
+          y: [pos.y],
+          z: [0],
+          text: [`${team[0].toUpperCase()}${letter.toUpperCase()}`],
+          mode: 'markers+text',
+          type: 'scatter3d',
+          marker: { size: 5, color: flagColors[team] },
+          textposition: 'top center'
+        });
+      }
+    });
+  });
+  Plotly.newPlot('terrain3d', traces, layout, { responsive: true });
   applyCameraLock();
 }
 
@@ -284,6 +324,9 @@ document.getElementById('showAxes').addEventListener('change', update3DPlot);
 document.getElementById('viewSelect').addEventListener('change', update3DPlot);
 document.getElementById('projectionType').addEventListener('change', update3DPlot);
 document.getElementById('lockCamera').addEventListener('change', applyCameraLock);
+document.getElementById('mode').addEventListener('change', () => {
+  updateModeVisibility();
+});
 ['sizeX','sizeY','terrainType'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('change', initializeTerrain);
@@ -297,4 +340,12 @@ document.addEventListener('mouseup', () => { mouseDown = false; });
 plot.addEventListener('contextmenu', (e) => e.preventDefault());
 plot.on('plotly_click', handlePlotPaint);
 plot.on('plotly_hover', (e) => { if (mouseDown) handlePlotPaint(e); });
+
+function updateModeVisibility() {
+  const mode = document.getElementById('mode').value;
+  document.querySelectorAll('.flag-controls').forEach(el => {
+    el.style.display = mode === 'flags' ? '' : 'none';
+  });
+}
+updateModeVisibility();
 
