@@ -41,6 +41,7 @@ let ammoCache = [];
 let editingNationIndex = null;
 let editingTankIndex = null;
 let editingAmmoIndex = null;
+let tankNationChart = null;
 
 async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
@@ -79,6 +80,7 @@ async function loadData() {
   clearNationForm();
   clearTankForm();
   clearAmmoForm();
+  updateStats();
 }
 
 function collectNationForm() {
@@ -251,6 +253,30 @@ async function setTerrain() {
     body: JSON.stringify({ terrain: document.getElementById('terrainInput').value })
   });
   loadData();
+}
+
+function updateStats() {
+  const totalNations = nationsCache.length;
+  const totalTanks = tanksCache.length;
+  document.getElementById('summaryStats').innerText = `${totalNations} nations, ${totalTanks} tanks`;
+  const ctx = document.getElementById('tankNationChart').getContext('2d');
+  const counts = nationsCache.map(n => tanksCache.filter(t => t.nation === n).length);
+  if (tankNationChart) tankNationChart.destroy();
+  tankNationChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: nationsCache,
+      datasets: [{
+        label: 'Tanks per Nation',
+        data: counts,
+        backgroundColor: '#4e79a7'
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false
+    }
+  });
 }
 
 // Attach event listeners to expose functions in module scope
