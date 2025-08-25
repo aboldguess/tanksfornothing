@@ -1,7 +1,8 @@
 <!-- terrain.html
-     Summary: Admin page for managing terrain presets and interactive terrain editing.
+     Summary: Admin page for managing terrain presets with a direct 3D terrain editor that allows
+              clicking on the surface to sculpt ground types and elevation.
      Structure: login, navbar with profile menu, sidebar navigation, table of maps with thumbnails
-               and an expandable grid-based terrain editor.
+               and an expandable 3D editor featuring camera controls and shading.
      Usage: Visit /admin/terrain.html after logging in to manage terrains and design custom maps. -->
 <!DOCTYPE html>
 <html lang="en">
@@ -91,6 +92,21 @@
           <label for="showAxes">Show Axes</label>
           <input type="checkbox" id="showAxes" checked>
 
+          <label for="viewSelect">View</label>
+          <select id="viewSelect">
+            <option value="iso">Isometric</option>
+            <option value="top">Top</option>
+            <option value="front">Front</option>
+            <option value="side">Side</option>
+          </select>
+          <label for="projectionType">Projection</label>
+          <select id="projectionType">
+            <option value="perspective">Perspective</option>
+            <option value="orthographic">Orthographic</option>
+          </select>
+          <label for="lockCamera">Lock Position</label>
+          <input type="checkbox" id="lockCamera">
+
           <h3>Ground Types</h3>
           <div id="groundTypesList" class="ground-types"></div>
           <label for="groundName">Name</label>
@@ -106,7 +122,6 @@
           <button id="cancelEditBtn">Cancel</button>
         </div>
         <div id="editorViews">
-          <canvas id="terrainCanvas" class="terrain-canvas"></canvas>
           <div id="terrain3d"></div>
         </div>
       </section>
