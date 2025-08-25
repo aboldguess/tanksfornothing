@@ -1,7 +1,7 @@
 // terrain-editor.js
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
 //          perspective control and shading.
-// Structure: state setup -> ground type management -> grid generation -> raised-cosine painting -> 3D plot with camera controls -> event wiring.
+// Structure: state setup -> ground type management -> terrain initialization -> raised-cosine painting -> 3D plot with camera controls -> event wiring.
 // Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and camera settings are user configurable.
 
 // Default ground types with color, traction and viscosity for quick start
@@ -70,8 +70,8 @@ function addGroundType() {
   renderGroundTypes();
 }
 
-// Generate grid based on map size in km (1 cell = 50 m)
-function generateGrid() {
+// Initialize terrain based on map size in km (1 cell = 50 m)
+function initializeTerrain() {
   const type = document.getElementById('terrainType').value;
   const xKm = Number(document.getElementById('sizeX').value);
   const yKm = Number(document.getElementById('sizeY').value);
@@ -81,7 +81,7 @@ function generateGrid() {
   gridHeight = Math.max(1, Math.round(yMeters / cellMeters));
   mapWidthMeters = gridWidth * cellMeters;
   mapHeightMeters = gridHeight * cellMeters;
-  console.debug('Generating grid', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
+  console.debug('Initializing terrain', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
   update3DPlot();
@@ -192,12 +192,16 @@ function update3DPlot() {
 // Event wiring
 renderGroundTypes();
 document.getElementById('addGroundBtn').addEventListener('click', addGroundType);
-document.getElementById('generateBtn').addEventListener('click', generateGrid);
 document.getElementById('randomizeBtn').addEventListener('click', randomizeTerrain);
 document.getElementById('showAxes').addEventListener('change', update3DPlot);
 document.getElementById('viewSelect').addEventListener('change', update3DPlot);
 document.getElementById('projectionType').addEventListener('change', update3DPlot);
 document.getElementById('lockCamera').addEventListener('change', update3DPlot);
+['sizeX','sizeY','terrainType'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('change', initializeTerrain);
+});
+document.addEventListener('terrain-editor-opened', initializeTerrain);
 
 const plot = document.getElementById('terrain3d');
 let mouseDown = false;

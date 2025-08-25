@@ -315,6 +315,7 @@ function openTerrainEditor(i) {
     document.getElementById('sizeY').value = t.size.y;
     document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
   }
+  document.dispatchEvent(new Event('terrain-editor-opened'));
 }
 
 async function deleteTerrain(i) {
