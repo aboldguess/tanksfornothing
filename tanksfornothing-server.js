@@ -13,6 +13,9 @@ import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import cookieParser from 'cookie-parser';
 import { promises as fs } from 'fs';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import cookie from 'cookie';
 
 const app = express();
 const server = http.createServer(app);
@@ -21,6 +24,7 @@ const io = new SocketIOServer(server);
 // Configuration
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
+const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
 // In-memory stores (tanks/ammo/terrains persisted to disk)
 const players = new Map(); // socket.id -> player state
@@ -67,10 +71,14 @@ let baseBR = null; // Battle Rating of first player
 let nations = []; // CRUD via admin, loaded from JSON file
 let nationsSet = new Set();
 
+// Users persisted to disk for authentication and stat tracking
+let users = new Map(); // username -> { passwordHash, stats }
+
 const TANKS_FILE = new URL('./data/tanks.json', import.meta.url);
 const NATIONS_FILE = new URL('./data/nations.json', import.meta.url);
 const TERRAIN_FILE = new URL('./data/terrains.json', import.meta.url);
 const AMMO_FILE = new URL('./data/ammo.json', import.meta.url);
+const USERS_FILE = new URL('./data/users.json', import.meta.url);
 
 // Generic JSON helpers with backup handling to guard against corruption
 async function safeReadJson(file, defaults) {
@@ -194,10 +202,32 @@ async function saveAmmo() {
   await safeWriteJson(AMMO_FILE, data);
 }
 
+async function loadUsers() {
+  const data = await safeReadJson(USERS_FILE, { users: [] });
+  if (Array.isArray(data.users)) {
+    users = new Map(
+      data.users.map(u => [u.username, { passwordHash: u.passwordHash, stats: u.stats || { games: 0, kills: 0, deaths: 0 } }])
+    );
+  }
+}
+
+async function saveUsers() {
+  const data = {
+    _comment: [
+      'Summary: Persisted user accounts for Tanks for Nothing.',
+      'Structure: JSON object with _comment array and users list of {username,passwordHash,stats}.',
+      'Usage: Managed automatically by server; do not edit manually.'
+    ],
+    users: Array.from(users, ([username, u]) => ({ username, passwordHash: u.passwordHash, stats: u.stats }))
+  };
+  await safeWriteJson(USERS_FILE, data);
+}
+
 await loadNations();
 await loadTanks();
 await loadAmmo();
 await loadTerrains();
+await loadUsers();
 
 // Middleware
 app.use(express.static('public'));
@@ -240,6 +270,67 @@ app.post('/admin/logout', (req, res) => {
 app.get('/admin/status', (req, res) => {
   if (req.cookies && req.cookies.admin === 'true') return res.json({ admin: true });
   res.status(401).json({ admin: false });
+});
+
+// User signup endpoint with bcrypt password hashing
+app.post('/api/signup', async (req, res) => {
+  const { username, password } = req.body || {};
+  if (typeof username !== 'string' || typeof password !== 'string' || !username.trim() || password.length < 6) {
+    return res.status(400).json({ error: 'invalid credentials' });
+  }
+  if (users.has(username)) return res.status(400).json({ error: 'user exists' });
+  const hash = await bcrypt.hash(password, 10);
+  users.set(username, { passwordHash: hash, stats: { games: 0, kills: 0, deaths: 0 } });
+  await saveUsers();
+  console.log(`User signed up: ${username}`);
+  res.json({ success: true });
+});
+
+// User login endpoint issues httpOnly JWT cookie
+app.post('/api/login', async (req, res) => {
+  const { username, password } = req.body || {};
+  const record = users.get(username);
+  if (!record || !(await bcrypt.compare(password || '', record.passwordHash))) {
+    return res.status(401).json({ error: 'invalid credentials' });
+  }
+  const token = jwt.sign({ username }, JWT_SECRET, { expiresIn: '7d' });
+  res.cookie('token', token, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  console.log(`User logged in: ${username}`);
+  res.json({ success: true });
+});
+
+// Clear JWT cookie to sign out
+app.post('/api/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  res.json({ success: true });
+});
+
+// Authentication middleware using JWT cookie
+function requireAuth(req, res, next) {
+  const token = req.cookies && req.cookies.token;
+  if (!token) return res.status(401).json({ error: 'auth required' });
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    req.username = payload.username;
+    return next();
+  } catch {
+    return res.status(401).json({ error: 'auth failed' });
+  }
+}
+
+// Fetch current user stats
+app.get('/api/stats', requireAuth, (req, res) => {
+  const u = users.get(req.username);
+  if (!u) return res.status(404).json({ error: 'user not found' });
+  res.json({ username: req.username, stats: u.stats });
 });
 
 // Admin CRUD endpoints with validation helpers
@@ -444,33 +535,45 @@ io.on('connection', (socket) => {
   socket.emit('terrain', terrain);
 
   socket.on('join', (clientTank) => {
-    // Validate client-sent tank against server list to prevent tampering
-    const tank = tanks.find(
-      (t) => t.name === clientTank.name && t.nation === clientTank.nation
-    );
-    if (!tank) {
-      socket.emit('join-denied', 'Invalid tank');
-      return;
+    const cookies = cookie.parse(socket.handshake.headers.cookie || '');
+    try {
+      const payload = jwt.verify(cookies.token || '', JWT_SECRET);
+      const username = payload.username;
+      const userRecord = users.get(username);
+      if (!userRecord) throw new Error('no user');
+      // Validate client-sent tank against server list to prevent tampering
+      const tank = tanks.find(
+        (t) => t.name === clientTank.name && t.nation === clientTank.nation
+      );
+      if (!tank) {
+        socket.emit('join-denied', 'Invalid tank');
+        return;
+      }
+      // Ensure BR constraint based on trusted server data
+      if (baseBR === null) baseBR = tank.br;
+      if (tank.br > baseBR + 1) {
+        socket.emit('join-denied', 'Tank BR too high');
+        return;
+      }
+      // Initialize server-side player state with health and armor for damage calculations
+      players.set(socket.id, {
+        ...tank,
+        username,
+        x: 0,
+        y: 0,
+        z: 0,
+        rot: 0,
+        turret: 0,
+        health: 100,
+        crew: tank.crew || 3,
+        armor: tank.armor || 20
+      });
+      userRecord.stats.games += 1;
+      saveUsers();
+      io.emit('player-joined', { id: socket.id, tank, username });
+    } catch {
+      socket.emit('join-denied', 'Authentication required');
     }
-    // Ensure BR constraint based on trusted server data
-    if (baseBR === null) baseBR = tank.br;
-    if (tank.br > baseBR + 1) {
-      socket.emit('join-denied', 'Tank BR too high');
-      return;
-    }
-    // Initialize server-side player state with health and armor for damage calculations
-    players.set(socket.id, {
-      ...tank,
-      x: 0,
-      y: 0,
-      z: 0,
-      rot: 0,
-      turret: 0,
-      health: 100,
-      crew: tank.crew || 3,
-      armor: tank.armor || 20
-    });
-    io.emit('player-joined', { id: socket.id, tank });
   });
 
   socket.on('update', (state) => {
@@ -542,6 +645,14 @@ setInterval(() => {
         total += explosion;
         player.health = Math.max(0, (player.health ?? 100) - total);
         io.emit('tank-damaged', { id: pid, health: player.health });
+        if (player.health <= 0) {
+          const shooter = players.get(p.shooter);
+          const shooterUser = shooter && users.get(shooter.username);
+          const victimUser = users.get(player.username);
+          if (shooterUser) shooterUser.stats.kills += 1;
+          if (victimUser) victimUser.stats.deaths += 1;
+          saveUsers();
+        }
         io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
         projectiles.delete(id);
         break;

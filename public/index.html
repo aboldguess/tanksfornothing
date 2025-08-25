@@ -11,7 +11,20 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <nav id="navbar"><span>Tanks for Nothing</span></nav>
+  <nav id="navbar">
+    <span>Tanks for Nothing</span>
+    <div class="profile-menu">
+      <img id="profilePic" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAQAAADZc7J/AAAADUlEQVR42mP8/5+hHgAHggJ/lvE9GAAAAABJRU5ErkJggg==" alt="profile" />
+      <div class="profile-menu-content" id="profileMenuContent">
+        <a href="#">Manage Profiles</a>
+        <a href="#">Learning Zone</a>
+        <a href="#">My Details</a>
+        <a href="#">Subscription Details</a>
+        <a href="#">Manage Users</a>
+        <a href="#" id="signOut">Sign out</a>
+      </div>
+    </div>
+  </nav>
   <div id="lobby">
     <p>Select your nation and tank to join the battle.</p>
     <label for="nationSelect">Nation:</label>
@@ -22,6 +35,7 @@
     <div id="lobbyError"></div>
   </div>
   <div id="instructions" style="display:none">WASD move | Space brake | Mouse look | C freelook | V camera | Scroll zoom | 1-4 ammo</div>
+  <script type="module" src="nav.js"></script>
   <script src="/socket.io/socket.io.js"></script>
   <script
     type="module"
