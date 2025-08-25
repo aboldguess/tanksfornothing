@@ -6,7 +6,7 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - WASD driving, mouse-look turret control
 - Hold `C` for freelook, `V` to toggle first/third person
 - Mouse wheel zoom
-- Minimal admin panel for CRUD of nations, tanks, ammo and terrain
+- Modern admin dashboard with CRUD for nations, tanks, ammo and terrain plus live statistics
 
 ## Requirements
 - Node.js 18+ and npm

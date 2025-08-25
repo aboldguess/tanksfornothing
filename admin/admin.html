@@ -8,6 +8,7 @@
   <meta charset="UTF-8">
   <title>Tanks Admin</title>
   <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="admin.css">
 </head>
 <body>
   <nav id="navbar">
@@ -32,98 +33,118 @@
   </div>
 
   <div id="dashboard" style="display:none">
-    <h2>Nations</h2>
-    <div id="nationList"></div>
-    <input id="nationName" placeholder="Name">
-    <button id="addNationBtn">Add Nation</button>
+    <p class="instructions">Manage nations, tanks, ammo and terrain. Statistics update automatically.</p>
+    <div class="dashboard-grid">
+      <section class="card">
+        <h2>Statistics</h2>
+        <p id="summaryStats"></p>
+        <div class="chart-container">
+          <canvas id="tankNationChart" aria-label="Tanks per nation chart"></canvas>
+        </div>
+      </section>
 
-    <h2>Tanks</h2>
-    <div id="tankList"></div>
-    <input id="tankName" placeholder="Name">
-    <select id="tankNation"></select>
-    <label>Battle Rating
-      <input id="tankBR" type="range" min="1" max="10" step="0.1" oninput="document.getElementById('brVal').innerText=this.value">
-      <span id="brVal"></span>
-    </label>
-    <select id="tankClass">
-      <option value="Light/Scout">Light/Scout</option>
-      <option value="Medium/MBT">Medium/MBT</option>
-      <option value="Heavy">Heavy</option>
-    </select>
-    <label>Armour Thickness (mm)
-      <input id="tankArmor" type="range" min="10" max="150" step="1" oninput="document.getElementById('armorVal').innerText=this.value">
-      <span id="armorVal"></span>
-    </label>
-    <label>Main Cannon Caliber (mm)
-      <input id="tankCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('caliberVal').innerText=this.value">
-      <span id="caliberVal"></span>
-    </label>
-    <div>
-      <label><input type="checkbox" name="tankAmmo" value="HE"> HE</label>
-      <label><input type="checkbox" name="tankAmmo" value="HEAT"> HEAT</label>
-      <label><input type="checkbox" name="tankAmmo" value="AP"> AP</label>
-      <label><input type="checkbox" name="tankAmmo" value="Smoke"> Smoke</label>
+      <section class="card">
+        <h2>Nations</h2>
+        <div id="nationList"></div>
+        <input id="nationName" placeholder="Name">
+        <button id="addNationBtn">Add Nation</button>
+      </section>
+
+      <section class="card">
+        <h2>Tanks</h2>
+        <div id="tankList"></div>
+        <input id="tankName" placeholder="Name">
+        <select id="tankNation"></select>
+        <label>Battle Rating
+          <input id="tankBR" type="range" min="1" max="10" step="0.1" oninput="document.getElementById('brVal').innerText=this.value">
+          <span id="brVal"></span>
+        </label>
+        <select id="tankClass">
+          <option value="Light/Scout">Light/Scout</option>
+          <option value="Medium/MBT">Medium/MBT</option>
+          <option value="Heavy">Heavy</option>
+        </select>
+        <label>Armour Thickness (mm)
+          <input id="tankArmor" type="range" min="10" max="150" step="1" oninput="document.getElementById('armorVal').innerText=this.value">
+          <span id="armorVal"></span>
+        </label>
+        <label>Main Cannon Caliber (mm)
+          <input id="tankCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('caliberVal').innerText=this.value">
+          <span id="caliberVal"></span>
+        </label>
+        <div>
+          <label><input type="checkbox" name="tankAmmo" value="HE"> HE</label>
+          <label><input type="checkbox" name="tankAmmo" value="HEAT"> HEAT</label>
+          <label><input type="checkbox" name="tankAmmo" value="AP"> AP</label>
+          <label><input type="checkbox" name="tankAmmo" value="Smoke"> Smoke</label>
+        </div>
+        <label>Crew Count
+          <input id="tankCrew" type="range" min="1" max="10" step="1" oninput="document.getElementById('crewVal').innerText=this.value">
+          <span id="crewVal"></span>
+        </label>
+        <label>Engine Horsepower
+          <input id="tankHP" type="range" min="100" max="1000" step="50" oninput="document.getElementById('hpVal').innerText=this.value">
+          <span id="hpVal"></span>
+        </label>
+        <label>Max Incline (%)
+          <input id="tankIncline" type="range" min="2" max="12" step="1" oninput="document.getElementById('inclineVal').innerText=this.value">
+          <span id="inclineVal"></span>
+        </label>
+        <label>Body Rotation Time (s/360°)
+          <input id="tankBodyRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('bodyRotVal').innerText=this.value">
+          <span id="bodyRotVal"></span>
+        </label>
+        <label>Turret Rotation Time (s/360°)
+          <input id="tankTurretRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
+          <span id="turretRotVal"></span>
+        </label>
+        <button id="addTankBtn">Add Tank</button>
+      </section>
+
+      <section class="card">
+        <h2>Ammo</h2>
+        <div id="ammoList"></div>
+        <input id="ammoName" placeholder="Name">
+        <select id="ammoNation"></select>
+        <label>Caliber (mm)
+          <input id="ammoCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('ammoCaliberVal').innerText=this.value">
+          <span id="ammoCaliberVal"></span>
+        </label>
+        <label>Armor Penetration (mm)
+          <input id="ammoPen" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPenVal').innerText=this.value">
+          <span id="ammoPenVal"></span>
+        </label>
+        <select id="ammoType">
+          <option value="HE">HE</option>
+          <option value="HEAT">HEAT</option>
+          <option value="AP">AP</option>
+          <option value="Smoke">Smoke</option>
+        </select>
+        <label>Explosion Radius (m)
+          <input id="ammoRadius" type="range" min="0" max="20" step="1" oninput="document.getElementById('ammoRadiusVal').innerText=this.value">
+          <span id="ammoRadiusVal"></span>
+        </label>
+        <label>Explosion Penetration 0m (mm)
+          <input id="ammoPen0" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen0Val').innerText=this.value">
+          <span id="ammoPen0Val"></span>
+        </label>
+        <label>Explosion Penetration 100m (mm)
+          <input id="ammoPen100" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen100Val').innerText=this.value">
+          <span id="ammoPen100Val"></span>
+        </label>
+        <button id="addAmmoBtn">Add Ammo</button>
+      </section>
+
+      <section class="card">
+        <h2>Terrain</h2>
+        <div id="terrainName"></div>
+        <input id="terrainInput" placeholder="Terrain name">
+        <button id="setTerrainBtn">Set Terrain</button>
+      </section>
     </div>
-    <label>Crew Count
-      <input id="tankCrew" type="range" min="1" max="10" step="1" oninput="document.getElementById('crewVal').innerText=this.value">
-      <span id="crewVal"></span>
-    </label>
-    <label>Engine Horsepower
-      <input id="tankHP" type="range" min="100" max="1000" step="50" oninput="document.getElementById('hpVal').innerText=this.value">
-      <span id="hpVal"></span>
-    </label>
-    <label>Max Incline (%)
-      <input id="tankIncline" type="range" min="2" max="12" step="1" oninput="document.getElementById('inclineVal').innerText=this.value">
-      <span id="inclineVal"></span>
-    </label>
-    <label>Body Rotation Time (s/360°)
-      <input id="tankBodyRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('bodyRotVal').innerText=this.value">
-      <span id="bodyRotVal"></span>
-    </label>
-    <label>Turret Rotation Time (s/360°)
-      <input id="tankTurretRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
-      <span id="turretRotVal"></span>
-    </label>
-    <button id="addTankBtn">Add Tank</button>
-
-    <h2>Ammo</h2>
-    <div id="ammoList"></div>
-    <input id="ammoName" placeholder="Name">
-    <select id="ammoNation"></select>
-    <label>Caliber (mm)
-      <input id="ammoCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('ammoCaliberVal').innerText=this.value">
-      <span id="ammoCaliberVal"></span>
-    </label>
-    <label>Armor Penetration (mm)
-      <input id="ammoPen" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPenVal').innerText=this.value">
-      <span id="ammoPenVal"></span>
-    </label>
-    <select id="ammoType">
-      <option value="HE">HE</option>
-      <option value="HEAT">HEAT</option>
-      <option value="AP">AP</option>
-      <option value="Smoke">Smoke</option>
-    </select>
-    <label>Explosion Radius (m)
-      <input id="ammoRadius" type="range" min="0" max="20" step="1" oninput="document.getElementById('ammoRadiusVal').innerText=this.value">
-      <span id="ammoRadiusVal"></span>
-    </label>
-    <label>Explosion Penetration 0m (mm)
-      <input id="ammoPen0" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen0Val').innerText=this.value">
-      <span id="ammoPen0Val"></span>
-    </label>
-    <label>Explosion Penetration 100m (mm)
-      <input id="ammoPen100" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen100Val').innerText=this.value">
-      <span id="ammoPen100Val"></span>
-    </label>
-    <button id="addAmmoBtn">Add Ammo</button>
-
-    <h2>Terrain</h2>
-    <div id="terrainName"></div>
-    <input id="terrainInput" placeholder="Terrain name">
-    <button id="setTerrainBtn">Set Terrain</button>
   </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script type="module" src="admin.js"></script>
 </body>
 </html>
