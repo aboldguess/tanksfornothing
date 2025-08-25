@@ -1,9 +1,9 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Renders 3D scene, handles user input,
-//          uses Cannon.js for simple collision physics and tank movement based on
-//          per-tank speed settings, and synchronizes state with a server via Socket.IO.
-// Structure: scene setup -> physics setup -> input handling -> animation loop ->
-//             optional networking.
+// Summary: Browser client for Tanks for Nothing. Provides lobby tank selection,
+//          renders 3D scene, handles user input, uses Cannon.js for simple
+//          collision physics and synchronizes state with a server via Socket.IO.
+// Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
+//             animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
 //         loads Cannon.js from CDN for physics.
 // ---------------------------------------------------------------------------
@@ -61,6 +61,71 @@ if (window.io) {
 } else {
   showError('Socket.IO failed to load. Running offline.');
 }
+
+// Lobby DOM elements for tank selection
+const lobby = document.getElementById('lobby');
+const nationSelect = document.getElementById('nationSelect');
+const tankSelect = document.getElementById('tankSelect');
+const joinBtn = document.getElementById('joinBtn');
+const lobbyError = document.getElementById('lobbyError');
+const instructions = document.getElementById('instructions');
+let availableTanks = [];
+
+// Populate nation and tank dropdowns from server data
+async function loadLobbyData() {
+  try {
+    const [nations, tanks] = await Promise.all([
+      fetch('/api/nations').then(r => r.json()),
+      fetch('/api/tanks').then(r => r.json())
+    ]);
+    availableTanks = Array.isArray(tanks) ? tanks : [];
+    nations.forEach(n => {
+      const opt = document.createElement('option');
+      opt.value = n;
+      opt.textContent = n;
+      nationSelect.appendChild(opt);
+    });
+    nationSelect.addEventListener('change', updateTankOptions);
+    updateTankOptions();
+  } catch (err) {
+    showError('Failed to load tank data');
+  }
+}
+
+function updateTankOptions() {
+  tankSelect.innerHTML = '';
+  const filtered = availableTanks.filter(t => t.nation === nationSelect.value);
+  filtered.forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.name;
+    opt.textContent = `${t.name} (BR ${t.br})`;
+    tankSelect.appendChild(opt);
+  });
+}
+
+joinBtn.addEventListener('click', () => {
+  lobbyError.textContent = '';
+  const tank = availableTanks.find(
+    t => t.name === tankSelect.value && t.nation === nationSelect.value
+  );
+  if (!tank) {
+    lobbyError.textContent = 'Invalid selection';
+    return;
+  }
+  lobby.style.display = 'none';
+  instructions.style.display = 'block';
+  if (socket) socket.emit('join', tank);
+});
+
+if (socket) {
+  socket.on('join-denied', (msg) => {
+    lobbyError.textContent = msg;
+    lobby.style.display = 'block';
+    instructions.style.display = 'none';
+  });
+}
+
+loadLobbyData();
 
 let tank, turret, camera, scene, renderer, ground;
 // Physics objects
@@ -259,11 +324,6 @@ function init() {
   });
 
   animate();
-
-  // Join game with default tank when networking is available
-  if (socket) {
-    socket.emit('join', defaultTank);
-  }
 }
 
 function onMouseMove(e) {

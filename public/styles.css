@@ -1,6 +1,6 @@
 /* styles.css
    Summary: Basic styling for Tanks for Nothing client and admin pages with a tank-inspired palette.
-   Structure: Layout, navbar, overlay instructions.
+   Structure: Layout, navbar, lobby overlay and instructions.
    Usage: Included automatically by HTML pages. */
 /* Global body and navbar styling with a dark, tank-inspired palette */
 body {
@@ -20,6 +20,28 @@ body {
   color: #fff;
   padding: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+}
+
+#lobby {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(34,34,34,0.9);
+  padding: 20px;
+  border-radius: 6px;
+  text-align: center;
+  z-index: 1000;
+}
+
+#lobby select,
+#lobby button {
+  margin: 5px;
+}
+
+#lobbyError {
+  color: #ff8080;
+  margin-top: 5px;
 }
 
 #instructions {

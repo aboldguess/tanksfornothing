@@ -1,7 +1,8 @@
 // tanksfornothing-server.js
 // Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
-// This script sets up an Express web server with Socket.IO for real-time tank position updates and persists admin-defined tanks,
-// nations and terrain details to disk.
+// This script sets up an Express web server with Socket.IO for real-time tank position updates,
+// persists admin-defined tanks, nations and terrain details to disk and enforces Battle Rating
+// constraints when players join.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores -> persistence helpers -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
 // ---------------------------------------------------------------------------
@@ -357,8 +358,16 @@ io.on('connection', (socket) => {
   socket.emit('ammo', ammo);
   socket.emit('terrain', terrain);
 
-  socket.on('join', (tank) => {
-    // Ensure BR constraint
+  socket.on('join', (clientTank) => {
+    // Validate client-sent tank against server list to prevent tampering
+    const tank = tanks.find(
+      (t) => t.name === clientTank.name && t.nation === clientTank.nation
+    );
+    if (!tank) {
+      socket.emit('join-denied', 'Invalid tank');
+      return;
+    }
+    // Ensure BR constraint based on trusted server data
     if (baseBR === null) baseBR = tank.br;
     if (tank.br > baseBR + 1) {
       socket.emit('join-denied', 'Tank BR too high');
