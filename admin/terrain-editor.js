@@ -148,7 +148,6 @@ function update3DPlot() {
   const showAxes = document.getElementById('showAxes').checked; // user toggle for axis visibility
   const view = document.getElementById('viewSelect').value;
   const projection = document.getElementById('projectionType').value;
-  const lockCamera = document.getElementById('lockCamera').checked;
   let eye;
   switch (view) {
     case 'top':
@@ -170,7 +169,7 @@ function update3DPlot() {
       yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters, visible: showAxes },
       zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters, visible: showAxes },
       aspectmode: 'data',
-      dragmode: lockCamera ? false : 'turntable',
+      dragmode: 'turntable',
       camera: { eye, projection: { type: projection } }
     }
   };
@@ -187,6 +186,21 @@ function update3DPlot() {
     lighting: { ambient: 0.4, diffuse: 0.6, specular: 0.2, roughness: 0.5, fresnel: 0.2 },
     lightposition: { x: 100, y: 200, z: 400 }
   }], layout, { responsive: true });
+  applyCameraLock();
+}
+
+// Prevent scrolling to keep zoom level fixed when camera is locked
+function preventPlotScroll(e) {
+  e.preventDefault();
+}
+
+// Toggle drag and zoom capabilities to freeze or free the current view
+function applyCameraLock() {
+  const locked = document.getElementById('lockCamera').checked;
+  const plot = document.getElementById('terrain3d');
+  Plotly.relayout(plot, { 'scene.dragmode': locked ? false : 'turntable' });
+  plot.removeEventListener('wheel', preventPlotScroll);
+  if (locked) plot.addEventListener('wheel', preventPlotScroll, { passive: false });
 }
 
 // Event wiring
@@ -196,7 +210,7 @@ document.getElementById('randomizeBtn').addEventListener('click', randomizeTerra
 document.getElementById('showAxes').addEventListener('change', update3DPlot);
 document.getElementById('viewSelect').addEventListener('change', update3DPlot);
 document.getElementById('projectionType').addEventListener('change', update3DPlot);
-document.getElementById('lockCamera').addEventListener('change', update3DPlot);
+document.getElementById('lockCamera').addEventListener('change', applyCameraLock);
 ['sizeX','sizeY','terrainType'].forEach(id => {
   const el = document.getElementById(id);
   el.addEventListener('change', initializeTerrain);
