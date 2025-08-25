@@ -102,12 +102,20 @@ async function init() {
     const terrainData = {
       _comment: [
         'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
-        'Structure: JSON object with _comment array, current index and terrains list of {name,type,size}.',
+        'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags}.',
         'Usage: Managed automatically by server; do not edit manually.'
       ],
       current: 0,
       terrains: [
-        { name: 'flat', type: 'default', size: { x: 1, y: 1 } }
+        {
+          name: 'flat',
+          type: 'default',
+          size: { x: 1, y: 1 },
+          flags: {
+            red: { a: null, b: null, c: null, d: null },
+            blue: { a: null, b: null, c: null, d: null }
+          }
+        }
       ]
     };
     await fs.writeFile(terrainFile, JSON.stringify(terrainData, null, 2));

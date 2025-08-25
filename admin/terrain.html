@@ -82,7 +82,20 @@
           <select id="mode">
             <option value="ground">Ground</option>
             <option value="elevation">Elevation</option>
+            <option value="flags">Flags</option>
           </select>
+          <label for="flagSelect" class="flag-controls" style="display:none">Flag</label>
+          <select id="flagSelect" class="flag-controls" style="display:none">
+            <option value="red-a">Red A</option>
+            <option value="red-b">Red B</option>
+            <option value="red-c">Red C</option>
+            <option value="red-d">Red D</option>
+            <option value="blue-a">Blue A</option>
+            <option value="blue-b">Blue B</option>
+            <option value="blue-c">Blue C</option>
+            <option value="blue-d">Blue D</option>
+          </select>
+          <p id="flagInstructions" class="flag-controls instructions" style="display:none">Select a flag then click the map to place it.</p>
           <label for="brushSizeX">Brush Size X (cells)</label>
           <input type="range" id="brushSizeX" min="1" max="10" value="2">
           <label for="brushSizeY">Brush Size Y (cells)</label>
