@@ -21,6 +21,7 @@ async function login() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ password })
   });
+  console.debug('Admin login response', res.status);
   if (res.ok) {
     // Cookie is set server-side; simply render dashboard
     showDashboard();
@@ -86,6 +87,17 @@ async function setTerrain() {
   });
   loadData();
 }
+
+// Attach event listeners to expose functions in module scope
+document.getElementById('profilePic').addEventListener('click', toggleMenu);
+document.getElementById('signOutLink').addEventListener('click', (e) => {
+  e.preventDefault();
+  signOut();
+});
+document.getElementById('loginBtn').addEventListener('click', login);
+document.getElementById('addTankBtn').addEventListener('click', addTank);
+document.getElementById('addAmmoBtn').addEventListener('click', addAmmo);
+document.getElementById('setTerrainBtn').addEventListener('click', setTerrain);
 
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {
