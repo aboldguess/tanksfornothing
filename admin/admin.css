@@ -67,3 +67,36 @@
   width: auto;
   margin-bottom: 4px;
 }
+
+/* Terrain editor specific styling */
+.terrain-canvas {
+  border: 1px solid #2b361e;
+  margin-top: 10px;
+  cursor: crosshair;
+}
+
+.ground-types button {
+  border: none;
+  padding: 6px 10px;
+  margin-right: 5px;
+  margin-bottom: 5px;
+  cursor: pointer;
+  color: #000;
+  position: relative;
+}
+
+.ground-types button.selected {
+  outline: 2px solid #fff;
+}
+
+.ground-types .delete-ground {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 10px;
+  background: #000000aa;
+  color: #fff;
+  padding: 0 2px;
+  border-radius: 50%;
+  pointer-events: all;
+}
