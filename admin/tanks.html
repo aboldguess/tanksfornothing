@@ -60,6 +60,7 @@
               <th data-sort="crew">Crew</th>
               <th data-sort="engineHp">HP</th>
               <th data-sort="maxSpeed">Speed</th>
+              <th data-sort="horizontalTraverse">Horiz Trav</th>
               <th data-sort="bodyWidth">Body W</th>
               <th data-sort="bodyLength">Body L</th>
               <th data-sort="bodyHeight">Body H</th>
@@ -80,6 +81,7 @@
               <option value="Light/Scout">Light/Scout</option>
               <option value="Medium/MBT">Medium/MBT</option>
               <option value="Heavy">Heavy</option>
+              <option value="Tank Destroyer">Tank Destroyer</option>
             </select>
           </div>
           <div id="tankSections">
@@ -102,6 +104,10 @@
               <label>Turret Rotation Time (s/360°)
                 <input id="tankTurretRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
                 <span id="turretRotVal"></span>
+              </label>
+              <label>Horizontal Traverse (deg)
+                <input id="tankHorizontalTraverse" type="range" min="0" max="20" step="1" oninput="document.getElementById('horizontalTraverseVal').innerText=this.value">
+                <span id="horizontalTraverseVal"></span>
               </label>
               <label>Max Turret Incline (deg)
                 <input id="tankMaxTurretIncline" type="range" min="0" max="50" step="1" oninput="document.getElementById('maxTurretInclineVal').innerText=this.value">

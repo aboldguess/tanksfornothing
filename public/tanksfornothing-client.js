@@ -192,6 +192,7 @@ const defaultTank = {
   bodyRotation: 20, // seconds for full rotation
   maxTurretIncline: 50,
   maxTurretDecline: 25,
+  horizontalTraverse: 0,
   bodyWidth: 2,
   bodyLength: 4,
   bodyHeight: 1,
@@ -205,6 +206,7 @@ let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/
 let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
 let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
+let MAX_TURRET_TRAVERSE = Infinity; // radians; Infinity allows full rotation
 // Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
 let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
@@ -415,6 +417,8 @@ function applyTankConfig(t) {
   ROT_SPEED = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
   MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
   MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
+  const traverseDeg = t.horizontalTraverse ?? defaultTank.horizontalTraverse;
+  MAX_TURRET_TRAVERSE = traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
 
   tank.geometry.dispose();
@@ -452,7 +456,8 @@ function applyTankConfig(t) {
 
 function onMouseMove(e) {
   const sensitivity = 0.002;
-  turret.rotation.y -= e.movementX * sensitivity;
+  const newYaw = turret.rotation.y - e.movementX * sensitivity;
+  turret.rotation.y = THREE.MathUtils.clamp(newYaw, -MAX_TURRET_TRAVERSE, MAX_TURRET_TRAVERSE);
   turret.rotation.x = THREE.MathUtils.clamp(
     turret.rotation.x - e.movementY * sensitivity,
     -MAX_TURRET_DECLINE,
