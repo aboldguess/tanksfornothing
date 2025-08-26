@@ -16,6 +16,18 @@ body {
   min-height: calc(100vh - 60px);
 }
 
+/* Centered layout for standalone login page */
+body.login-page {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+#loginCard {
+  max-width: 320px;
+}
+
 #sidebar {
   width: 200px;
   background: #2b361e;

@@ -1,5 +1,5 @@
 // admin.js
-// Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain across
+// Summary: Handles CRUD actions for nations, tanks, ammo and terrain across
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
 //          preview with independently rotating chassis and turret based on rotation times, and
@@ -11,9 +11,9 @@
 
 import { getFlagList } from './flag-utils.js';
 
-// Lazily load Three.js so login and other admin features work even if the
-// 3D library fails to download. This prevents the entire admin script from
-// aborting when the optional 3D dependency is unavailable.
+// Lazily load Three.js so admin features work even if the optional 3D library
+// fails to download. This keeps the admin panel functional even when the
+// preview renderer is unavailable.
 let THREE = null;
 async function ensureThree() {
   if (!THREE) {
@@ -32,42 +32,7 @@ function toggleMenu() {
 
 async function signOut() {
   await fetch('/admin/logout', { method: 'POST' });
-  location.reload();
-}
-
-async function login(e) {
-  if (e) e.preventDefault();
-  const msg = document.getElementById('loginError');
-  if (msg) msg.textContent = '';
-  try {
-    // Read the password lazily so missing input fields do not throw
-    const passInput = document.getElementById('password');
-    const password = passInput ? passInput.value : '';
-    const res = await fetch('/admin/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({ password })
-    });
-    console.debug('Admin login response', res.status);
-    if (res.ok) {
-      // Cookie is set server-side; render the page
-      showApp();
-    } else {
-      const data = await res.json().catch(() => ({}));
-      if (msg) msg.textContent = data.error || 'Login failed';
-    }
-  } catch (err) {
-    console.error('Login request failed', err);
-    if (msg) msg.textContent = err.message || 'Login failed';
-  }
-}
-
-function showApp() {
-  document.getElementById('login').style.display = 'none';
-  const app = document.getElementById('app');
-  if (app) app.style.display = 'flex';
-  loadData();
+  location.href = 'login.html';
 }
 
 // In-memory caches for editing
@@ -610,9 +575,6 @@ function initAdmin() {
     });
   }
 
-  const loginForm = document.getElementById('loginForm');
-  if (loginForm) loginForm.addEventListener('submit', login);
-
   const addNationBtn = document.getElementById('addNationBtn');
   if (addNationBtn) addNationBtn.addEventListener('click', addNation);
 
@@ -639,7 +601,7 @@ function initAdmin() {
   const restartBtn = document.getElementById('restartBtn');
   if (restartBtn) restartBtn.addEventListener('click', restartGame);
 
-  // Quick check to see if an admin cookie already exists
+  // Ensure the user is authenticated before loading any data
   checkAdmin();
 }
 
@@ -647,10 +609,15 @@ function initAdmin() {
 async function checkAdmin() {
   try {
     const res = await fetch('/admin/status');
-    if (res.ok) showApp();
+    if (res.ok) {
+      loadData();
+      return;
+    }
   } catch (err) {
     console.warn('Admin status check failed', err);
   }
+  // Not authenticated; redirect to login page
+  window.location.href = 'login.html';
 }
 
 document.addEventListener('DOMContentLoaded', initAdmin);

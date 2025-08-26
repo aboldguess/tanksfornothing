@@ -1,11 +1,11 @@
 <!-- tanks.html
      Summary: Admin page for creating, listing and editing tanks with live preview.
-     Structure: login, navbar with profile menu, sidebar navigation and tank CRUD card
+     Structure: navbar with profile menu, sidebar navigation and tank CRUD card
                 containing a sortable table and a multi-column form grouped into
                 Armament, Survivability, Maneuverability and Dimensions sections. The
                 Survivability section now includes chassis and turret armor sliders.
-     Usage: Visit /admin/tanks.html after logging in to manage tank definitions. Slider
-            values display defaults at midpoints to maintain consistent layout. -->
+     Usage: Visit /admin/tanks.html to manage tank definitions. Slider values display
+            defaults at midpoints to maintain consistent layout. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -30,16 +30,7 @@
     </div>
   </nav>
 
-  <div id="login">
-    <h2>Admin Login</h2>
-    <form id="loginForm">
-      <input type="password" id="password" placeholder="Password" required>
-      <button id="loginBtn" type="submit">Login</button>
-    </form>
-    <div id="loginError" role="alert"></div>
-  </div>
-
-  <div id="app" style="display:none">
+  <div id="app">
     <aside id="sidebar">
       <a href="admin.html">Dashboard</a>
       <a href="nations.html">Nations</a>

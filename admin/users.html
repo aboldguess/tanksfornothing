@@ -1,7 +1,7 @@
 <!-- users.html
      Summary: Admin page listing registered users and their statistics.
-     Structure: login, navbar with profile menu, sidebar navigation and user stats table.
-     Usage: Visit /admin/users.html after logging in to review player metrics. -->
+     Structure: navbar with profile menu, sidebar navigation and user stats table.
+     Usage: Visit /admin/users.html to review player metrics. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,16 +26,7 @@
     </div>
   </nav>
 
-  <div id="login">
-    <h2>Admin Login</h2>
-    <form id="loginForm">
-      <input type="password" id="password" placeholder="Password" required>
-      <button id="loginBtn" type="submit">Login</button>
-    </form>
-    <div id="loginError" role="alert"></div>
-  </div>
-
-  <div id="app" style="display:none">
+  <div id="app">
     <aside id="sidebar">
       <a href="admin.html">Dashboard</a>
       <a href="nations.html">Nations</a>
