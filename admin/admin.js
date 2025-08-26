@@ -3,7 +3,8 @@
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
 //          preview with independently rotating chassis and turret based on rotation times, and
-//          range inputs auto-populate mid-scale defaults for consistent layout.
+//          range inputs auto-populate mid-scale defaults for consistent layout. Nation management
+//          uses a drop-down list for choosing flag emojis.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
@@ -68,14 +69,13 @@ async function loadData() {
   const ammoNation = document.getElementById('ammoNation');
   if (ammoNation) ammoNation.innerHTML = nationOptions;
 
-  // Populate flag emoji datalist for nation form. Value is the emoji so the
-  // selected symbol is inserted directly into the text box while the option
-  // text remains searchable by country name.
-  const flagList = document.getElementById('flagOptions');
-  if (flagList) {
-    flagList.innerHTML = FLAG_LIST
-      .map(f => `<option value="${f.emoji}">${f.name}</option>`) // emoji value, name label
-      .join('');
+  // Populate flag emoji dropdown for nation form. Each option's value is the
+  // emoji itself so selecting a flag inserts the symbol directly.
+  const flagSelect = document.getElementById('nationFlag');
+  if (flagSelect) {
+    flagSelect.innerHTML =
+      '<option value="" disabled selected>Select a flag</option>' +
+      FLAG_LIST.map(f => `<option value="${f.emoji}">${f.emoji} ${f.name}</option>`).join('');
   }
 
   // Render nation list inside a table body for clearer presentation
@@ -130,12 +130,8 @@ async function loadData() {
 
 function collectNationForm() {
   const name = document.getElementById('nationName').value;
-  let flag = document.getElementById('nationFlag').value.trim();
-  // Allow users to type a country name, ISO code or pick an emoji directly.
-  const found = FLAG_LIST.find(f =>
-    f.name === flag || f.emoji === flag || f.code === flag.toUpperCase()
-  );
-  if (found) flag = found.emoji; // normalise to emoji
+  // Dropdown stores emoji values directly, making submission straightforward.
+  const flag = document.getElementById('nationFlag').value;
   return { name, flag };
 }
 
@@ -157,7 +153,7 @@ async function addNation() {
 function editNation(i) {
   const n = nationsCache[i];
   document.getElementById('nationName').value = n.name;
-  // Input expects an emoji value so insert the stored flag directly
+  // Select expects an emoji value so set the dropdown accordingly
   document.getElementById('nationFlag').value = n.flag;
   editingNationIndex = i;
   document.getElementById('addNationBtn').innerText = 'Update Nation';
@@ -170,7 +166,8 @@ async function deleteNation(i) {
 
 function clearNationForm() {
   document.getElementById('nationName').value = '';
-  document.getElementById('nationFlag').value = '';
+  // Reset dropdown to placeholder option.
+  document.getElementById('nationFlag').selectedIndex = 0;
 }
 
 function collectTankForm() {
