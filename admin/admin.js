@@ -66,7 +66,7 @@ async function loadData() {
   currentTerrainIndex = terrainData.current ?? 0;
 
   // Populate nation selects for tank and ammo forms
-  const nationOptions = nationsCache.map(n => `<option value="${n}">${n}</option>`).join('');
+  const nationOptions = nationsCache.map(n => `<option value="${n.name}">${n.name}</option>`).join('');
   const tankNation = document.getElementById('tankNation');
   if (tankNation) tankNation.innerHTML = nationOptions;
   const ammoNation = document.getElementById('ammoNation');
@@ -76,7 +76,7 @@ async function loadData() {
   const nationDiv = document.getElementById('nationList');
   if (nationDiv) {
     nationDiv.innerHTML = nationsCache.map((n, i) =>
-      `<div>${n} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
+      `<div><img src="${n.flag || ''}" alt="${n.name}" width="32"> ${n.name} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
     ).join('');
     nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
     nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
@@ -121,7 +121,11 @@ async function loadData() {
 }
 
 function collectNationForm() {
-  return { name: document.getElementById('nationName').value };
+  const fd = new FormData();
+  fd.append('name', document.getElementById('nationName').value);
+  const file = document.getElementById('nationFlag').files[0];
+  if (file) fd.append('flag', file);
+  return fd;
 }
 
 async function addNation() {
@@ -130,8 +134,7 @@ async function addNation() {
   const url = editingNationIndex === null ? '/api/nations' : `/api/nations/${editingNationIndex}`;
   await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: payload
   });
   editingNationIndex = null;
   document.getElementById('addNationBtn').innerText = 'Add Nation';
@@ -141,7 +144,8 @@ async function addNation() {
 
 function editNation(i) {
   const n = nationsCache[i];
-  document.getElementById('nationName').value = n;
+  document.getElementById('nationName').value = n.name;
+  document.getElementById('nationFlag').value = '';
   editingNationIndex = i;
   document.getElementById('addNationBtn').innerText = 'Update Nation';
 }
@@ -153,6 +157,7 @@ async function deleteNation(i) {
 
 function clearNationForm() {
   document.getElementById('nationName').value = '';
+  document.getElementById('nationFlag').value = '';
 }
 
 function collectTankForm() {
@@ -270,7 +275,7 @@ async function deleteTank(i) {
 
 function clearTankForm() {
   document.getElementById('tankName').value = '';
-  document.getElementById('tankNation').value = nationsCache[0] || '';
+  document.getElementById('tankNation').value = nationsCache[0]?.name || '';
   document.getElementById('tankBR').value = 1; document.getElementById('brVal').innerText = '';
   document.getElementById('tankClass').value = 'Light/Scout';
   document.getElementById('tankArmor').value = 10; document.getElementById('armorVal').innerText = '';
@@ -354,16 +359,18 @@ function updatePreview() {
 window.updatePreview = updatePreview;
 
 function collectAmmoForm() {
-  return {
-    name: document.getElementById('ammoName').value,
-    nation: document.getElementById('ammoNation').value,
-    caliber: parseInt(document.getElementById('ammoCaliber').value, 10),
-    armorPen: parseInt(document.getElementById('ammoPen').value, 10),
-    type: document.getElementById('ammoType').value,
-    explosionRadius: parseInt(document.getElementById('ammoRadius').value, 10),
-    pen0: parseInt(document.getElementById('ammoPen0').value, 10),
-    pen100: parseInt(document.getElementById('ammoPen100').value, 10)
-  };
+  const fd = new FormData();
+  fd.append('name', document.getElementById('ammoName').value);
+  fd.append('nation', document.getElementById('ammoNation').value);
+  fd.append('caliber', document.getElementById('ammoCaliber').value);
+  fd.append('armorPen', document.getElementById('ammoPen').value);
+  fd.append('type', document.getElementById('ammoType').value);
+  fd.append('explosionRadius', document.getElementById('ammoRadius').value);
+  fd.append('pen0', document.getElementById('ammoPen0').value);
+  fd.append('pen100', document.getElementById('ammoPen100').value);
+  const file = document.getElementById('ammoImage').files[0];
+  if (file) fd.append('image', file);
+  return fd;
 }
 
 async function addAmmo() {
@@ -372,8 +379,7 @@ async function addAmmo() {
   const url = editingAmmoIndex === null ? '/api/ammo' : `/api/ammo/${editingAmmoIndex}`;
   await fetch(url, {
     method,
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: payload
   });
   editingAmmoIndex = null;
   document.getElementById('addAmmoBtn').innerText = 'Add Ammo';
@@ -391,6 +397,7 @@ function editAmmo(i) {
   document.getElementById('ammoRadius').value = a.explosionRadius; document.getElementById('ammoRadiusVal').innerText = a.explosionRadius;
   document.getElementById('ammoPen0').value = a.pen0; document.getElementById('ammoPen0Val').innerText = a.pen0;
   document.getElementById('ammoPen100').value = a.pen100; document.getElementById('ammoPen100Val').innerText = a.pen100;
+  document.getElementById('ammoImage').value = '';
   editingAmmoIndex = i;
   document.getElementById('addAmmoBtn').innerText = 'Update Ammo';
 }
@@ -402,13 +409,14 @@ async function deleteAmmo(i) {
 
 function clearAmmoForm() {
   document.getElementById('ammoName').value = '';
-  document.getElementById('ammoNation').value = nationsCache[0] || '';
+  document.getElementById('ammoNation').value = nationsCache[0]?.name || '';
   document.getElementById('ammoCaliber').value = 20; document.getElementById('ammoCaliberVal').innerText = '';
   document.getElementById('ammoPen').value = 20; document.getElementById('ammoPenVal').innerText = '';
   document.getElementById('ammoType').value = 'HE';
   document.getElementById('ammoRadius').value = 0; document.getElementById('ammoRadiusVal').innerText = '';
   document.getElementById('ammoPen0').value = 20; document.getElementById('ammoPen0Val').innerText = '';
   document.getElementById('ammoPen100').value = 20; document.getElementById('ammoPen100Val').innerText = '';
+  document.getElementById('ammoImage').value = '';
 }
 
 function collectTerrainForm() {
@@ -529,12 +537,12 @@ function updateStats() {
   const totalTanks = tanksCache.length;
   summary.innerText = `${totalNations} nations, ${totalTanks} tanks`;
   const ctx = chartEl.getContext('2d');
-  const counts = nationsCache.map(n => tanksCache.filter(t => t.nation === n).length);
+  const counts = nationsCache.map(n => tanksCache.filter(t => t.nation === n.name).length);
   if (tankNationChart) tankNationChart.destroy();
   tankNationChart = new Chart(ctx, {
     type: 'bar',
     data: {
-      labels: nationsCache,
+      labels: nationsCache.map(n => n.name),
       datasets: [{
         label: 'Tanks per Nation',
         data: counts,

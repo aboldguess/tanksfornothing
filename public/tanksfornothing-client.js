@@ -1,5 +1,5 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Provides lobby tank selection,
+// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tank and ammo selection,
 //          renders a dimensioned 3D tank based on server-supplied parameters,
 //          handles user input and firing mechanics, uses Cannon.js for simple
 //          collision physics, force-based tank movement and synchronizes state
@@ -115,58 +115,110 @@ if (window.io) {
 
 // Lobby DOM elements for tank selection
 const lobby = document.getElementById('lobby');
-const nationSelect = document.getElementById('nationSelect');
-const tankSelect = document.getElementById('tankSelect');
+const nationColumn = document.getElementById('nationColumn');
+const tankColumn = document.getElementById('tankColumn');
+const ammoColumn = document.getElementById('ammoColumn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
 const instructions = document.getElementById('instructions');
 let availableTanks = [];
+let ammoDefs = [];
+let selectedNation = null;
+let selectedTank = null;
+const loadout = {};
 
-// Populate nation and tank dropdowns from server data
+// Populate lobby columns from server data
 async function loadLobbyData() {
   try {
-    const [nations, tanks] = await Promise.all([
+    const [nations, tanks, ammo] = await Promise.all([
       fetch('/api/nations').then(r => r.json()),
-      fetch('/api/tanks').then(r => r.json())
+      fetch('/api/tanks').then(r => r.json()),
+      fetch('/api/ammo').then(r => r.json())
     ]);
     availableTanks = Array.isArray(tanks) ? tanks : [];
+    ammoDefs = Array.isArray(ammo) ? ammo : [];
+    nationColumn.innerHTML = '';
     nations.forEach(n => {
-      const opt = document.createElement('option');
-      opt.value = n;
-      opt.textContent = n;
-      nationSelect.appendChild(opt);
+      const img = document.createElement('img');
+      img.src = n.flag || 'https://placehold.co/64x40?text=Flag';
+      img.alt = n.name;
+      img.addEventListener('click', () => {
+        selectedNation = n;
+        renderTanks();
+        highlightSelection(nationColumn, img);
+      });
+      nationColumn.appendChild(img);
     });
-    nationSelect.addEventListener('change', updateTankOptions);
-    updateTankOptions();
   } catch (err) {
-    showError('Failed to load tank data');
+    showError('Failed to load lobby data');
   }
 }
 
-function updateTankOptions() {
-  tankSelect.innerHTML = '';
-  const filtered = availableTanks.filter(t => t.nation === nationSelect.value);
+function highlightSelection(container, img) {
+  container.querySelectorAll('img').forEach(i => i.classList.remove('selected'));
+  img.classList.add('selected');
+}
+
+function renderTanks() {
+  tankColumn.innerHTML = '';
+  ammoColumn.innerHTML = '';
+  selectedTank = null;
+  if (!selectedNation) return;
+  const filtered = availableTanks.filter(t => t.nation === selectedNation.name);
   filtered.forEach(t => {
-    const opt = document.createElement('option');
-    opt.value = t.name;
-    opt.textContent = `${t.name} (BR ${t.br})`;
-    tankSelect.appendChild(opt);
+    const img = document.createElement('img');
+    img.src = t.thumbnail || 'https://placehold.co/80x60?text=Tank';
+    img.alt = t.name;
+    img.title = `${t.name} (BR ${t.br})`;
+    img.addEventListener('click', () => {
+      selectedTank = t;
+      renderAmmo();
+      highlightSelection(tankColumn, img);
+    });
+    tankColumn.appendChild(img);
+  });
+}
+
+function renderAmmo() {
+  ammoColumn.innerHTML = '';
+  Object.keys(loadout).forEach(k => delete loadout[k]);
+  if (!selectedTank) return;
+  selectedTank.ammo.forEach(name => {
+    const def = ammoDefs.find(a => a.name === name);
+    if (!def) return;
+    loadout[name] = 0;
+    const div = document.createElement('div');
+    div.className = 'ammo-item';
+    const img = document.createElement('img');
+    img.src = def.image || 'https://placehold.co/40x40?text=A';
+    img.alt = name;
+    const label = document.createElement('span');
+    label.textContent = name;
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '50';
+    slider.value = '0';
+    slider.addEventListener('input', () => {
+      loadout[name] = parseInt(slider.value, 10);
+    });
+    div.appendChild(img);
+    div.appendChild(label);
+    div.appendChild(slider);
+    ammoColumn.appendChild(div);
   });
 }
 
 joinBtn.addEventListener('click', () => {
   lobbyError.textContent = '';
-  const tank = availableTanks.find(
-    t => t.name === tankSelect.value && t.nation === nationSelect.value
-  );
-  if (!tank) {
-    lobbyError.textContent = 'Invalid selection';
+  if (!selectedTank) {
+    lobbyError.textContent = 'Select a tank';
     return;
   }
   lobby.style.display = 'none';
   instructions.style.display = 'block';
-  applyTankConfig(tank);
-  if (socket) socket.emit('join', tank);
+  applyTankConfig(selectedTank);
+  if (socket) socket.emit('join', { tank: selectedTank, loadout });
 });
 
 if (socket) {

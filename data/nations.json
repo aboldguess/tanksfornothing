@@ -1,8 +1,13 @@
 {
   "_comment": [
-    "Summary: Persisted nation names for Tanks for Nothing.",
-    "Structure: JSON object with _comment array and nations list.",
+    "Summary: Persisted nation definitions for Tanks for Nothing.",
+    "Structure: JSON object with _comment array and nations list of {name,flag}.",
     "Usage: Managed automatically by server; do not edit manually."
   ],
-  "nations": ["Neutral"]
+  "nations": [
+    {
+      "name": "Neutral",
+      "flag": ""
+    }
+  ]
 }
