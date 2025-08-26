@@ -2,7 +2,8 @@
 // Summary: Browser client for Tanks for Nothing. Provides lobby tank selection,
 //          renders a dimensioned 3D tank based on server-supplied parameters,
 //          handles user input and firing mechanics, uses Cannon.js for simple
-//          collision physics and synchronizes state with a server via Socket.IO.
+//          collision physics, force-based tank movement and synchronizes state
+//          with a server via Socket.IO.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -204,6 +205,8 @@ const defaultTank = {
 let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+// Torque applied for A/D rotation; computed once mass is known
+let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
 let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
 let MAX_TURRET_TRAVERSE = Infinity; // radians; Infinity allows full rotation
@@ -356,6 +359,8 @@ function init() {
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   chassisBody.angularDamping = 0.4;
+  chassisBody.linearDamping = 0.3; // simulate ground friction/drag
+  TURN_TORQUE = chassisBody.mass * ROT_SPEED;
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -450,6 +455,8 @@ function applyTankConfig(t) {
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   chassisBody.angularDamping = 0.4;
+  chassisBody.linearDamping = 0.3;
+  TURN_TORQUE = chassisBody.mass * ROT_SPEED;
   world.addBody(chassisBody);
   currentSpeed = 0;
 }
@@ -470,30 +477,31 @@ function onMouseMove(e) {
  * @param {number} delta - seconds since last frame.
  */
 function updateMovement(delta) {
-  let accel = 0;
-  if (keys['w']) accel = ACCELERATION;
-  else if (keys['s']) accel = -ACCELERATION;
-  else if (currentSpeed > 0) accel = -ACCELERATION;
-  else if (currentSpeed < 0) accel = ACCELERATION;
+  // Translate key input into continuous forces rather than direct velocity changes
+  let throttle = 0;
+  if (keys['w']) throttle = 1;
+  else if (keys['s']) throttle = -1;
+  if (throttle !== 0) {
+    const withinLimits =
+      (throttle > 0 && currentSpeed < MAX_SPEED) ||
+      (throttle < 0 && currentSpeed > -MAX_REVERSE_SPEED);
+    if (withinLimits) {
+      const force = throttle * ACCELERATION * chassisBody.mass;
+      // Negative Z is forward in local space; applying at center of mass
+      chassisBody.applyLocalForce(new CANNON.Vec3(0, 0, -force), new CANNON.Vec3(0, 0, 0));
+    }
+  }
 
-  currentSpeed = THREE.MathUtils.clamp(
-    currentSpeed + accel * delta,
-    -MAX_REVERSE_SPEED,
-    MAX_SPEED
-  );
+  // Apply torque for rotation around the Y axis
+  let turn = 0;
+  if (keys['a']) turn = 1;
+  else if (keys['d']) turn = -1;
+  if (turn !== 0) {
+    chassisBody.applyLocalTorque(new CANNON.Vec3(0, turn * TURN_TORQUE, 0));
+  }
 
-  if (keys[' ']) currentSpeed = 0; // instant brake
-
-  const forward = new CANNON.Vec3(0, 0, -1);
-  chassisBody.quaternion.vmult(forward, forward);
-  const vy = chassisBody.velocity.y;
-  chassisBody.velocity.set(forward.x * currentSpeed, vy, forward.z * currentSpeed);
-
-  if (keys['a']) chassisBody.angularVelocity.set(0, ROT_SPEED, 0);
-  else if (keys['d']) chassisBody.angularVelocity.set(0, -ROT_SPEED, 0);
-  else chassisBody.angularVelocity.set(0, 0, 0);
-
-  logMovement('spd', currentSpeed.toFixed(2), 'ang', chassisBody.angularVelocity.y.toFixed(2));
+  // Simple hand brake: increase damping while space is held
+  chassisBody.linearDamping = keys[' '] ? 0.8 : 0.3;
 }
 
 function animate() {
@@ -505,6 +513,12 @@ function animate() {
 
   // Step physics world with fixed timestep
   world.step(1 / 60, delta, 3);
+
+  // Calculate speed along the forward vector and log for debugging
+  const forward = new CANNON.Vec3(0, 0, -1);
+  chassisBody.quaternion.vmult(forward, forward);
+  currentSpeed = forward.dot(chassisBody.velocity);
+  logMovement('spd', currentSpeed.toFixed(2), 'ang', chassisBody.angularVelocity.y.toFixed(2));
 
   // Sync Three.js mesh with physics body
   tank.position.copy(chassisBody.position);
