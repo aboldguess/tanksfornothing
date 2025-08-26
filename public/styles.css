@@ -32,6 +32,10 @@ body {
   border-radius: 6px;
   text-align: center;
   z-index: 1000;
+  /* Occupy 80% of the viewport to create a prominent splash screen */
+  width: 80vw;
+  height: 80vh;
+  overflow: auto;
 }
 
 #selectionRow {
@@ -127,6 +131,10 @@ canvas { display: block; }
   border-radius: 6px;
   text-align: center;
   z-index: 1000;
+  /* Match splash screen size: cover 80% of viewport */
+  width: 80vw;
+  height: 80vh;
+  overflow: auto;
 }
 #authContainer input {
   margin: 5px;
