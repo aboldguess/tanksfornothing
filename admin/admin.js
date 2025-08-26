@@ -36,8 +36,10 @@ async function signOut() {
 }
 
 async function login() {
-  const password = document.getElementById('password').value;
   try {
+    // Read the password lazily so missing input fields do not throw
+    const passInput = document.getElementById('password');
+    const password = passInput ? passInput.value : '';
     const res = await fetch('/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -48,7 +50,9 @@ async function login() {
     if (res.ok) {
       // Cookie is set server-side; render the page
       showApp();
-    } else alert('Login failed');
+    } else {
+      alert('Login failed');
+    }
   } catch (err) {
     console.error('Login request failed', err);
     alert('Login failed');
@@ -589,37 +593,60 @@ function updateStats() {
   });
 }
 
-// Attach event listeners conditionally so pages without elements do not error
-const profilePic = document.getElementById('profilePic');
-if (profilePic) profilePic.addEventListener('click', toggleMenu);
-const signOutLink = document.getElementById('signOutLink');
-if (signOutLink) signOutLink.addEventListener('click', (e) => {
-  e.preventDefault();
-  signOut();
-});
-const loginBtn = document.getElementById('loginBtn');
-if (loginBtn) loginBtn.addEventListener('click', login);
-const addNationBtn = document.getElementById('addNationBtn');
-if (addNationBtn) addNationBtn.addEventListener('click', addNation);
-const tankFormEl = document.getElementById('tankForm');
-if (tankFormEl) tankFormEl.addEventListener('submit', (e) => { e.preventDefault(); addTank(); });
-const addAmmoBtn = document.getElementById('addAmmoBtn');
-if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
-const newTerrainBtn = document.getElementById('newTerrainBtn');
-if (newTerrainBtn) newTerrainBtn.addEventListener('click', () => openTerrainEditor());
-const saveTerrainBtn = document.getElementById('saveTerrainBtn');
-if (saveTerrainBtn) saveTerrainBtn.addEventListener('click', saveTerrain);
-const cancelEditBtn = document.getElementById('cancelEditBtn');
-if (cancelEditBtn) cancelEditBtn.addEventListener('click', () => {
-  editingTerrainIndex = null;
-  document.getElementById('editorCard').style.display = 'none';
-});
-const restartBtn = document.getElementById('restartBtn');
-if (restartBtn) restartBtn.addEventListener('click', restartGame);
+// Initialise page once DOM is ready so event handlers always attach
+function initAdmin() {
+  const profilePic = document.getElementById('profilePic');
+  if (profilePic) profilePic.addEventListener('click', toggleMenu);
+
+  const signOutLink = document.getElementById('signOutLink');
+  if (signOutLink) {
+    signOutLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      signOut();
+    });
+  }
+
+  const loginBtn = document.getElementById('loginBtn');
+  if (loginBtn) loginBtn.addEventListener('click', login);
+
+  const addNationBtn = document.getElementById('addNationBtn');
+  if (addNationBtn) addNationBtn.addEventListener('click', addNation);
+
+  const tankFormEl = document.getElementById('tankForm');
+  if (tankFormEl) tankFormEl.addEventListener('submit', (e) => { e.preventDefault(); addTank(); });
+
+  const addAmmoBtn = document.getElementById('addAmmoBtn');
+  if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
+
+  const newTerrainBtn = document.getElementById('newTerrainBtn');
+  if (newTerrainBtn) newTerrainBtn.addEventListener('click', () => openTerrainEditor());
+
+  const saveTerrainBtn = document.getElementById('saveTerrainBtn');
+  if (saveTerrainBtn) saveTerrainBtn.addEventListener('click', saveTerrain);
+
+  const cancelEditBtn = document.getElementById('cancelEditBtn');
+  if (cancelEditBtn) {
+    cancelEditBtn.addEventListener('click', () => {
+      editingTerrainIndex = null;
+      document.getElementById('editorCard').style.display = 'none';
+    });
+  }
+
+  const restartBtn = document.getElementById('restartBtn');
+  if (restartBtn) restartBtn.addEventListener('click', restartGame);
+
+  // Quick check to see if an admin cookie already exists
+  checkAdmin();
+}
 
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {
-  const res = await fetch('/admin/status');
-  if (res.ok) showApp();
+  try {
+    const res = await fetch('/admin/status');
+    if (res.ok) showApp();
+  } catch (err) {
+    console.warn('Admin status check failed', err);
+  }
 }
-checkAdmin();
+
+document.addEventListener('DOMContentLoaded', initAdmin);
