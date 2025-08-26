@@ -169,6 +169,22 @@ body.login-page {
   pointer-events: all;
 }
 
+/* Nation CRUD layout -------------------------------------------------- */
+#nationTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+#nationTable th,
+#nationTable td {
+  border: 1px solid #2b361e;
+  padding: 4px;
+  text-align: left;
+}
+#nationTable .flag-cell {
+  font-size: 1.5em;
+}
+
 /* Table listing of saved terrains with thumbnail previews */
 #terrainTable {
   width: 100%;

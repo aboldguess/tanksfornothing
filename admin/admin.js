@@ -68,20 +68,26 @@ async function loadData() {
   const ammoNation = document.getElementById('ammoNation');
   if (ammoNation) ammoNation.innerHTML = nationOptions;
 
-  // Populate flag emoji datalist for nation form
+  // Populate flag emoji datalist for nation form. Value is the emoji so the
+  // selected symbol is inserted directly into the text box while the option
+  // text remains searchable by country name.
   const flagList = document.getElementById('flagOptions');
   if (flagList) {
-    flagList.innerHTML = FLAG_LIST.map(f => `<option value="${f.name}" label="${f.emoji}"></option>`).join('');
+    flagList.innerHTML = FLAG_LIST
+      .map(f => `<option value="${f.emoji}">${f.name}</option>`) // emoji value, name label
+      .join('');
   }
 
-  // Render nation list
-  const nationDiv = document.getElementById('nationList');
-  if (nationDiv) {
-    nationDiv.innerHTML = nationsCache.map((n, i) =>
-      `<div>${n.flag || ''} ${n.name} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
+  // Render nation list inside a table body for clearer presentation
+  const nationBody = document.getElementById('nationList');
+  if (nationBody) {
+    nationBody.innerHTML = nationsCache.map((n, i) =>
+      `<tr><td class="flag-cell">${n.flag || ''}</td><td>${n.name}</td>` +
+      `<td><button data-i="${i}" class="edit-nation">Edit</button>` +
+      `<button data-i="${i}" class="del-nation">Delete</button></td></tr>`
     ).join('');
-    nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
-    nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
+    nationBody.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
+    nationBody.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
   }
 
   // Render tank table and enable column sorting
@@ -125,8 +131,11 @@ async function loadData() {
 function collectNationForm() {
   const name = document.getElementById('nationName').value;
   let flag = document.getElementById('nationFlag').value.trim();
-  const found = FLAG_LIST.find(f => f.name === flag);
-  if (found) flag = found.emoji; // convert country name to emoji
+  // Allow users to type a country name, ISO code or pick an emoji directly.
+  const found = FLAG_LIST.find(f =>
+    f.name === flag || f.emoji === flag || f.code === flag.toUpperCase()
+  );
+  if (found) flag = found.emoji; // normalise to emoji
   return { name, flag };
 }
 
@@ -148,8 +157,8 @@ async function addNation() {
 function editNation(i) {
   const n = nationsCache[i];
   document.getElementById('nationName').value = n.name;
-  const match = FLAG_LIST.find(f => f.emoji === n.flag);
-  document.getElementById('nationFlag').value = match ? match.name : n.flag;
+  // Input expects an emoji value so insert the stored flag directly
+  document.getElementById('nationFlag').value = n.flag;
   editingNationIndex = i;
   document.getElementById('addNationBtn').innerText = 'Update Nation';
 }
