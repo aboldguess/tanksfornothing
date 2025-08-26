@@ -101,6 +101,8 @@ if (window.io) {
     tank.rotation.set(0, 0, 0);
     turret.rotation.set(0, 0, 0);
     if (gun) gun.rotation.set(0, 0, 0); // keep turret level; reset barrel pitch
+    targetYaw = 0;
+    targetPitch = 0;
     if (chassisBody) {
       chassisBody.position.set(0, 1, 0);
       chassisBody.velocity.set(0, 0, 0);
@@ -244,7 +246,8 @@ const defaultTank = {
   horsepower: 500,
   maxSpeed: 40, // km/h
   maxReverseSpeed: 15, // km/h
-  bodyRotation: 20, // seconds for full rotation
+  bodyRotation: 20, // seconds for full hull rotation
+  turretRotation: 20, // seconds for full turret rotation
   maxTurretIncline: 50,
   maxTurretDecline: 25,
   horizontalTraverse: 0,
@@ -259,6 +262,7 @@ const defaultTank = {
 let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
 // Torque applied for A/D rotation; computed once mass is known
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
@@ -268,6 +272,10 @@ let MAX_TURRET_TRAVERSE = Infinity; // radians; Infinity allows full rotation
 let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
+
+// Target angles driven by mouse movement; turret/gun ease toward these each frame
+let targetYaw = 0;
+let targetPitch = 0;
 let cameraDistance = 10;
 const keys = {};
 const DEBUG_MOVEMENT = false;
@@ -478,11 +486,18 @@ function applyTankConfig(t) {
   MAX_SPEED = (t.maxSpeed ?? defaultTank.maxSpeed) / 3.6;
   MAX_REVERSE_SPEED = (t.maxReverseSpeed ?? defaultTank.maxReverseSpeed) / 3.6;
   ROT_SPEED = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
+  TURRET_ROT_SPEED = (2 * Math.PI) / (t.turretRotation ?? defaultTank.turretRotation);
   MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
   MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
   const traverseDeg = t.horizontalTraverse ?? defaultTank.horizontalTraverse;
   MAX_TURRET_TRAVERSE = traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
+
+  // Reset turret orientation targets for new tank stats
+  targetYaw = 0;
+  targetPitch = 0;
+  turret.rotation.set(0, 0, 0);
+  if (gun) gun.rotation.set(0, 0, 0);
 
   tank.geometry.dispose();
   tank.geometry = new THREE.BoxGeometry(
@@ -521,11 +536,13 @@ function applyTankConfig(t) {
 
 function onMouseMove(e) {
   const sensitivity = 0.002;
-  const newYaw = turret.rotation.y - e.movementX * sensitivity;
-  turret.rotation.y = THREE.MathUtils.clamp(newYaw, -MAX_TURRET_TRAVERSE, MAX_TURRET_TRAVERSE);
-  const newPitch = gun.rotation.x - e.movementY * sensitivity;
-  gun.rotation.x = THREE.MathUtils.clamp(
-    newPitch,
+  targetYaw = THREE.MathUtils.clamp(
+    targetYaw - e.movementX * sensitivity,
+    -MAX_TURRET_TRAVERSE,
+    MAX_TURRET_TRAVERSE
+  );
+  targetPitch = THREE.MathUtils.clamp(
+    targetPitch - e.movementY * sensitivity,
     -MAX_TURRET_DECLINE,
     MAX_TURRET_INCLINE
   );
@@ -594,6 +611,31 @@ function animate() {
     proj.mesh.position.y += proj.vy * delta;
     proj.mesh.position.z += proj.vz * delta;
   }
+
+  // Smoothly rotate turret and gun toward target angles
+  const yawDiff = targetYaw - turret.rotation.y;
+  const yawStep = THREE.MathUtils.clamp(
+    yawDiff,
+    -TURRET_ROT_SPEED * delta,
+    TURRET_ROT_SPEED * delta
+  );
+  turret.rotation.y = THREE.MathUtils.clamp(
+    turret.rotation.y + yawStep,
+    -MAX_TURRET_TRAVERSE,
+    MAX_TURRET_TRAVERSE
+  );
+
+  const pitchDiff = targetPitch - gun.rotation.x;
+  const pitchStep = THREE.MathUtils.clamp(
+    pitchDiff,
+    -TURRET_ROT_SPEED * delta,
+    TURRET_ROT_SPEED * delta
+  );
+  gun.rotation.x = THREE.MathUtils.clamp(
+    gun.rotation.x + pitchStep,
+    -MAX_TURRET_DECLINE,
+    MAX_TURRET_INCLINE
+  );
 
   // Update HUD with current speed, inclination and health
   const speedKmh = currentSpeed * 3.6;
