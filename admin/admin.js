@@ -9,8 +9,22 @@
 // Usage: Included by all files in /admin.
 // ---------------------------------------------------------------------------
 
-import * as THREE from '/libs/three.module.js';
 import { getFlagList } from './flag-utils.js';
+
+// Lazily load Three.js so login and other admin features work even if the
+// 3D library fails to download. This prevents the entire admin script from
+// aborting when the optional 3D dependency is unavailable.
+let THREE = null;
+async function ensureThree() {
+  if (!THREE) {
+    try {
+      THREE = await import('../libs/three.module.js');
+    } catch (err) {
+      console.error('Failed to load Three.js', err);
+    }
+  }
+  return THREE;
+}
 
 function toggleMenu() {
   document.getElementById('profileMenu').classList.toggle('show');
@@ -23,16 +37,22 @@ async function signOut() {
 
 async function login() {
   const password = document.getElementById('password').value;
-  const res = await fetch('/admin/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password })
-  });
-  console.debug('Admin login response', res.status);
-  if (res.ok) {
-    // Cookie is set server-side; render the page
-    showApp();
-  } else alert('Login failed');
+  try {
+    const res = await fetch('/admin/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ password })
+    });
+    console.debug('Admin login response', res.status);
+    if (res.ok) {
+      // Cookie is set server-side; render the page
+      showApp();
+    } else alert('Login failed');
+  } catch (err) {
+    console.error('Login request failed', err);
+    alert('Login failed');
+  }
 }
 
 function showApp() {
@@ -307,7 +327,9 @@ function clearTankForm() {
   updatePreview();
 }
 
-function initPreview(canvas) {
+async function initPreview(canvas) {
+  const THREE = await ensureThree();
+  if (!THREE) return;
   previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
   previewRenderer.setSize(canvas.width, canvas.height);
   previewScene = new THREE.Scene();
@@ -332,10 +354,14 @@ function animatePreview() {
   previewRenderer.render(previewScene, previewCamera);
 }
 
-function updatePreview() {
+async function updatePreview() {
   const canvas = document.getElementById('tankPreview');
   if (!canvas) return;
-  if (!previewRenderer) initPreview(canvas);
+  if (!previewRenderer) await initPreview(canvas);
+  if (!previewRenderer) return;
+
+  const THREE = await ensureThree();
+  if (!THREE) return;
 
   const bodyW = parseFloat(document.getElementById('tankBodyWidth').value) || 1;
   const bodyL = parseFloat(document.getElementById('tankBodyLength').value) || 1;
