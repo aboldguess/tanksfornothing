@@ -147,3 +147,4 @@ canvas { display: block; }
   padding: 5px;
 }
 #authError { color: #ff8080; margin-top: 5px; }
+#loginError { color: #ff8080; margin-top: 5px; }

@@ -35,7 +35,10 @@ async function signOut() {
   location.reload();
 }
 
-async function login() {
+async function login(e) {
+  if (e) e.preventDefault();
+  const msg = document.getElementById('loginError');
+  if (msg) msg.textContent = '';
   try {
     // Read the password lazily so missing input fields do not throw
     const passInput = document.getElementById('password');
@@ -51,11 +54,12 @@ async function login() {
       // Cookie is set server-side; render the page
       showApp();
     } else {
-      alert('Login failed');
+      const data = await res.json().catch(() => ({}));
+      if (msg) msg.textContent = data.error || 'Login failed';
     }
   } catch (err) {
     console.error('Login request failed', err);
-    alert('Login failed');
+    if (msg) msg.textContent = err.message || 'Login failed';
   }
 }
 
@@ -606,8 +610,8 @@ function initAdmin() {
     });
   }
 
-  const loginBtn = document.getElementById('loginBtn');
-  if (loginBtn) loginBtn.addEventListener('click', login);
+  const loginForm = document.getElementById('loginForm');
+  if (loginForm) loginForm.addEventListener('submit', login);
 
   const addNationBtn = document.getElementById('addNationBtn');
   if (addNationBtn) addNationBtn.addEventListener('click', addNation);

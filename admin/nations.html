@@ -29,8 +29,11 @@
 
   <div id="login">
     <h2>Admin Login</h2>
-    <input type="password" id="password" placeholder="Password">
-    <button id="loginBtn" type="button">Login</button>
+    <form id="loginForm">
+      <input type="password" id="password" placeholder="Password" required>
+      <button id="loginBtn" type="submit">Login</button>
+    </form>
+    <div id="loginError" role="alert"></div>
   </div>
 
   <div id="app" style="display:none">
