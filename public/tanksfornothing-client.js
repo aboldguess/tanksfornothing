@@ -497,7 +497,12 @@ function updateMovement(delta) {
   if (keys['a']) turn = 1;
   else if (keys['d']) turn = -1;
   if (turn !== 0) {
-    chassisBody.applyLocalTorque(new CANNON.Vec3(0, turn * TURN_TORQUE, 0));
+    // cannon-es does not expose an applyLocalTorque helper. Convert the
+    // desired yaw torque from local to world space and accumulate it on the
+    // body's torque vector to induce rotation.
+    const yawTorque = new CANNON.Vec3(0, turn * TURN_TORQUE, 0);
+    chassisBody.vectorToWorldFrame(yawTorque, yawTorque);
+    chassisBody.torque.vadd(yawTorque, chassisBody.torque);
   }
 
   // Simple hand brake: increase damping while space is held
