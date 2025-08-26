@@ -1,11 +1,14 @@
 // admin.js
 // Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain across
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
-//          3D thumbnails and an in-page editor.
+//          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
+//          preview with independently rotating chassis and turret based on rotation times.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
 // ---------------------------------------------------------------------------
+
+import * as THREE from '/libs/three.module.js';
 
 function toggleMenu() {
   document.getElementById('profileMenu').classList.toggle('show');
@@ -51,6 +54,7 @@ let currentTerrainIndex = 0;
 let tankNationChart = null;
 let tankSortKey = 'name';
 let tankSortAsc = true;
+let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurret, previewClock;
 
 async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
@@ -287,29 +291,61 @@ function clearTankForm() {
   updatePreview();
 }
 
+function initPreview(canvas) {
+  previewRenderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  previewRenderer.setSize(canvas.width, canvas.height);
+  previewScene = new THREE.Scene();
+  previewCamera = new THREE.PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 1000);
+  previewScene.add(new THREE.AmbientLight(0x404040));
+  const light = new THREE.DirectionalLight(0xffffff, 1);
+  light.position.set(5, 10, 7.5);
+  previewScene.add(light);
+  previewClock = new THREE.Clock();
+  console.debug('Initializing tank preview');
+  animatePreview();
+}
+
+function animatePreview() {
+  requestAnimationFrame(animatePreview);
+  if (!previewRenderer || !previewScene || !previewCamera || !previewTankGroup) return;
+  const dt = previewClock.getDelta();
+  const bodyRot = parseFloat(document.getElementById('tankBodyRot').value) || 60;
+  const turretRot = parseFloat(document.getElementById('tankTurretRot').value) || 60;
+  previewTankGroup.rotation.y += (2 * Math.PI / bodyRot) * dt;
+  if (previewTurret) previewTurret.rotation.y += (2 * Math.PI / turretRot) * dt;
+  previewRenderer.render(previewScene, previewCamera);
+}
+
 function updatePreview() {
   const canvas = document.getElementById('tankPreview');
   if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  const bodyW = parseFloat(document.getElementById('tankBodyWidth').value) || 0;
-  const bodyL = parseFloat(document.getElementById('tankBodyLength').value) || 0;
-  const turretW = parseFloat(document.getElementById('tankTurretWidth').value) || 0;
-  const turretL = parseFloat(document.getElementById('tankTurretLength').value) || 0;
-  // scale to fit canvas; assume 10px per meter then scale down if needed
-  const scale = Math.min(canvas.width / (bodyL * 10), canvas.height / (bodyW * 10)) || 1;
-  const bodyWidthPx = bodyW * 10 * scale;
-  const bodyLengthPx = bodyL * 10 * scale;
-  const startX = (canvas.width - bodyLengthPx) / 2;
-  const startY = (canvas.height - bodyWidthPx) / 2;
-  ctx.fillStyle = '#556b2f';
-  ctx.fillRect(startX, startY, bodyLengthPx, bodyWidthPx);
-  const turretWidthPx = turretW * 10 * scale;
-  const turretLengthPx = turretL * 10 * scale;
-  const turretX = startX + (bodyLengthPx - turretLengthPx) / 2;
-  const turretY = startY + (bodyWidthPx - turretWidthPx) / 2;
-  ctx.fillStyle = '#6b8e23';
-  ctx.fillRect(turretX, turretY, turretLengthPx, turretWidthPx);
+  if (!previewRenderer) initPreview(canvas);
+
+  const bodyW = parseFloat(document.getElementById('tankBodyWidth').value) || 1;
+  const bodyL = parseFloat(document.getElementById('tankBodyLength').value) || 1;
+  const bodyH = parseFloat(document.getElementById('tankBodyHeight').value) || 1;
+  const turretW = parseFloat(document.getElementById('tankTurretWidth').value) || 1;
+  const turretL = parseFloat(document.getElementById('tankTurretLength').value) || 1;
+  const turretH = parseFloat(document.getElementById('tankTurretHeight').value) || 0.25;
+
+  if (previewTankGroup) previewScene.remove(previewTankGroup);
+  previewTankGroup = new THREE.Group();
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(bodyW, bodyH, bodyL),
+    new THREE.MeshStandardMaterial({ color: 0x556b2f })
+  );
+  previewTankGroup.add(body);
+  previewTurret = new THREE.Mesh(
+    new THREE.BoxGeometry(turretW, turretH, turretL),
+    new THREE.MeshStandardMaterial({ color: 0x6b8e23 })
+  );
+  previewTurret.position.y = bodyH / 2 + turretH / 2;
+  previewTankGroup.add(previewTurret);
+  previewScene.add(previewTankGroup);
+
+  const maxDim = Math.max(bodyW, bodyL, bodyH) || 1;
+  previewCamera.position.set(maxDim * 2, maxDim * 2, maxDim * 2);
+  previewCamera.lookAt(0, bodyH / 2, 0);
 }
 window.updatePreview = updatePreview;
 
