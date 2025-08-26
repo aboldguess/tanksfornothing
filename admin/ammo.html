@@ -1,5 +1,5 @@
 <!-- ammo.html
-     Summary: Admin page for creating and editing ammunition.
+     Summary: Admin page for creating and editing ammunition with images.
      Structure: login, navbar with profile menu, sidebar navigation and ammo CRUD card.
      Usage: Visit /admin/ammo.html after logging in. -->
 <!DOCTYPE html>
@@ -45,9 +45,10 @@
     <main id="mainContent">
       <section class="card">
         <h2>Ammo</h2>
-        <p class="instructions">Manage ammunition statistics.</p>
+        <p class="instructions">Manage ammunition statistics and images.</p>
         <div id="ammoList"></div>
         <input id="ammoName" placeholder="Name">
+        <input type="file" id="ammoImage" accept="image/*">
         <select id="ammoNation"></select>
         <label>Caliber (mm)
           <input id="ammoCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('ammoCaliberVal').innerText=this.value">

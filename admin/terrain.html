@@ -4,6 +4,10 @@
               tool tabs. Includes a Perlin-noise generator with adjustable controls for quickly
               creating natural-looking landscapes. The 3D view renders automatically whenever a map
               is created or its size/type is changed.
+              clicking on the surface to sculpt ground types and elevation. Includes a Perlin-noise
+              generator with adjustable controls for quickly creating natural-looking landscapes. The
+              3D view renders automatically whenever a map is created or its size/type is changed and
+              each control now displays an inline description for clarity.
      Structure: login, navbar with profile menu, sidebar navigation, table of maps with thumbnails
                and an expandable 3D editor featuring camera controls and shading.
      Usage: Visit /admin/terrain.html after logging in to manage terrains and design custom maps. -->
@@ -66,19 +70,23 @@
 
         <div id="editorControls">
           <p class="instructions">Map preview updates automatically when size or terrain type changes.</p>
-          <label for="terrainName">Name</label>
-          <input id="terrainName" placeholder="Name">
-          <label for="terrainType">Terrain Type</label>
-          <select id="terrainType">
-            <option value="snow">Snow</option>
-            <option value="jungle">Jungle</option>
-            <option value="desert">Desert</option>
-            <option value="fields">Fields</option>
-          </select>
-          <label for="sizeX">Map width (km)</label>
-          <input type="number" id="sizeX" min="0.1" step="0.1" value="1">
-          <label for="sizeY">Map height (km)</label>
-          <input type="number" id="sizeY" min="0.1" step="0.1" value="1">
+            <label for="terrainName">Name</label>
+            <input id="terrainName" placeholder="Name">
+            <p class="field-desc">Unique label used to identify the map.</p>
+            <label for="terrainType">Terrain Type</label>
+            <select id="terrainType">
+              <option value="snow">Snow</option>
+              <option value="jungle">Jungle</option>
+              <option value="desert">Desert</option>
+              <option value="fields">Fields</option>
+            </select>
+            <p class="field-desc">Base environment preset determining default ground and textures.</p>
+            <label for="sizeX">Map width (km)</label>
+            <input type="number" id="sizeX" min="0.1" step="0.1" value="1">
+            <p class="field-desc">Horizontal size of the map in kilometers.</p>
+            <label for="sizeY">Map height (km)</label>
+            <input type="number" id="sizeY" min="0.1" step="0.1" value="1">
+            <p class="field-desc">Vertical size of the map in kilometers.</p>
 
           <div id="toolTabs">
             <button data-mode="ground" class="tool-tab active">Ground</button>
@@ -137,26 +145,91 @@
             <p class="instructions">Select a flag then click the map to place it.</p>
           </div>
 
-          <label for="showAxes">Show Axes</label>
-          <input type="checkbox" id="showAxes" checked>
+            <label for="mode">Edit Mode</label>
+            <select id="mode">
+              <option value="ground">Ground</option>
+              <option value="elevation">Elevation</option>
+              <option value="flags">Flags</option>
+            </select>
+            <p class="field-desc">Choose what the brush edits: ground type, height or flags.</p>
+            <label for="flagSelect" class="flag-controls" style="display:none">Flag</label>
+            <select id="flagSelect" class="flag-controls" style="display:none">
+              <option value="red-a">Red A</option>
+              <option value="red-b">Red B</option>
+              <option value="red-c">Red C</option>
+              <option value="red-d">Red D</option>
+              <option value="blue-a">Blue A</option>
+              <option value="blue-b">Blue B</option>
+              <option value="blue-c">Blue C</option>
+              <option value="blue-d">Blue D</option>
+            </select>
+            <p id="flagInstructions" class="flag-controls field-desc" style="display:none">Select a flag then click the map to place it.</p>
+            <label for="brushSizeX">Brush Size X (cells)</label>
+            <input type="range" id="brushSizeX" min="1" max="10" value="2">
+            <p class="field-desc">Brush width in grid cells.</p>
+            <label for="brushSizeY">Brush Size Y (cells)</label>
+            <input type="range" id="brushSizeY" min="1" max="10" value="2">
+            <p class="field-desc">Brush depth in grid cells.</p>
+            <label for="brushSizeZ">Brush Height</label>
+            <input type="range" id="brushSizeZ" min="1" max="20" value="5">
+            <p class="field-desc">Height change applied when editing elevation.</p>
 
-          <label for="viewSelect">View</label>
-          <select id="viewSelect">
-            <option value="iso">Isometric</option>
-            <option value="top">Top</option>
-            <option value="front">Front</option>
-            <option value="side">Side</option>
-          </select>
-          <label for="projectionType">Projection</label>
-          <select id="projectionType">
-            <option value="perspective">Perspective</option>
-            <option value="orthographic">Orthographic</option>
-          </select>
-          <label for="lockCamera">Lock Position</label>
-          <input type="checkbox" id="lockCamera">
+            <label for="perlinScale">Perlin Scale</label>
+            <input type="number" id="perlinScale" min="1" max="100" value="10">
+            <p class="field-desc">Noise frequency; higher values create finer terrain detail.</p>
+
+            <label for="perlinAmplitude">Perlin Amplitude</label>
+            <input type="number" id="perlinAmplitude" min="1" max="100" value="100">
+            <p class="field-desc">Maximum height variation produced by the noise.</p>
+
+            <button id="perlinBtn">Generate Perlin Terrain</button>
+            <p class="field-desc">Fill the map using Perlin noise with the above settings.</p>
+
+            <label for="showAxes">Show Axes</label>
+            <input type="checkbox" id="showAxes" checked>
+            <p class="field-desc">Toggle XYZ axis guides in the preview.</p>
+
+            <label for="viewSelect">View</label>
+            <select id="viewSelect">
+              <option value="iso">Isometric</option>
+              <option value="top">Top</option>
+              <option value="front">Front</option>
+              <option value="side">Side</option>
+            </select>
+            <p class="field-desc">Camera angle for the 3D preview.</p>
+            <label for="projectionType">Projection</label>
+            <select id="projectionType">
+              <option value="perspective">Perspective</option>
+              <option value="orthographic">Orthographic</option>
+            </select>
+            <p class="field-desc">Perspective mimics depth; orthographic keeps scale uniform.</p>
+            <label for="lockCamera">Lock Position</label>
+            <input type="checkbox" id="lockCamera">
+            <p class="field-desc">Prevent accidental camera movement.</p>
 
           <button id="saveTerrainBtn">Save Map</button>
           <button id="cancelEditBtn">Cancel</button>
+            <h3>Ground Types</h3>
+            <p class="field-desc">Existing types for painting. Click to select.</p>
+            <div id="groundTypesList" class="ground-types"></div>
+            <label for="groundName">Name</label>
+            <input id="groundName" placeholder="e.g. gravel">
+            <p class="field-desc">Label for the new ground type.</p>
+            <label for="groundColor">Color</label>
+            <input id="groundColor" type="color" value="#777777">
+            <p class="field-desc">Display color for this ground.</p>
+            <label for="groundTraction">Traction (0-1)</label>
+            <input id="groundTraction" type="number" step="0.1" min="0" max="1" value="0.5">
+            <p class="field-desc">Higher traction lets tanks grip and accelerate.</p>
+            <label for="groundViscosity">Viscosity (0-1)</label>
+            <input id="groundViscosity" type="number" step="0.1" min="0" max="1" value="0.5">
+            <p class="field-desc">Higher viscosity slows tank movement.</p>
+            <button id="addGroundBtn">Add Ground Type</button>
+            <p class="field-desc">Adds the custom ground above to the list.</p>
+            <button id="saveTerrainBtn">Save Map</button>
+            <p class="field-desc">Stores the map on the server.</p>
+            <button id="cancelEditBtn">Cancel</button>
+            <p class="field-desc">Discard changes and return to map list.</p>
         </div>
         <div id="editorViews">
           <div id="terrain3d"></div>

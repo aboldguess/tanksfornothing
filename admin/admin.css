@@ -1,6 +1,5 @@
 /* admin.css
-   Summary: Styling for Tanks admin pages with tank-themed cards, forms, sidebar navigation, terrain tables and 3D terrain editor layout including tabbed tools.
-   Structure: flex layout with sidebar, reusable card styles and chart container for statistics.
+
    Usage: Linked by all files in /admin for admin panel styling. */
 
 /* Admin pages use a clean flex layout with a sidebar and card-style forms.
@@ -47,6 +46,14 @@ body {
 
 .instructions {
   margin-bottom: 20px;
+}
+
+/* Brief helper text for individual form controls */
+.field-desc {
+  font-size: 0.85em;
+  margin-top: -6px;
+  margin-bottom: 10px;
+  color: #ddd;
 }
 
 .chart-container {

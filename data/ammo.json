@@ -17,7 +17,8 @@
       "speed": 200,
       "damage": 40,
       "penetration": 50,
-      "explosion": 0
+      "explosion": 0,
+      "image": ""
     },
     {
       "name": "HE",
@@ -31,7 +32,8 @@
       "speed": 150,
       "damage": 20,
       "penetration": 10,
-      "explosion": 50
+      "explosion": 50,
+      "image": ""
     }
   ]
 }
