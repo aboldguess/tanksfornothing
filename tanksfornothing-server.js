@@ -278,8 +278,12 @@ await loadAmmo();
 await loadTerrains();
 await loadUsers();
 
-// Middleware
+// Middleware: parsers must run before routes that read cookies or body data
+app.use(express.json());
+app.use(express.urlencoded({ extended: false })); // support classic form posts
+app.use(cookieParser()); // ensure req.cookies is populated for auth checks
 app.use(express.static('public'));
+
 // Admin HTML pages require authentication; login assets remain public
 app.get('/admin', (req, res) => {
   if (req.cookies && req.cookies.admin === 'true') {
@@ -293,9 +297,6 @@ app.get('/admin/:page.html', (req, res, next) => {
   return res.redirect('/admin/login.html');
 });
 app.use('/admin', express.static('admin'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: false })); // support classic form posts
-app.use(cookieParser());
 
 // Admin authentication middleware
 function requireAdmin(req, res, next) {
@@ -307,6 +308,7 @@ function requireAdmin(req, res, next) {
 app.post('/admin/login', (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
+    console.log('Admin login successful');
     // Set signed-in flag with secure attributes to prevent XSS and CSRF
     res.cookie('admin', 'true', {
       httpOnly: true,
@@ -315,6 +317,7 @@ app.post('/admin/login', (req, res) => {
     });
     return res.json({ success: true });
   }
+  console.warn('Admin login failed');
   res.status(403).json({ error: 'bad password' });
 });
 
