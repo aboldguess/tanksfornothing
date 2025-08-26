@@ -38,11 +38,11 @@ async function init() {
   } catch {
     const nationsData = {
       _comment: [
-        'Summary: Persisted nation names for Tanks for Nothing.',
-        'Structure: JSON object with _comment array and nations list.',
+        'Summary: Persisted nation definitions for Tanks for Nothing.',
+        'Structure: JSON object with _comment array and nations list of {name,flag}.',
         'Usage: Managed automatically by server; do not edit manually.'
       ],
-      nations: ['Neutral']
+      nations: [{ name: 'Neutral', flag: '' }]
     };
     await fs.writeFile(nationsFile, JSON.stringify(nationsData, null, 2));
     console.log('Created data/nations.json');
@@ -56,7 +56,7 @@ async function init() {
     const ammoData = {
       _comment: [
         'Summary: Persisted ammunition definitions for Tanks for Nothing.',
-        'Structure: JSON object with _comment array and ammo list.',
+        'Structure: JSON object with _comment array and ammo list including image paths.',
         'Usage: Managed automatically by server; do not edit manually.'
       ],
       ammo: [
@@ -72,7 +72,8 @@ async function init() {
           speed: 200,
           damage: 40,
           penetration: 50,
-          explosion: 0
+          explosion: 0,
+          image: ''
         },
         {
           name: 'HE',
@@ -86,7 +87,8 @@ async function init() {
           speed: 150,
           damage: 20,
           penetration: 10,
-          explosion: 50
+          explosion: 50,
+          image: ''
         }
       ]
     };

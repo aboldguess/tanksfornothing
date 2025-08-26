@@ -1,8 +1,9 @@
 // tanksfornothing-server.js
 // Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
 // This script sets up an Express web server with Socket.IO for real-time tank and projectile
-// updates, persists admin-defined tanks, nations and terrain details (including capture-the-flag
-// positions) to disk and enforces Battle Rating constraints when players join.
+// updates, handles image uploads for nation flags and ammo types, persists admin-defined tanks,
+// nations and terrain details (including capture-the-flag positions) to disk and enforces Battle
+// Rating constraints when players join.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
@@ -16,6 +17,9 @@ import { promises as fs } from 'fs';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import cookie from 'cookie';
+import multer from 'multer';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 const server = http.createServer(app);
@@ -25,6 +29,31 @@ const io = new SocketIOServer(server);
 const PORT = process.env.PORT || 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const uploadBase = path.join(__dirname, 'public', 'uploads');
+const flagDir = path.join(uploadBase, 'nations');
+const ammoDir = path.join(uploadBase, 'ammo');
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = file.fieldname === 'flag' ? flagDir : ammoDir;
+    fs.mkdir(dir, { recursive: true }).then(() => cb(null, dir)).catch(cb);
+  },
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, unique + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) return cb(new Error('Only images allowed'));
+    cb(null, true);
+  }
+});
 
 // In-memory stores (tanks/ammo/terrains persisted to disk)
 const players = new Map(); // socket.id -> player state
@@ -158,22 +187,22 @@ async function saveTanks() {
 async function loadNations() {
   const data = await safeReadJson(NATIONS_FILE, { nations: [] });
   if (Array.isArray(data.nations)) {
-    nations = data.nations;
-    nationsSet = new Set(nations);
+    nations = data.nations.map((n) => ({ name: n.name || n, flag: n.flag || '' }));
+    nationsSet = new Set(nations.map((n) => n.name));
   }
 }
 
 async function saveNations() {
   const data = {
     _comment: [
-      'Summary: Persisted nation names for Tanks for Nothing.',
-      'Structure: JSON object with _comment array and nations list.',
+      'Summary: Persisted nation definitions for Tanks for Nothing.',
+      'Structure: JSON object with _comment array and nations list of {name,flag}.',
       'Usage: Managed automatically by server; do not edit manually.'
     ],
     nations
   };
   await safeWriteJson(NATIONS_FILE, data);
-  nationsSet = new Set(nations);
+  nationsSet = new Set(nations.map((n) => n.name));
 }
 
 async function loadTerrains() {
@@ -368,7 +397,7 @@ const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
 function validateNation(n) {
   if (!n || typeof n.name !== 'string' || !n.name.trim()) return 'name required';
-  return { name: n.name.trim() };
+  return { name: n.name.trim(), flag: typeof n.flag === 'string' ? n.flag : '' };
 }
 
 function validateTank(t) {
@@ -441,6 +470,7 @@ function validateAmmo(a) {
     explosionRadius: a.explosionRadius,
     pen0: a.pen0,
     pen100: a.pen100,
+    image: typeof a.image === 'string' ? a.image : '',
     // Derived gameplay fields so firing logic has required values
     speed: a.caliber * 10,
     damage: a.armorPen,
@@ -450,19 +480,21 @@ function validateAmmo(a) {
 }
 
 app.get('/api/nations', (req, res) => res.json(nations));
-app.post('/api/nations', requireAdmin, async (req, res) => {
-  const valid = validateNation(req.body);
+app.post('/api/nations', requireAdmin, upload.single('flag'), async (req, res) => {
+  const flagPath = req.file ? `/uploads/nations/${req.file.filename}` : '';
+  const valid = validateNation({ ...req.body, flag: flagPath });
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
-  nations.push(valid.name);
+  nations.push(valid);
   await saveNations();
   res.json({ success: true });
 });
-app.put('/api/nations/:idx', requireAdmin, async (req, res) => {
+app.put('/api/nations/:idx', requireAdmin, upload.single('flag'), async (req, res) => {
   const idx = Number(req.params.idx);
   if (!nations[idx]) return res.status(404).json({ error: 'not found' });
-  const valid = validateNation(req.body);
+  const flagPath = req.file ? `/uploads/nations/${req.file.filename}` : nations[idx].flag;
+  const valid = validateNation({ ...req.body, flag: flagPath });
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
-  nations[idx] = valid.name;
+  nations[idx] = valid;
   await saveNations();
   res.json({ success: true });
 });
@@ -500,17 +532,37 @@ app.delete('/api/tanks/:idx', requireAdmin, async (req, res) => {
 });
 
 app.get('/api/ammo', (req, res) => res.json(ammo));
-app.post('/api/ammo', requireAdmin, async (req, res) => {
-  const valid = validateAmmo(req.body);
+app.post('/api/ammo', requireAdmin, upload.single('image'), async (req, res) => {
+  const imgPath = req.file ? `/uploads/ammo/${req.file.filename}` : '';
+  const body = {
+    ...req.body,
+    caliber: Number(req.body.caliber),
+    armorPen: Number(req.body.armorPen),
+    explosionRadius: Number(req.body.explosionRadius),
+    pen0: Number(req.body.pen0),
+    pen100: Number(req.body.pen100),
+    image: imgPath
+  };
+  const valid = validateAmmo(body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   ammo.push(valid);
   await saveAmmo();
   res.json({ success: true });
 });
-app.put('/api/ammo/:idx', requireAdmin, async (req, res) => {
+app.put('/api/ammo/:idx', requireAdmin, upload.single('image'), async (req, res) => {
   const idx = Number(req.params.idx);
   if (!ammo[idx]) return res.status(404).json({ error: 'not found' });
-  const valid = validateAmmo(req.body);
+  const imgPath = req.file ? `/uploads/ammo/${req.file.filename}` : ammo[idx].image;
+  const body = {
+    ...req.body,
+    caliber: Number(req.body.caliber),
+    armorPen: Number(req.body.armorPen),
+    explosionRadius: Number(req.body.explosionRadius),
+    pen0: Number(req.body.pen0),
+    pen100: Number(req.body.pen100),
+    image: imgPath
+  };
+  const valid = validateAmmo(body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   ammo[idx] = valid;
   await saveAmmo();
@@ -583,14 +635,15 @@ io.on('connection', (socket) => {
   socket.emit('ammo', ammo);
   socket.emit('terrain', terrain);
 
-  socket.on('join', (clientTank) => {
+  socket.on('join', (payload) => {
+    const clientTank = payload?.tank || payload;
+    const loadout = payload?.loadout || {};
     const cookies = cookie.parse(socket.handshake.headers.cookie || '');
     try {
-      const payload = jwt.verify(cookies.token || '', JWT_SECRET);
-      const username = payload.username;
+      const jwtPayload = jwt.verify(cookies.token || '', JWT_SECRET);
+      const username = jwtPayload.username;
       const userRecord = users.get(username);
       if (!userRecord) throw new Error('no user');
-      // Validate client-sent tank against server list to prevent tampering
       const tank = tanks.find(
         (t) => t.name === clientTank.name && t.nation === clientTank.nation
       );
@@ -598,16 +651,15 @@ io.on('connection', (socket) => {
         socket.emit('join-denied', 'Invalid tank');
         return;
       }
-      // Ensure BR constraint based on trusted server data
       if (baseBR === null) baseBR = tank.br;
       if (tank.br > baseBR + 1) {
         socket.emit('join-denied', 'Tank BR too high');
         return;
       }
-      // Initialize server-side player state with health and armor for damage calculations
       players.set(socket.id, {
         ...tank,
         username,
+        ammoLoadout: loadout,
         x: 0,
         y: 0,
         z: 0,
