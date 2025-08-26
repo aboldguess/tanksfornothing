@@ -2,7 +2,8 @@
 // Summary: Handles admin login and CRUD actions for nations, tanks, ammo and terrain across
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
-//          preview with independently rotating chassis and turret based on rotation times.
+//          preview with independently rotating chassis and turret based on rotation times, and
+//          range inputs auto-populate mid-scale defaults for consistent layout.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
@@ -176,7 +177,8 @@ function collectTankForm() {
     nation: document.getElementById('tankNation').value,
     br: parseFloat(document.getElementById('tankBR').value),
     class: document.getElementById('tankClass').value,
-    armor: parseInt(document.getElementById('tankArmor').value, 10),
+    armor: parseInt(document.getElementById('tankChassisArmor').value, 10),
+    turretArmor: parseInt(document.getElementById('tankTurretArmor').value, 10),
     cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
     ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
     crew: parseInt(document.getElementById('tankCrew').value, 10),
@@ -254,7 +256,8 @@ function editTank(i) {
   document.getElementById('tankNation').value = t.nation;
   document.getElementById('tankBR').value = t.br; document.getElementById('brVal').innerText = t.br;
   document.getElementById('tankClass').value = t.class;
-  document.getElementById('tankArmor').value = t.armor; document.getElementById('armorVal').innerText = t.armor;
+  document.getElementById('tankChassisArmor').value = t.armor; document.getElementById('chassisArmorVal').innerText = t.armor;
+  document.getElementById('tankTurretArmor').value = t.turretArmor ?? 80; document.getElementById('turretArmorVal').innerText = t.turretArmor ?? 80;
   document.getElementById('tankCaliber').value = t.cannonCaliber; document.getElementById('caliberVal').innerText = t.cannonCaliber;
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
   document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
@@ -283,30 +286,24 @@ async function deleteTank(i) {
   loadData();
 }
 
+function resetSlider(el) {
+  // Compute midpoint respecting step and display it so layout doesn't shift on first use
+  const min = parseFloat(el.min);
+  const max = parseFloat(el.max);
+  const step = parseFloat(el.step) || 1;
+  let value = (min + max) / 2;
+  value = Math.round(value / step) * step;
+  el.value = value;
+  const span = el.nextElementSibling;
+  if (span) span.innerText = value;
+}
+
 function clearTankForm() {
   document.getElementById('tankName').value = '';
   document.getElementById('tankNation').value = nationsCache[0]?.name || '';
-  document.getElementById('tankBR').value = 1; document.getElementById('brVal').innerText = '';
   document.getElementById('tankClass').value = 'Light/Scout';
-  document.getElementById('tankArmor').value = 10; document.getElementById('armorVal').innerText = '';
-  document.getElementById('tankCaliber').value = 20; document.getElementById('caliberVal').innerText = '';
+  document.querySelectorAll('#tankForm input[type="range"]').forEach(resetSlider);
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = false; });
-  document.getElementById('tankCrew').value = 1; document.getElementById('crewVal').innerText = '';
-  document.getElementById('tankHP').value = 100; document.getElementById('hpVal').innerText = '';
-  document.getElementById('tankMaxSpeed').value = 10; document.getElementById('maxSpeedVal').innerText = '';
-  document.getElementById('tankMaxReverse').value = 0; document.getElementById('maxReverseVal').innerText = '';
-  document.getElementById('tankIncline').value = 2; document.getElementById('inclineVal').innerText = '';
-  document.getElementById('tankBodyRot').value = 1; document.getElementById('bodyRotVal').innerText = '';
-  document.getElementById('tankTurretRot').value = 1; document.getElementById('turretRotVal').innerText = '';
-  document.getElementById('tankHorizontalTraverse').value = 0; document.getElementById('horizontalTraverseVal').innerText = '';
-  document.getElementById('tankMaxTurretIncline').value = 0; document.getElementById('maxTurretInclineVal').innerText = '';
-  document.getElementById('tankMaxTurretDecline').value = 0; document.getElementById('maxTurretDeclineVal').innerText = '';
-  document.getElementById('tankBodyWidth').value = 1; document.getElementById('bodyWidthVal').innerText = '';
-  document.getElementById('tankBodyLength').value = 1; document.getElementById('bodyLengthVal').innerText = '';
-  document.getElementById('tankBodyHeight').value = 1; document.getElementById('bodyHeightVal').innerText = '';
-  document.getElementById('tankTurretWidth').value = 1; document.getElementById('turretWidthVal').innerText = '';
-  document.getElementById('tankTurretLength').value = 1; document.getElementById('turretLengthVal').innerText = '';
-  document.getElementById('tankTurretHeight').value = 0.25; document.getElementById('turretHeightVal').innerText = '';
   updatePreview();
 }
 
