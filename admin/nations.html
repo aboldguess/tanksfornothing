@@ -1,7 +1,8 @@
 <!-- nations.html
-     Summary: Admin page for creating and editing nations with flag uploads.
+     Summary: Admin page for creating and editing nations with flag emoji selection.
      Structure: login, navbar with profile menu, sidebar navigation and nation CRUD card.
-     Usage: Visit /admin/nations.html after logging in. -->
+     Usage: Visit /admin/nations.html after logging in. Choose a flag emoji from the list
+            to represent each nation. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -45,10 +46,11 @@
     <main id="mainContent">
       <section class="card">
         <h2>Nations</h2>
-        <p class="instructions">Add, edit or delete nations. Upload a flag image to represent each nation.</p>
+        <p class="instructions">Add, edit or delete nations. Select a flag emoji to represent each nation.</p>
         <div id="nationList"></div>
         <input id="nationName" placeholder="Name">
-        <input type="file" id="nationFlag" accept="image/*">
+        <input id="nationFlag" placeholder="Flag" list="flagOptions">
+        <datalist id="flagOptions"></datalist>
         <button id="addNationBtn">Add Nation</button>
       </section>
     </main>
