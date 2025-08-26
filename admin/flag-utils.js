@@ -11,15 +11,31 @@ export function codeToFlagEmoji(code) {
     .replace(/./g, c => String.fromCodePoint(127397 + c.charCodeAt(0)));
 }
 
+// Predefined set of region codes that should always be available. This acts as a
+// fallback when Intl.supportedValuesOf is unavailable or incomplete. Codes were
+// chosen based on user feedback to ensure common flags always appear.
+const defaultRegions = [
+  'GB', 'US', 'CA', 'AU', 'NZ', 'IE', 'FR', 'DE', 'ES', 'IT', 'PT', 'NL', 'BE',
+  'CH', 'AT', 'SE', 'NO', 'DK', 'FI', 'IS', 'JP', 'CN', 'KR', 'IN', 'PK', 'BD',
+  'RU', 'UA', 'PL', 'CZ', 'SK', 'HU', 'RO', 'RS', 'GR', 'TR', 'IL', 'SA', 'AE',
+  'QA', 'ZA', 'NG', 'EG', 'MA', 'KE', 'TZ', 'CM', 'GH', 'UG', 'SD', 'MX', 'BR',
+  'AR', 'CL', 'PE', 'CO', 'EC', 'VE', 'BO', 'PY', 'UY'
+];
+
 // Build [{code,name,emoji}] list using Intl APIs with graceful fallback.
 export function getFlagList() {
   const display = typeof Intl.DisplayNames === 'function'
     ? new Intl.DisplayNames(['en'], { type: 'region' })
     : null;
+
   const regions = typeof Intl.supportedValuesOf === 'function'
     ? Intl.supportedValuesOf('region').filter(c => c.length === 2)
-    : ['US', 'GB', 'DE', 'FR', 'JP']; // minimal fallback
-  return regions.map(code => ({
+    : [];
+
+  // Merge supported regions with defaults and remove duplicates.
+  const merged = Array.from(new Set([...regions, ...defaultRegions]));
+
+  return merged.map(code => ({
     code,
     name: display ? display.of(code) : code,
     emoji: codeToFlagEmoji(code)
