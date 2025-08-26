@@ -50,14 +50,20 @@ body {
   overflow-y: auto;
 }
 
-#nationColumn img, #tankColumn img {
+#nationColumn .flag, #tankColumn img {
   width: 100%;
   cursor: pointer;
   margin-bottom: 5px;
   border: 2px solid transparent;
+  display: block;
+  text-align: center;
 }
 
-#nationColumn img.selected, #tankColumn img.selected {
+#nationColumn .flag {
+  font-size: 48px;
+}
+
+#nationColumn .flag.selected, #tankColumn img.selected {
   border-color: #fff;
 }
 

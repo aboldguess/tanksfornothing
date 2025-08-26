@@ -9,6 +9,7 @@
 // ---------------------------------------------------------------------------
 
 import * as THREE from '/libs/three.module.js';
+import { getFlagList } from './flag-utils.js';
 
 function toggleMenu() {
   document.getElementById('profileMenu').classList.toggle('show');
@@ -55,6 +56,7 @@ let tankNationChart = null;
 let tankSortKey = 'name';
 let tankSortAsc = true;
 let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurret, previewClock;
+const FLAG_LIST = getFlagList();
 
 async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
@@ -72,11 +74,17 @@ async function loadData() {
   const ammoNation = document.getElementById('ammoNation');
   if (ammoNation) ammoNation.innerHTML = nationOptions;
 
+  // Populate flag emoji datalist for nation form
+  const flagList = document.getElementById('flagOptions');
+  if (flagList) {
+    flagList.innerHTML = FLAG_LIST.map(f => `<option value="${f.name}" label="${f.emoji}"></option>`).join('');
+  }
+
   // Render nation list
   const nationDiv = document.getElementById('nationList');
   if (nationDiv) {
     nationDiv.innerHTML = nationsCache.map((n, i) =>
-      `<div><img src="${n.flag || ''}" alt="${n.name}" width="32"> ${n.name} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
+      `<div>${n.flag || ''} ${n.name} <button data-i="${i}" class="edit-nation">Edit</button><button data-i="${i}" class="del-nation">Delete</button></div>`
     ).join('');
     nationDiv.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
     nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
@@ -121,11 +129,11 @@ async function loadData() {
 }
 
 function collectNationForm() {
-  const fd = new FormData();
-  fd.append('name', document.getElementById('nationName').value);
-  const file = document.getElementById('nationFlag').files[0];
-  if (file) fd.append('flag', file);
-  return fd;
+  const name = document.getElementById('nationName').value;
+  let flag = document.getElementById('nationFlag').value.trim();
+  const found = FLAG_LIST.find(f => f.name === flag);
+  if (found) flag = found.emoji; // convert country name to emoji
+  return { name, flag };
 }
 
 async function addNation() {
@@ -134,7 +142,8 @@ async function addNation() {
   const url = editingNationIndex === null ? '/api/nations' : `/api/nations/${editingNationIndex}`;
   await fetch(url, {
     method,
-    body: payload
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   });
   editingNationIndex = null;
   document.getElementById('addNationBtn').innerText = 'Add Nation';
@@ -145,7 +154,8 @@ async function addNation() {
 function editNation(i) {
   const n = nationsCache[i];
   document.getElementById('nationName').value = n.name;
-  document.getElementById('nationFlag').value = '';
+  const match = FLAG_LIST.find(f => f.emoji === n.flag);
+  document.getElementById('nationFlag').value = match ? match.name : n.flag;
   editingNationIndex = i;
   document.getElementById('addNationBtn').innerText = 'Update Nation';
 }

@@ -142,24 +142,25 @@ async function loadLobbyData() {
     ammoDefs = Array.isArray(ammo) ? ammo : [];
     nationColumn.innerHTML = '';
     nations.forEach(n => {
-      const img = document.createElement('img');
-      img.src = n.flag || 'https://placehold.co/64x40?text=Flag';
-      img.alt = n.name;
-      img.addEventListener('click', () => {
+      const div = document.createElement('div');
+      div.className = 'flag selectable';
+      div.textContent = n.flag || '🏳️';
+      div.title = n.name;
+      div.addEventListener('click', () => {
         selectedNation = n;
         renderTanks();
-        highlightSelection(nationColumn, img);
+        highlightSelection(nationColumn, div);
       });
-      nationColumn.appendChild(img);
+      nationColumn.appendChild(div);
     });
   } catch (err) {
     showError('Failed to load lobby data');
   }
 }
 
-function highlightSelection(container, img) {
-  container.querySelectorAll('img').forEach(i => i.classList.remove('selected'));
-  img.classList.add('selected');
+function highlightSelection(container, el) {
+  container.querySelectorAll('.selected').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
 }
 
 function renderTanks() {

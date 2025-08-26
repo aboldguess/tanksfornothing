@@ -1,8 +1,9 @@
 // tanksfornothing-server.js
 // Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
 // This script sets up an Express web server with Socket.IO for real-time tank and projectile
-// updates, handles image uploads for nation flags and ammo types, persists admin-defined tanks,
-// nations and terrain details (including capture-the-flag positions) to disk and enforces Battle
+// updates, handles image uploads for ammo types, stores flag emojis for nations,
+// persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
+// to disk and enforces Battle
 // Rating constraints when players join.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
@@ -33,13 +34,11 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadBase = path.join(__dirname, 'public', 'uploads');
-const flagDir = path.join(uploadBase, 'nations');
 const ammoDir = path.join(uploadBase, 'ammo');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = file.fieldname === 'flag' ? flagDir : ammoDir;
-    fs.mkdir(dir, { recursive: true }).then(() => cb(null, dir)).catch(cb);
+    fs.mkdir(ammoDir, { recursive: true }).then(() => cb(null, ammoDir)).catch(cb);
   },
   filename: (req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -397,6 +396,7 @@ const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
 function validateNation(n) {
   if (!n || typeof n.name !== 'string' || !n.name.trim()) return 'name required';
+  // Flag is stored as an emoji string; fallback to empty if invalid
   return { name: n.name.trim(), flag: typeof n.flag === 'string' ? n.flag : '' };
 }
 
@@ -480,19 +480,17 @@ function validateAmmo(a) {
 }
 
 app.get('/api/nations', (req, res) => res.json(nations));
-app.post('/api/nations', requireAdmin, upload.single('flag'), async (req, res) => {
-  const flagPath = req.file ? `/uploads/nations/${req.file.filename}` : '';
-  const valid = validateNation({ ...req.body, flag: flagPath });
+app.post('/api/nations', requireAdmin, async (req, res) => {
+  const valid = validateNation(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   nations.push(valid);
   await saveNations();
   res.json({ success: true });
 });
-app.put('/api/nations/:idx', requireAdmin, upload.single('flag'), async (req, res) => {
+app.put('/api/nations/:idx', requireAdmin, async (req, res) => {
   const idx = Number(req.params.idx);
   if (!nations[idx]) return res.status(404).json({ error: 'not found' });
-  const flagPath = req.file ? `/uploads/nations/${req.file.filename}` : nations[idx].flag;
-  const valid = validateNation({ ...req.body, flag: flagPath });
+  const valid = validateNation(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   nations[idx] = valid;
   await saveNations();
