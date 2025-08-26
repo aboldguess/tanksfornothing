@@ -2,8 +2,10 @@
      Summary: Admin page for creating, listing and editing tanks with live preview.
      Structure: login, navbar with profile menu, sidebar navigation and tank CRUD card
                 containing a sortable table and a multi-column form grouped into
-                Armament, Survivability, Maneuverability and Dimensions sections.
-     Usage: Visit /admin/tanks.html after logging in to manage tank definitions. -->
+                Armament, Survivability, Maneuverability and Dimensions sections. The
+                Survivability section now includes chassis and turret armor sliders.
+     Usage: Visit /admin/tanks.html after logging in to manage tank definitions. Slider
+            values display defaults at midpoints to maintain consistent layout. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -55,7 +57,7 @@
               <th data-sort="nation">Nation</th>
               <th data-sort="br">BR</th>
               <th data-sort="class">Class</th>
-              <th data-sort="armor">Armor</th>
+              <th data-sort="armor">Chassis Armor</th>
               <th data-sort="cannonCaliber">Caliber</th>
               <th data-sort="crew">Crew</th>
               <th data-sort="engineHp">HP</th>
@@ -87,10 +89,6 @@
           <div id="tankSections">
             <fieldset>
               <legend>Armament</legend>
-              <label>Armour Thickness (mm)
-                <input id="tankArmor" type="range" min="10" max="150" step="1" oninput="document.getElementById('armorVal').innerText=this.value">
-                <span id="armorVal"></span>
-              </label>
               <label>Main Cannon Caliber (mm)
                 <input id="tankCaliber" type="range" min="20" max="150" step="10" oninput="document.getElementById('caliberVal').innerText=this.value">
                 <span id="caliberVal"></span>
@@ -123,6 +121,14 @@
               <label>Crew Count
                 <input id="tankCrew" type="range" min="1" max="10" step="1" oninput="document.getElementById('crewVal').innerText=this.value">
                 <span id="crewVal"></span>
+              </label>
+              <label>Chassis Armor Thickness (mm)
+                <input id="tankChassisArmor" type="range" min="10" max="150" step="1" oninput="document.getElementById('chassisArmorVal').innerText=this.value">
+                <span id="chassisArmorVal"></span>
+              </label>
+              <label>Turret Armor Thickness (mm)
+                <input id="tankTurretArmor" type="range" min="10" max="150" step="1" oninput="document.getElementById('turretArmorVal').innerText=this.value">
+                <span id="turretArmorVal"></span>
               </label>
             </fieldset>
             <fieldset>

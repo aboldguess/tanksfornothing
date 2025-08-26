@@ -406,6 +406,7 @@ function validateTank(t) {
   if (typeof t.br !== 'number' || t.br < 1 || t.br > 10) return 'br out of range';
   if (typeof t.class !== 'string' || !classes.has(t.class)) return 'invalid class';
   if (typeof t.armor !== 'number' || t.armor < 10 || t.armor > 150) return 'armor out of range';
+  if (typeof t.turretArmor !== 'number' || t.turretArmor < 10 || t.turretArmor > 150) return 'turretArmor out of range'; // turret protection
   if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber < 20 || t.cannonCaliber > 150) return 'caliber out of range';
   if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
   if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
@@ -431,6 +432,7 @@ function validateTank(t) {
     br: t.br,
     class: t.class,
     armor: t.armor,
+    turretArmor: t.turretArmor,
     cannonCaliber: t.cannonCaliber,
     ammo: t.ammo,
     crew: t.crew,
