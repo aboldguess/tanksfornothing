@@ -145,3 +145,44 @@ body {
 .current-row {
   outline: 2px solid #fff;
 }
+
+/* Tank CRUD layout ------------------------------------------------------ */
+#tanksTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+#tanksTable th,
+#tanksTable td {
+  border: 1px solid #2b361e;
+  padding: 4px;
+  text-align: left;
+}
+#tanksTable th {
+  cursor: pointer; /* allow sorting */
+}
+
+#tankForm .form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+#tankSections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+
+#tankSections fieldset {
+  border: 1px solid #2b361e;
+  padding: 10px;
+}
+
+#tankPreview {
+  width: 100%;
+  background: #222;
+  margin-top: 10px;
+  border: 1px solid #2b361e;
+}
