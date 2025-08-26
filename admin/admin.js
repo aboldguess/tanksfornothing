@@ -164,7 +164,15 @@ function collectTankForm() {
     maxReverseSpeed: parseFloat(document.getElementById('tankMaxReverse').value),
     incline: parseInt(document.getElementById('tankIncline').value, 10),
     bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
-    turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10)
+    turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10),
+    maxTurretIncline: parseInt(document.getElementById('tankMaxTurretIncline').value, 10),
+    maxTurretDecline: parseInt(document.getElementById('tankMaxTurretDecline').value, 10),
+    bodyWidth: parseFloat(document.getElementById('tankBodyWidth').value),
+    bodyLength: parseFloat(document.getElementById('tankBodyLength').value),
+    bodyHeight: parseFloat(document.getElementById('tankBodyHeight').value),
+    turretWidth: parseFloat(document.getElementById('tankTurretWidth').value),
+    turretLength: parseFloat(document.getElementById('tankTurretLength').value),
+    turretHeight: parseFloat(document.getElementById('tankTurretHeight').value)
   };
 }
 
@@ -199,6 +207,14 @@ function editTank(i) {
   document.getElementById('tankIncline').value = t.incline; document.getElementById('inclineVal').innerText = t.incline;
   document.getElementById('tankBodyRot').value = t.bodyRotation; document.getElementById('bodyRotVal').innerText = t.bodyRotation;
   document.getElementById('tankTurretRot').value = t.turretRotation; document.getElementById('turretRotVal').innerText = t.turretRotation;
+  document.getElementById('tankMaxTurretIncline').value = t.maxTurretIncline ?? 0; document.getElementById('maxTurretInclineVal').innerText = t.maxTurretIncline ?? 0;
+  document.getElementById('tankMaxTurretDecline').value = t.maxTurretDecline ?? 0; document.getElementById('maxTurretDeclineVal').innerText = t.maxTurretDecline ?? 0;
+  document.getElementById('tankBodyWidth').value = t.bodyWidth ?? 1; document.getElementById('bodyWidthVal').innerText = t.bodyWidth ?? 1;
+  document.getElementById('tankBodyLength').value = t.bodyLength ?? 1; document.getElementById('bodyLengthVal').innerText = t.bodyLength ?? 1;
+  document.getElementById('tankBodyHeight').value = t.bodyHeight ?? 1; document.getElementById('bodyHeightVal').innerText = t.bodyHeight ?? 1;
+  document.getElementById('tankTurretWidth').value = t.turretWidth ?? 1; document.getElementById('turretWidthVal').innerText = t.turretWidth ?? 1;
+  document.getElementById('tankTurretLength').value = t.turretLength ?? 1; document.getElementById('turretLengthVal').innerText = t.turretLength ?? 1;
+  document.getElementById('tankTurretHeight').value = t.turretHeight ?? 0.25; document.getElementById('turretHeightVal').innerText = t.turretHeight ?? 0.25;
   editingTankIndex = i;
   document.getElementById('addTankBtn').innerText = 'Update Tank';
 }
@@ -223,6 +239,14 @@ function clearTankForm() {
   document.getElementById('tankIncline').value = 2; document.getElementById('inclineVal').innerText = '';
   document.getElementById('tankBodyRot').value = 1; document.getElementById('bodyRotVal').innerText = '';
   document.getElementById('tankTurretRot').value = 1; document.getElementById('turretRotVal').innerText = '';
+  document.getElementById('tankMaxTurretIncline').value = 0; document.getElementById('maxTurretInclineVal').innerText = '';
+  document.getElementById('tankMaxTurretDecline').value = 0; document.getElementById('maxTurretDeclineVal').innerText = '';
+  document.getElementById('tankBodyWidth').value = 1; document.getElementById('bodyWidthVal').innerText = '';
+  document.getElementById('tankBodyLength').value = 1; document.getElementById('bodyLengthVal').innerText = '';
+  document.getElementById('tankBodyHeight').value = 1; document.getElementById('bodyHeightVal').innerText = '';
+  document.getElementById('tankTurretWidth').value = 1; document.getElementById('turretWidthVal').innerText = '';
+  document.getElementById('tankTurretLength').value = 1; document.getElementById('turretLengthVal').innerText = '';
+  document.getElementById('tankTurretHeight').value = 0.25; document.getElementById('turretHeightVal').innerText = '';
 }
 
 function collectAmmoForm() {
