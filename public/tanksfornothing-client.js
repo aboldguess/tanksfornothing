@@ -4,7 +4,7 @@
 //          handles user input and firing mechanics, uses Cannon.js for simple
 //          collision physics and synchronizes state with a server via Socket.IO.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
-//             firing helpers -> animation loop -> optional networking.
+//             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
 //         loads Cannon.js from CDN for physics.
 // ---------------------------------------------------------------------------
@@ -206,11 +206,13 @@ let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
 let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
 // Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
-const ACCELERATION = MAX_SPEED / 3;
+let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
 let cameraDistance = 10;
 const keys = {};
+const DEBUG_MOVEMENT = false;
+const logMovement = (...args) => { if (DEBUG_MOVEMENT) console.debug('[movement]', ...args); };
 
 // Timing and networking helpers
 const clock = new THREE.Clock(); // tracks frame timing for physics updates
@@ -350,6 +352,8 @@ function init() {
   chassisBody = new CANNON.Body({ mass: defaultTank.mass });
   chassisBody.addShape(box);
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
+  chassisBody.angularFactor.set(0, 1, 0);
+  chassisBody.angularDamping = 0.4;
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -411,6 +415,7 @@ function applyTankConfig(t) {
   ROT_SPEED = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
   MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
   MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
+  ACCELERATION = MAX_SPEED / 3;
 
   tank.geometry.dispose();
   tank.geometry = new THREE.BoxGeometry(
@@ -439,6 +444,8 @@ function applyTankConfig(t) {
   chassisBody = new CANNON.Body({ mass: t.mass ?? defaultTank.mass });
   chassisBody.addShape(box);
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
+  chassisBody.angularFactor.set(0, 1, 0);
+  chassisBody.angularDamping = 0.4;
   world.addBody(chassisBody);
   currentSpeed = 0;
 }
@@ -452,14 +459,12 @@ function onMouseMove(e) {
     MAX_TURRET_INCLINE
   );
 }
-function animate() {
-  requestAnimationFrame(animate);
-
-  // Frame timing used for physics and acceleration integration
-  const delta = clock.getDelta();
-
-  // Determine acceleration based on key input. When no key is pressed,
-  // apply a small opposing acceleration to simulate friction.
+/**
+ * updateMovement translates key inputs into physics state. It constrains the
+ * chassis to horizontal movement while allowing yaw rotation.
+ * @param {number} delta - seconds since last frame.
+ */
+function updateMovement(delta) {
   let accel = 0;
   if (keys['w']) accel = ACCELERATION;
   else if (keys['s']) accel = -ACCELERATION;
@@ -471,22 +476,27 @@ function animate() {
     -MAX_REVERSE_SPEED,
     MAX_SPEED
   );
+
   if (keys[' ']) currentSpeed = 0; // instant brake
 
-  // Apply linear velocity along the chassis body's forward vector
   const forward = new CANNON.Vec3(0, 0, -1);
   chassisBody.quaternion.vmult(forward, forward);
   const vy = chassisBody.velocity.y;
   chassisBody.velocity.set(forward.x * currentSpeed, vy, forward.z * currentSpeed);
 
-  // Apply angular velocity for turning
-  if (keys['a']) {
-    chassisBody.angularVelocity.set(0, ROT_SPEED, 0);
-  } else if (keys['d']) {
-    chassisBody.angularVelocity.set(0, -ROT_SPEED, 0);
-  } else {
-    chassisBody.angularVelocity.set(0, 0, 0);
-  }
+  if (keys['a']) chassisBody.angularVelocity.set(0, ROT_SPEED, 0);
+  else if (keys['d']) chassisBody.angularVelocity.set(0, -ROT_SPEED, 0);
+  else chassisBody.angularVelocity.set(0, 0, 0);
+
+  logMovement('spd', currentSpeed.toFixed(2), 'ang', chassisBody.angularVelocity.y.toFixed(2));
+}
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Frame timing used for physics and acceleration integration
+  const delta = clock.getDelta();
+  updateMovement(delta);
 
   // Step physics world with fixed timestep
   world.step(1 / 60, delta, 3);
