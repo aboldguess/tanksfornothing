@@ -49,6 +49,8 @@ let editingAmmoIndex = null;
 let editingTerrainIndex = null;
 let currentTerrainIndex = 0;
 let tankNationChart = null;
+let tankSortKey = 'name';
+let tankSortAsc = true;
 
 async function loadData() {
   nationsCache = await fetch('/api/nations').then(r => r.json());
@@ -76,14 +78,14 @@ async function loadData() {
     nationDiv.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
   }
 
-  const tankDiv = document.getElementById('tankList');
-  if (tankDiv) {
-    tankDiv.innerHTML = tanksCache.map((t, i) =>
-      `<div>${t.name} (${t.nation}) BR ${t.br} <button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></div>`
-    ).join('');
-    tankDiv.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
-    tankDiv.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
-  }
+  // Render tank table and enable column sorting
+  const tankHeaders = document.querySelectorAll('#tanksTable th[data-sort]');
+  tankHeaders.forEach(th => th.onclick = () => {
+    const key = th.dataset.sort;
+    if (tankSortKey === key) tankSortAsc = !tankSortAsc; else { tankSortKey = key; tankSortAsc = true; }
+    renderTankTable();
+  });
+  renderTankTable();
 
   const ammoDiv = document.getElementById('ammoList');
   if (ammoDiv) {
@@ -191,6 +193,40 @@ async function addTank() {
   loadData();
 }
 
+function renderTankTable() {
+  const tbody = document.getElementById('tanksTableBody');
+  if (!tbody) return;
+  const rows = tanksCache.map((t, i) => ({ t, i }));
+  rows.sort((a, b) => {
+    let av = a.t[tankSortKey];
+    let bv = b.t[tankSortKey];
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return tankSortAsc ? -1 : 1;
+    if (av > bv) return tankSortAsc ? 1 : -1;
+    return 0;
+  });
+  tbody.innerHTML = rows.map(({ t, i }) =>
+    `<tr>
+      <td>${t.name}</td>
+      <td>${t.nation}</td>
+      <td>${t.br}</td>
+      <td>${t.class}</td>
+      <td>${t.armor}</td>
+      <td>${t.cannonCaliber}</td>
+      <td>${t.crew}</td>
+      <td>${t.engineHp}</td>
+      <td>${t.maxSpeed}</td>
+      <td>${t.bodyWidth}</td>
+      <td>${t.bodyLength}</td>
+      <td>${t.bodyHeight}</td>
+      <td><button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></td>
+    </tr>`
+  ).join('');
+  tbody.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
+  tbody.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
+}
+
 function editTank(i) {
   const t = tanksCache[i];
   document.getElementById('tankName').value = t.name;
@@ -217,6 +253,7 @@ function editTank(i) {
   document.getElementById('tankTurretHeight').value = t.turretHeight ?? 0.25; document.getElementById('turretHeightVal').innerText = t.turretHeight ?? 0.25;
   editingTankIndex = i;
   document.getElementById('addTankBtn').innerText = 'Update Tank';
+  updatePreview();
 }
 
 async function deleteTank(i) {
@@ -247,7 +284,34 @@ function clearTankForm() {
   document.getElementById('tankTurretWidth').value = 1; document.getElementById('turretWidthVal').innerText = '';
   document.getElementById('tankTurretLength').value = 1; document.getElementById('turretLengthVal').innerText = '';
   document.getElementById('tankTurretHeight').value = 0.25; document.getElementById('turretHeightVal').innerText = '';
+  updatePreview();
 }
+
+function updatePreview() {
+  const canvas = document.getElementById('tankPreview');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const bodyW = parseFloat(document.getElementById('tankBodyWidth').value) || 0;
+  const bodyL = parseFloat(document.getElementById('tankBodyLength').value) || 0;
+  const turretW = parseFloat(document.getElementById('tankTurretWidth').value) || 0;
+  const turretL = parseFloat(document.getElementById('tankTurretLength').value) || 0;
+  // scale to fit canvas; assume 10px per meter then scale down if needed
+  const scale = Math.min(canvas.width / (bodyL * 10), canvas.height / (bodyW * 10)) || 1;
+  const bodyWidthPx = bodyW * 10 * scale;
+  const bodyLengthPx = bodyL * 10 * scale;
+  const startX = (canvas.width - bodyLengthPx) / 2;
+  const startY = (canvas.height - bodyWidthPx) / 2;
+  ctx.fillStyle = '#556b2f';
+  ctx.fillRect(startX, startY, bodyLengthPx, bodyWidthPx);
+  const turretWidthPx = turretW * 10 * scale;
+  const turretLengthPx = turretL * 10 * scale;
+  const turretX = startX + (bodyLengthPx - turretLengthPx) / 2;
+  const turretY = startY + (bodyWidthPx - turretWidthPx) / 2;
+  ctx.fillStyle = '#6b8e23';
+  ctx.fillRect(turretX, turretY, turretLengthPx, turretWidthPx);
+}
+window.updatePreview = updatePreview;
 
 function collectAmmoForm() {
   return {
@@ -456,8 +520,8 @@ const loginBtn = document.getElementById('loginBtn');
 if (loginBtn) loginBtn.addEventListener('click', login);
 const addNationBtn = document.getElementById('addNationBtn');
 if (addNationBtn) addNationBtn.addEventListener('click', addNation);
-const addTankBtn = document.getElementById('addTankBtn');
-if (addTankBtn) addTankBtn.addEventListener('click', addTank);
+const tankFormEl = document.getElementById('tankForm');
+if (tankFormEl) tankFormEl.addEventListener('submit', (e) => { e.preventDefault(); addTank(); });
 const addAmmoBtn = document.getElementById('addAmmoBtn');
 if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
 const newTerrainBtn = document.getElementById('newTerrainBtn');
