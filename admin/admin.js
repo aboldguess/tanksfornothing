@@ -171,6 +171,7 @@ function collectTankForm() {
     incline: parseInt(document.getElementById('tankIncline').value, 10),
     bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
     turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10),
+    horizontalTraverse: parseInt(document.getElementById('tankHorizontalTraverse').value, 10),
     maxTurretIncline: parseInt(document.getElementById('tankMaxTurretIncline').value, 10),
     maxTurretDecline: parseInt(document.getElementById('tankMaxTurretDecline').value, 10),
     bodyWidth: parseFloat(document.getElementById('tankBodyWidth').value),
@@ -221,6 +222,7 @@ function renderTankTable() {
       <td>${t.crew}</td>
       <td>${t.engineHp}</td>
       <td>${t.maxSpeed}</td>
+      <td>${t.horizontalTraverse ?? 0}</td>
       <td>${t.bodyWidth}</td>
       <td>${t.bodyLength}</td>
       <td>${t.bodyHeight}</td>
@@ -247,6 +249,7 @@ function editTank(i) {
   document.getElementById('tankIncline').value = t.incline; document.getElementById('inclineVal').innerText = t.incline;
   document.getElementById('tankBodyRot').value = t.bodyRotation; document.getElementById('bodyRotVal').innerText = t.bodyRotation;
   document.getElementById('tankTurretRot').value = t.turretRotation; document.getElementById('turretRotVal').innerText = t.turretRotation;
+  document.getElementById('tankHorizontalTraverse').value = t.horizontalTraverse ?? 0; document.getElementById('horizontalTraverseVal').innerText = t.horizontalTraverse ?? 0;
   document.getElementById('tankMaxTurretIncline').value = t.maxTurretIncline ?? 0; document.getElementById('maxTurretInclineVal').innerText = t.maxTurretIncline ?? 0;
   document.getElementById('tankMaxTurretDecline').value = t.maxTurretDecline ?? 0; document.getElementById('maxTurretDeclineVal').innerText = t.maxTurretDecline ?? 0;
   document.getElementById('tankBodyWidth').value = t.bodyWidth ?? 1; document.getElementById('bodyWidthVal').innerText = t.bodyWidth ?? 1;
@@ -280,6 +283,7 @@ function clearTankForm() {
   document.getElementById('tankIncline').value = 2; document.getElementById('inclineVal').innerText = '';
   document.getElementById('tankBodyRot').value = 1; document.getElementById('bodyRotVal').innerText = '';
   document.getElementById('tankTurretRot').value = 1; document.getElementById('turretRotVal').innerText = '';
+  document.getElementById('tankHorizontalTraverse').value = 0; document.getElementById('horizontalTraverseVal').innerText = '';
   document.getElementById('tankMaxTurretIncline').value = 0; document.getElementById('maxTurretInclineVal').innerText = '';
   document.getElementById('tankMaxTurretDecline').value = 0; document.getElementById('maxTurretDeclineVal').innerText = '';
   document.getElementById('tankBodyWidth').value = 1; document.getElementById('bodyWidthVal').innerText = '';

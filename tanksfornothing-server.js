@@ -362,7 +362,7 @@ app.get('/api/stats', requireAuth, (req, res) => {
 });
 
 // Admin CRUD endpoints with validation helpers
-const classes = new Set(['Light/Scout', 'Medium/MBT', 'Heavy']);
+const classes = new Set(['Light/Scout', 'Medium/MBT', 'Heavy', 'Tank Destroyer']);
 const ammoChoices = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
@@ -388,6 +388,8 @@ function validateTank(t) {
   if (typeof t.turretRotation !== 'number' || t.turretRotation < 1 || t.turretRotation > 60) return 'invalid turret rotation';
   if (typeof t.maxTurretIncline !== 'number' || t.maxTurretIncline < 0 || t.maxTurretIncline > 50 || t.maxTurretIncline % 1 !== 0) return 'invalid turret incline';
   if (typeof t.maxTurretDecline !== 'number' || t.maxTurretDecline < 0 || t.maxTurretDecline > 25 || t.maxTurretDecline % 1 !== 0) return 'invalid turret decline';
+  if (!Number.isInteger(t.horizontalTraverse) || t.horizontalTraverse < 0 || t.horizontalTraverse > 20)
+    return 'invalid horizontal traverse';
   if (typeof t.bodyWidth !== 'number' || t.bodyWidth < 1 || t.bodyWidth > 5 || (t.bodyWidth * 4) % 1 !== 0) return 'invalid body width';
   if (typeof t.bodyLength !== 'number' || t.bodyLength < 1 || t.bodyLength > 10 || (t.bodyLength * 4) % 1 !== 0) return 'invalid body length';
   if (typeof t.bodyHeight !== 'number' || t.bodyHeight < 1 || t.bodyHeight > 3 || (t.bodyHeight * 4) % 1 !== 0) return 'invalid body height';
@@ -411,6 +413,7 @@ function validateTank(t) {
     turretRotation: t.turretRotation,
     maxTurretIncline: t.maxTurretIncline,
     maxTurretDecline: t.maxTurretDecline,
+    horizontalTraverse: t.horizontalTraverse,
     bodyWidth: t.bodyWidth,
     bodyLength: t.bodyLength,
     bodyHeight: t.bodyHeight,
