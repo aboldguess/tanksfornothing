@@ -100,6 +100,7 @@ if (window.io) {
     tank.position.set(0, 0, 0);
     tank.rotation.set(0, 0, 0);
     turret.rotation.set(0, 0, 0);
+    if (gun) gun.rotation.set(0, 0, 0); // keep turret level; reset barrel pitch
     if (chassisBody) {
       chassisBody.position.set(0, 1, 0);
       chassisBody.velocity.set(0, 0, 0);
@@ -179,7 +180,8 @@ if (socket) {
 
 loadLobbyData();
 
-let tank, turret, camera, scene, renderer, ground;
+// Core scene objects
+let tank, turret, gun, camera, scene, renderer, ground;
 // Physics objects
 let world, chassisBody, groundBody;
 // Default tank stats used for movement and rotation
@@ -343,12 +345,16 @@ function init() {
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
   turret.position.y = defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2;
-  const gun = new THREE.Mesh(
+
+  // Gun pivot exposes rotation.x for pitch; barrel mesh aims down the -Z axis.
+  gun = new THREE.Object3D();
+  const barrel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.1, 3),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
-  gun.rotation.z = Math.PI / 2;
-  gun.position.x = 1.5;
+  barrel.rotation.x = -Math.PI / 2; // orient along -Z
+  barrel.position.z = -1.5; // move so base sits at turret center
+  gun.add(barrel);
   turret.add(gun);
   tank.add(turret);
 
@@ -465,8 +471,9 @@ function onMouseMove(e) {
   const sensitivity = 0.002;
   const newYaw = turret.rotation.y - e.movementX * sensitivity;
   turret.rotation.y = THREE.MathUtils.clamp(newYaw, -MAX_TURRET_TRAVERSE, MAX_TURRET_TRAVERSE);
-  turret.rotation.x = THREE.MathUtils.clamp(
-    turret.rotation.x - e.movementY * sensitivity,
+  const newPitch = gun.rotation.x - e.movementY * sensitivity;
+  gun.rotation.x = THREE.MathUtils.clamp(
+    newPitch,
     -MAX_TURRET_DECLINE,
     MAX_TURRET_INCLINE
   );
