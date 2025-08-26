@@ -1,8 +1,8 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Provides lobby tank selection,
-//          renders 3D scene, handles user input and firing mechanics, uses
-//          Cannon.js for simple collision physics and synchronizes state with a
-//          server via Socket.IO.
+//          renders a dimensioned 3D tank based on server-supplied parameters,
+//          handles user input and firing mechanics, uses Cannon.js for simple
+//          collision physics and synchronizes state with a server via Socket.IO.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -164,6 +164,7 @@ joinBtn.addEventListener('click', () => {
   }
   lobby.style.display = 'none';
   instructions.style.display = 'block';
+  applyTankConfig(tank);
   if (socket) socket.emit('join', tank);
 });
 
@@ -192,13 +193,29 @@ const defaultTank = {
   maxAcceleration: 3, // m/s²
   maxSpeed: 40, // km/h
   maxReverseSpeed: 15, // km/h
-  bodyRotation: 20 // seconds for full rotation
+  bodyRotation: 20, // seconds for full rotation
+  maxTurretIncline: 50,
+  maxTurretDecline: 25,
+  bodyWidth: 2,
+  bodyLength: 4,
+  bodyHeight: 1,
+  turretWidth: 1.5,
+  turretLength: 1.5,
+  turretHeight: 0.5
 };
 // Movement coefficients derived from tank stats
 const MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 const MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 const ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
 const MAX_ACCEL = defaultTank.maxAcceleration; // maximum linear acceleration
+// Movement coefficients derived from tank stats; mutable to apply tank-specific values
+let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
+let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
+let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
+let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
+// Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
+const ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
 let cameraDistance = 10;
@@ -316,7 +333,7 @@ function init() {
 
   // Tank body graphics
   const body = new THREE.Mesh(
-    new THREE.BoxGeometry(2, 1, 4),
+    new THREE.BoxGeometry(defaultTank.bodyWidth, defaultTank.bodyHeight, defaultTank.bodyLength),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
   );
   scene.add(body);
@@ -324,11 +341,14 @@ function init() {
 
   // Turret and gun
   turret = new THREE.Mesh(
-    new THREE.BoxGeometry(1.5, 0.5, 1.5),
+    new THREE.BoxGeometry(defaultTank.turretWidth, defaultTank.turretHeight, defaultTank.turretLength),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
   turret.position.y = 0.75;
   gunBarrel = new THREE.Mesh(
+
+  turret.position.y = defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2;
+  const gun = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.1, 3),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
@@ -340,10 +360,10 @@ function init() {
   tank.add(turret);
 
   // Chassis physics body mirrors tank mesh
-  const box = new CANNON.Box(new CANNON.Vec3(1, 0.5, 2));
+  const box = new CANNON.Box(new CANNON.Vec3(defaultTank.bodyWidth / 2, defaultTank.bodyHeight / 2, defaultTank.bodyLength / 2));
   chassisBody = new CANNON.Body({ mass: defaultTank.mass });
   chassisBody.addShape(box);
-  chassisBody.position.set(0, 1, 0);
+  chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -399,6 +419,44 @@ function init() {
   animate();
 }
 
+function applyTankConfig(t) {
+  MAX_SPEED = (t.maxSpeed ?? defaultTank.maxSpeed) / 3.6;
+  MAX_REVERSE_SPEED = (t.maxReverseSpeed ?? defaultTank.maxReverseSpeed) / 3.6;
+  ROT_SPEED = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
+  MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
+  MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
+
+  tank.geometry.dispose();
+  tank.geometry = new THREE.BoxGeometry(
+    t.bodyWidth ?? defaultTank.bodyWidth,
+    t.bodyHeight ?? defaultTank.bodyHeight,
+    t.bodyLength ?? defaultTank.bodyLength
+  );
+  turret.geometry.dispose();
+  turret.geometry = new THREE.BoxGeometry(
+    t.turretWidth ?? defaultTank.turretWidth,
+    t.turretHeight ?? defaultTank.turretHeight,
+    t.turretLength ?? defaultTank.turretLength
+  );
+  turret.position.y =
+    (t.bodyHeight ?? defaultTank.bodyHeight) / 2 +
+    (t.turretHeight ?? defaultTank.turretHeight) / 2;
+
+  world.removeBody(chassisBody);
+  const box = new CANNON.Box(
+    new CANNON.Vec3(
+      (t.bodyWidth ?? defaultTank.bodyWidth) / 2,
+      (t.bodyHeight ?? defaultTank.bodyHeight) / 2,
+      (t.bodyLength ?? defaultTank.bodyLength) / 2
+    )
+  );
+  chassisBody = new CANNON.Body({ mass: t.mass ?? defaultTank.mass });
+  chassisBody.addShape(box);
+  chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
+  world.addBody(chassisBody);
+  currentSpeed = 0;
+}
+
 function onMouseMove(e) {
   const sensitivity = 0.002;
   // Horizontal mouse movement yaws the turret relative to the hull.
@@ -410,6 +468,10 @@ function onMouseMove(e) {
     gunPitch - e.movementY * sensitivity,
     -0.5,
     0.5
+  turret.rotation.x = THREE.MathUtils.clamp(
+    turret.rotation.x - e.movementY * sensitivity,
+    -MAX_TURRET_DECLINE,
+    MAX_TURRET_INCLINE
   );
   gunBarrel.rotation.z = GUN_BASE_ANGLE + gunPitch;
 }

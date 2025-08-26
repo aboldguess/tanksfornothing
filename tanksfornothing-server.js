@@ -386,6 +386,14 @@ function validateTank(t) {
   if (typeof t.incline !== 'number' || t.incline < 2 || t.incline > 12) return 'incline out of range';
   if (typeof t.bodyRotation !== 'number' || t.bodyRotation < 1 || t.bodyRotation > 60) return 'invalid body rotation';
   if (typeof t.turretRotation !== 'number' || t.turretRotation < 1 || t.turretRotation > 60) return 'invalid turret rotation';
+  if (typeof t.maxTurretIncline !== 'number' || t.maxTurretIncline < 0 || t.maxTurretIncline > 50 || t.maxTurretIncline % 1 !== 0) return 'invalid turret incline';
+  if (typeof t.maxTurretDecline !== 'number' || t.maxTurretDecline < 0 || t.maxTurretDecline > 25 || t.maxTurretDecline % 1 !== 0) return 'invalid turret decline';
+  if (typeof t.bodyWidth !== 'number' || t.bodyWidth < 1 || t.bodyWidth > 5 || (t.bodyWidth * 4) % 1 !== 0) return 'invalid body width';
+  if (typeof t.bodyLength !== 'number' || t.bodyLength < 1 || t.bodyLength > 10 || (t.bodyLength * 4) % 1 !== 0) return 'invalid body length';
+  if (typeof t.bodyHeight !== 'number' || t.bodyHeight < 1 || t.bodyHeight > 3 || (t.bodyHeight * 4) % 1 !== 0) return 'invalid body height';
+  if (typeof t.turretWidth !== 'number' || t.turretWidth < 1 || t.turretWidth > 3 || (t.turretWidth * 4) % 1 !== 0) return 'invalid turret width';
+  if (typeof t.turretLength !== 'number' || t.turretLength < 1 || t.turretLength > 5 || (t.turretLength * 4) % 1 !== 0) return 'invalid turret length';
+  if (typeof t.turretHeight !== 'number' || t.turretHeight < 0.25 || t.turretHeight > 2 || (t.turretHeight * 4) % 1 !== 0) return 'invalid turret height';
   return {
     name: t.name.trim(),
     nation: t.nation,
@@ -400,7 +408,15 @@ function validateTank(t) {
     maxReverseSpeed: t.maxReverseSpeed,
     incline: t.incline,
     bodyRotation: t.bodyRotation,
-    turretRotation: t.turretRotation
+    turretRotation: t.turretRotation,
+    maxTurretIncline: t.maxTurretIncline,
+    maxTurretDecline: t.maxTurretDecline,
+    bodyWidth: t.bodyWidth,
+    bodyLength: t.bodyLength,
+    bodyHeight: t.bodyHeight,
+    turretWidth: t.turretWidth,
+    turretLength: t.turretLength,
+    turretHeight: t.turretHeight
   };
 }
 
