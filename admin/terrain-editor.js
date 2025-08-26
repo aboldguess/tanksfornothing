@@ -1,7 +1,8 @@
 // terrain-editor.js
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
 //          perspective control, shading, Perlin-noise-based terrain generation (with adjustable scale
-//          and amplitude controls) and capture-the-flag position placement.
+//          and amplitude controls) and capture-the-flag position placement. Ground, elevation and flag
+//          tools are separated via a tabbed interface.
 // Structure: state setup -> ground type management -> terrain initialization -> raised-cosine painting ->
 //            Perlin noise generation -> 3D plot with camera controls -> event wiring.
 // Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and
@@ -26,6 +27,8 @@ let mapWidthMeters = 0; // actual map width represented, in metres
 let mapHeightMeters = 0; // actual map height represented, in metres
 const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
+
+let currentMode = 'ground'; // currently active editing tool
 
 // Capture-the-flag positions for red and blue teams (a-d each)
 function defaultFlags() {
@@ -102,10 +105,7 @@ function initializeTerrain() {
 }
 
 // Apply raised-cosine brush using X/Y size sliders and peak height
-function applyRaisedCosineBrush(cx, cy, cb) {
-  const rx = Number(document.getElementById('brushSizeX').value);
-  const ry = Number(document.getElementById('brushSizeY').value);
-  const peak = Number(document.getElementById('brushSizeZ').value);
+function applyRaisedCosineBrush(cx, cy, rx, ry, peak, cb) {
   console.debug('Brush params', { cx, cy, rx, ry, peak });
   for (let dy = -ry; dy <= ry; dy++) {
     for (let dx = -rx; dx <= rx; dx++) {
@@ -126,27 +126,33 @@ function handlePlotPaint(e) {
   if (!point) return;
   const cx = Math.floor(point.x / cellMeters);
   const cy = Math.floor(point.y / cellMeters);
-  const mode = document.getElementById('mode').value;
   const button = e.event.button;
-  if (mode === 'flags') {
+  if (currentMode === 'flags') {
     const [team, letter] = document.getElementById('flagSelect').value.split('-');
     flags[team][letter] = {
       x: cx * cellMeters + cellMeters / 2,
       y: cy * cellMeters + cellMeters / 2
     };
     console.debug('Set flag', { team, letter, position: flags[team][letter] });
-  } else {
-    applyRaisedCosineBrush(cx, cy, (x, y, influence) => {
-      if (mode === 'ground') {
-        groundGrid[y][x] = currentGround;
-      } else {
-        const sign = button === 2 ? -1 : 1;
-        const newHeight = elevationGrid[y][x] + sign * influence;
-        elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
-      }
+    update3DPlot();
+  } else if (currentMode === 'ground') {
+    const rx = Number(document.getElementById('gBrushSizeX').value);
+    const ry = Number(document.getElementById('gBrushSizeY').value);
+    applyRaisedCosineBrush(cx, cy, rx, ry, 1, (x, y) => {
+      groundGrid[y][x] = currentGround;
     });
+    update3DPlot();
+  } else if (currentMode === 'elevation') {
+    const rx = Number(document.getElementById('eBrushSizeX').value);
+    const ry = Number(document.getElementById('eBrushSizeY').value);
+    const peak = Number(document.getElementById('eBrushSizeZ').value);
+    const sign = button === 2 ? -1 : 1;
+    applyRaisedCosineBrush(cx, cy, rx, ry, peak, (x, y, influence) => {
+      const newHeight = elevationGrid[y][x] + sign * influence;
+      elevationGrid[y][x] = Math.max(0, Math.min(maxHeight, newHeight));
+    });
+    update3DPlot();
   }
-  update3DPlot();
 }
 
 // PerlinNoise generator based on public domain implementation by Stefan Gustavson
@@ -302,7 +308,14 @@ function update3DPlot() {
       }
     });
   });
-  Plotly.newPlot('terrain3d', traces, layout, { responsive: true });
+  const plot = document.getElementById('terrain3d');
+  if (!plot.data) {
+    Plotly.newPlot(plot, traces, layout, { responsive: true });
+    plot.on('plotly_click', handlePlotPaint);
+    plot.on('plotly_hover', (e) => { if (mouseDown) handlePlotPaint(e); });
+  } else {
+    Plotly.react(plot, traces, layout);
+  }
   applyCameraLock();
 }
 
@@ -328,8 +341,8 @@ document.getElementById('showAxes').addEventListener('change', update3DPlot);
 document.getElementById('viewSelect').addEventListener('change', update3DPlot);
 document.getElementById('projectionType').addEventListener('change', update3DPlot);
 document.getElementById('lockCamera').addEventListener('change', applyCameraLock);
-document.getElementById('mode').addEventListener('change', () => {
-  updateModeVisibility();
+document.querySelectorAll('.tool-tab').forEach(btn => {
+  btn.addEventListener('click', () => setMode(btn.dataset.mode));
 });
 ['sizeX','sizeY','terrainType'].forEach(id => {
   const el = document.getElementById(id);
@@ -337,19 +350,20 @@ document.getElementById('mode').addEventListener('change', () => {
 });
 document.addEventListener('terrain-editor-opened', initializeTerrain);
 
-const plot = document.getElementById('terrain3d');
+const plotDiv = document.getElementById('terrain3d');
 let mouseDown = false;
-plot.addEventListener('mousedown', () => { mouseDown = true; });
+plotDiv.addEventListener('mousedown', () => { mouseDown = true; });
 document.addEventListener('mouseup', () => { mouseDown = false; });
-plot.addEventListener('contextmenu', (e) => e.preventDefault());
-plot.on('plotly_click', handlePlotPaint);
-plot.on('plotly_hover', (e) => { if (mouseDown) handlePlotPaint(e); });
+plotDiv.addEventListener('contextmenu', (e) => e.preventDefault());
 
-function updateModeVisibility() {
-  const mode = document.getElementById('mode').value;
-  document.querySelectorAll('.flag-controls').forEach(el => {
-    el.style.display = mode === 'flags' ? '' : 'none';
+function setMode(mode) {
+  currentMode = mode;
+  document.querySelectorAll('.tool-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.mode === mode);
   });
+  document.getElementById('groundControls').style.display = mode === 'ground' ? '' : 'none';
+  document.getElementById('elevationControls').style.display = mode === 'elevation' ? '' : 'none';
+  document.getElementById('flagControls').style.display = mode === 'flags' ? '' : 'none';
 }
-updateModeVisibility();
+setMode('ground');
 
