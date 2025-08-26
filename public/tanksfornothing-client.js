@@ -177,7 +177,11 @@ if (socket) {
 
 loadLobbyData();
 
-let tank, turret, camera, scene, renderer, ground;
+let tank, turret, gunBarrel, camera, scene, renderer, ground;
+// Track barrel pitch relative to hull for mouse controls.
+let gunPitch = 0;
+// Base orientation of the gun barrel (pointing forward along X).
+const GUN_BASE_ANGLE = Math.PI / 2;
 // Physics objects
 let world, chassisBody, groundBody;
 // Default tank stats used for movement and rotation
@@ -325,13 +329,15 @@ function init() {
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
   turret.position.y = 0.75;
-  const gun = new THREE.Mesh(
+  gunBarrel = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.1, 3),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
-  gun.rotation.z = Math.PI / 2;
-  gun.position.x = 1.5;
-  turret.add(gun);
+  // Rotate barrel to point forward along the X axis.
+  // Pitch adjustments are applied relative to the global GUN_BASE_ANGLE.
+  gunBarrel.rotation.z = GUN_BASE_ANGLE;
+  gunBarrel.position.x = 1.5;
+  turret.add(gunBarrel);
   tank.add(turret);
 
   // Chassis physics body mirrors tank mesh
@@ -339,6 +345,9 @@ function init() {
   chassisBody = new CANNON.Body({ mass: defaultTank.mass });
   chassisBody.addShape(box);
   chassisBody.position.set(0, 1, 0);
+  // Restrict rotation to the Y axis so forward/reverse input doesn't cause the
+  // chassis to tip over when accelerating or braking.
+  chassisBody.angularFactor.set(0, 1, 0);
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -396,12 +405,17 @@ function init() {
 
 function onMouseMove(e) {
   const sensitivity = 0.002;
+  // Horizontal mouse movement yaws the turret relative to the hull.
   turret.rotation.y -= e.movementX * sensitivity;
-  turret.rotation.x = THREE.MathUtils.clamp(
-    turret.rotation.x - e.movementY * sensitivity,
+
+  // Vertical mouse movement adjusts the barrel pitch. Track the amount separately
+  // so we can clamp around the base orientation of the gun barrel.
+  gunPitch = THREE.MathUtils.clamp(
+    gunPitch - e.movementY * sensitivity,
     -0.5,
     0.5
   );
+  gunBarrel.rotation.z = GUN_BASE_ANGLE + gunPitch;
 }
 function animate() {
   requestAnimationFrame(animate);
