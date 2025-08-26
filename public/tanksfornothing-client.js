@@ -189,7 +189,7 @@ const defaultTank = {
   name: 'Basic',
   br: 1,
   mass: 30000,
-  horsepower: 500,
+  maxAcceleration: 3, // m/s²
   maxSpeed: 40, // km/h
   maxReverseSpeed: 15, // km/h
   bodyRotation: 20 // seconds for full rotation
@@ -198,8 +198,7 @@ const defaultTank = {
 const MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 const MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 const ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
-// Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
-const ACCELERATION = MAX_SPEED / 3;
+const MAX_ACCEL = defaultTank.maxAcceleration; // maximum linear acceleration
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
 let cameraDistance = 10;
@@ -345,9 +344,6 @@ function init() {
   chassisBody = new CANNON.Body({ mass: defaultTank.mass });
   chassisBody.addShape(box);
   chassisBody.position.set(0, 1, 0);
-  // Restrict rotation to the Y axis so forward/reverse input doesn't cause the
-  // chassis to tip over when accelerating or braking.
-  chassisBody.angularFactor.set(0, 1, 0);
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -426,10 +422,10 @@ function animate() {
   // Determine acceleration based on key input. When no key is pressed,
   // apply a small opposing acceleration to simulate friction.
   let accel = 0;
-  if (keys['w']) accel = ACCELERATION;
-  else if (keys['s']) accel = -ACCELERATION;
-  else if (currentSpeed > 0) accel = -ACCELERATION;
-  else if (currentSpeed < 0) accel = ACCELERATION;
+  if (keys['w']) accel = MAX_ACCEL;
+  else if (keys['s']) accel = -MAX_ACCEL;
+  else if (currentSpeed > 0) accel = -MAX_ACCEL;
+  else if (currentSpeed < 0) accel = MAX_ACCEL;
 
   currentSpeed = THREE.MathUtils.clamp(
     currentSpeed + accel * delta,
