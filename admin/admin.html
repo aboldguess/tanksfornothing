@@ -1,7 +1,7 @@
 <!-- admin.html
      Summary: Admin dashboard showing overall statistics with sidebar navigation.
-     Structure: login form, persistent navbar with profile menu, sidebar links and dashboard stats card.
-     Usage: Visit /admin/admin.html after login to view statistics. Use sidebar for other admin pages. -->
+     Structure: navbar with profile menu, sidebar links and dashboard stats card.
+     Usage: Visit /admin/admin.html to view statistics. Use sidebar for other admin pages. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -26,16 +26,7 @@
     </div>
   </nav>
 
-  <div id="login">
-    <h2>Admin Login</h2>
-    <form id="loginForm">
-      <input type="password" id="password" placeholder="Password" required>
-      <button id="loginBtn" type="submit">Login</button>
-    </form>
-    <div id="loginError" role="alert"></div>
-  </div>
-
-  <div id="app" style="display:none">
+  <div id="app">
     <aside id="sidebar">
       <a href="admin.html">Dashboard</a>
       <a href="nations.html">Nations</a>

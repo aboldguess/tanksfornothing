@@ -1,0 +1,25 @@
+<!-- login.html
+     Summary: Standalone admin login page prompting for password.
+     Structure: centered card with instructions and password form.
+     Usage: Visit /admin/login.html and enter the admin password to access other admin pages. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Admin Login</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body class="login-page">
+  <div class="card" id="loginCard">
+    <h2>Admin Login</h2>
+    <p class="instructions">Enter the admin password to access the control panel.</p>
+    <form id="loginForm">
+      <input type="password" id="password" placeholder="Password" required>
+      <button id="loginBtn" type="submit">Login</button>
+    </form>
+    <div id="loginError" role="alert"></div>
+  </div>
+  <script type="module" src="login.js"></script>
+</body>
+</html>

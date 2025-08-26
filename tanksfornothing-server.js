@@ -280,6 +280,18 @@ await loadUsers();
 
 // Middleware
 app.use(express.static('public'));
+// Admin HTML pages require authentication; login assets remain public
+app.get('/admin', (req, res) => {
+  if (req.cookies && req.cookies.admin === 'true') {
+    return res.redirect('/admin/admin.html');
+  }
+  res.redirect('/admin/login.html');
+});
+app.get('/admin/:page.html', (req, res, next) => {
+  if (req.params.page === 'login') return next();
+  if (req.cookies && req.cookies.admin === 'true') return next();
+  return res.redirect('/admin/login.html');
+});
 app.use('/admin', express.static('admin'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // support classic form posts

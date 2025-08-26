@@ -2,9 +2,9 @@
      Summary: Admin page for managing terrain presets with a 3D editor. Users can sculpt ground,
               elevation and capture-the-flag positions via dedicated tool tabs. Includes Perlin-noise
               generator and camera controls. Preview updates automatically when map settings change.
-     Structure: login -> navbar & profile menu -> sidebar navigation -> map table -> terrain editor
-                with settings panel, tool tabs and Plotly 3D preview.
-     Usage: Visit /admin/terrain.html after logging in to manage terrains and design custom maps. -->
+     Structure: navbar & profile menu -> sidebar navigation -> map table -> terrain editor with
+                settings panel, tool tabs and Plotly 3D preview.
+     Usage: Visit /admin/terrain.html to manage terrains and design custom maps. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -29,16 +29,7 @@
     </div>
   </nav>
 
-  <div id="login">
-    <h2>Admin Login</h2>
-    <form id="loginForm">
-      <input type="password" id="password" placeholder="Password" required>
-      <button id="loginBtn" type="submit">Login</button>
-    </form>
-    <div id="loginError" role="alert"></div>
-  </div>
-
-  <div id="app" style="display:none">
+  <div id="app">
     <aside id="sidebar">
       <a href="admin.html">Dashboard</a>
       <a href="nations.html">Nations</a>
