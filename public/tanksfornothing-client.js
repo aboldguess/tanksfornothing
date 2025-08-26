@@ -178,7 +178,11 @@ if (socket) {
 
 loadLobbyData();
 
-let tank, turret, camera, scene, renderer, ground;
+let tank, turret, gunBarrel, camera, scene, renderer, ground;
+// Track barrel pitch relative to hull for mouse controls.
+let gunPitch = 0;
+// Base orientation of the gun barrel (pointing forward along X).
+const GUN_BASE_ANGLE = Math.PI / 2;
 // Physics objects
 let world, chassisBody, groundBody;
 // Default tank stats used for movement and rotation
@@ -186,7 +190,7 @@ const defaultTank = {
   name: 'Basic',
   br: 1,
   mass: 30000,
-  horsepower: 500,
+  maxAcceleration: 3, // m/s²
   maxSpeed: 40, // km/h
   maxReverseSpeed: 15, // km/h
   bodyRotation: 20, // seconds for full rotation
@@ -199,6 +203,11 @@ const defaultTank = {
   turretLength: 1.5,
   turretHeight: 0.5
 };
+// Movement coefficients derived from tank stats
+const MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
+const MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
+const ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+const MAX_ACCEL = defaultTank.maxAcceleration; // maximum linear acceleration
 // Movement coefficients derived from tank stats; mutable to apply tank-specific values
 let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
@@ -335,14 +344,19 @@ function init() {
     new THREE.BoxGeometry(defaultTank.turretWidth, defaultTank.turretHeight, defaultTank.turretLength),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
+  turret.position.y = 0.75;
+  gunBarrel = new THREE.Mesh(
+
   turret.position.y = defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2;
   const gun = new THREE.Mesh(
     new THREE.CylinderGeometry(0.1, 0.1, 3),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
-  gun.rotation.z = Math.PI / 2;
-  gun.position.x = 1.5;
-  turret.add(gun);
+  // Rotate barrel to point forward along the X axis.
+  // Pitch adjustments are applied relative to the global GUN_BASE_ANGLE.
+  gunBarrel.rotation.z = GUN_BASE_ANGLE;
+  gunBarrel.position.x = 1.5;
+  turret.add(gunBarrel);
   tank.add(turret);
 
   // Chassis physics body mirrors tank mesh
@@ -445,12 +459,21 @@ function applyTankConfig(t) {
 
 function onMouseMove(e) {
   const sensitivity = 0.002;
+  // Horizontal mouse movement yaws the turret relative to the hull.
   turret.rotation.y -= e.movementX * sensitivity;
+
+  // Vertical mouse movement adjusts the barrel pitch. Track the amount separately
+  // so we can clamp around the base orientation of the gun barrel.
+  gunPitch = THREE.MathUtils.clamp(
+    gunPitch - e.movementY * sensitivity,
+    -0.5,
+    0.5
   turret.rotation.x = THREE.MathUtils.clamp(
     turret.rotation.x - e.movementY * sensitivity,
     -MAX_TURRET_DECLINE,
     MAX_TURRET_INCLINE
   );
+  gunBarrel.rotation.z = GUN_BASE_ANGLE + gunPitch;
 }
 function animate() {
   requestAnimationFrame(animate);
@@ -461,10 +484,10 @@ function animate() {
   // Determine acceleration based on key input. When no key is pressed,
   // apply a small opposing acceleration to simulate friction.
   let accel = 0;
-  if (keys['w']) accel = ACCELERATION;
-  else if (keys['s']) accel = -ACCELERATION;
-  else if (currentSpeed > 0) accel = -ACCELERATION;
-  else if (currentSpeed < 0) accel = ACCELERATION;
+  if (keys['w']) accel = MAX_ACCEL;
+  else if (keys['s']) accel = -MAX_ACCEL;
+  else if (currentSpeed > 0) accel = -MAX_ACCEL;
+  else if (currentSpeed < 0) accel = MAX_ACCEL;
 
   currentSpeed = THREE.MathUtils.clamp(
     currentSpeed + accel * delta,

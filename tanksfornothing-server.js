@@ -380,7 +380,7 @@ function validateTank(t) {
   if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber < 20 || t.cannonCaliber > 150) return 'caliber out of range';
   if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
   if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
-  if (typeof t.engineHp !== 'number' || t.engineHp < 100 || t.engineHp > 1000) return 'invalid engine hp';
+  if (typeof t.maxAcceleration !== 'number' || t.maxAcceleration < 0.5 || t.maxAcceleration > 5) return 'invalid max acceleration';
   if (typeof t.maxSpeed !== 'number' || t.maxSpeed < 10 || t.maxSpeed > 100 || t.maxSpeed % 1 !== 0) return 'invalid max speed';
   if (typeof t.maxReverseSpeed !== 'number' || t.maxReverseSpeed < 0 || t.maxReverseSpeed > 50 || (t.maxReverseSpeed * 2) % 1 !== 0) return 'invalid max reverse speed';
   if (typeof t.incline !== 'number' || t.incline < 2 || t.incline > 12) return 'incline out of range';
@@ -403,7 +403,7 @@ function validateTank(t) {
     cannonCaliber: t.cannonCaliber,
     ammo: t.ammo,
     crew: t.crew,
-    engineHp: t.engineHp,
+    maxAcceleration: t.maxAcceleration,
     maxSpeed: t.maxSpeed,
     maxReverseSpeed: t.maxReverseSpeed,
     incline: t.incline,
