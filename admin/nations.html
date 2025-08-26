@@ -3,7 +3,7 @@
      Structure: navbar with profile menu, sidebar navigation and a card containing a
                 table of nations and a form for adding/updating entries.
      Usage: Visit /admin/nations.html to manage nations. Choose a flag emoji from the
-            autocomplete list to represent each nation. -->
+            drop-down list to represent each nation. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -49,9 +49,10 @@
           <tbody id="nationList"></tbody>
         </table>
         <input id="nationName" placeholder="Name">
-        <input id="nationFlag" placeholder="Flag" list="flagOptions">
-        <span class="field-desc">Start typing a country name to pick its flag.</span>
-        <datalist id="flagOptions"></datalist>
+        <select id="nationFlag">
+          <option value="" disabled selected>Select a flag</option>
+        </select>
+        <span class="field-desc">Pick a flag emoji from the list.</span>
         <button id="addNationBtn">Add Nation</button>
       </section>
     </main>
