@@ -1,5 +1,9 @@
 <!-- terrain.html
      Summary: Admin page for managing terrain presets with a direct 3D terrain editor that allows
+              clicking on the surface to sculpt ground types, elevation and flag points via separate
+              tool tabs. Includes a Perlin-noise generator with adjustable controls for quickly
+              creating natural-looking landscapes. The 3D view renders automatically whenever a map
+              is created or its size/type is changed.
               clicking on the surface to sculpt ground types and elevation. Includes a Perlin-noise
               generator with adjustable controls for quickly creating natural-looking landscapes. The
               3D view renders automatically whenever a map is created or its size/type is changed and
@@ -84,6 +88,63 @@
             <input type="number" id="sizeY" min="0.1" step="0.1" value="1">
             <p class="field-desc">Vertical size of the map in kilometers.</p>
 
+          <div id="toolTabs">
+            <button data-mode="ground" class="tool-tab active">Ground</button>
+            <button data-mode="elevation" class="tool-tab">Elevation</button>
+            <button data-mode="flags" class="tool-tab">Flags</button>
+          </div>
+
+          <div id="groundControls" class="tool-panel active">
+            <label for="gBrushSizeX">Brush Size X (cells)</label>
+            <input type="range" id="gBrushSizeX" min="1" max="10" value="2">
+            <label for="gBrushSizeY">Brush Size Y (cells)</label>
+            <input type="range" id="gBrushSizeY" min="1" max="10" value="2">
+
+            <h3>Ground Types</h3>
+            <div id="groundTypesList" class="ground-types"></div>
+            <label for="groundName">Name</label>
+            <input id="groundName" placeholder="e.g. gravel">
+            <label for="groundColor">Color</label>
+            <input id="groundColor" type="color" value="#777777">
+            <label for="groundTraction">Traction (0-1)</label>
+            <input id="groundTraction" type="number" step="0.1" min="0" max="1" value="0.5">
+            <label for="groundViscosity">Viscosity (0-1)</label>
+            <input id="groundViscosity" type="number" step="0.1" min="0" max="1" value="0.5">
+            <button id="addGroundBtn">Add Ground Type</button>
+          </div>
+
+          <div id="elevationControls" class="tool-panel" style="display:none">
+            <label for="eBrushSizeX">Brush Size X (cells)</label>
+            <input type="range" id="eBrushSizeX" min="1" max="10" value="2">
+            <label for="eBrushSizeY">Brush Size Y (cells)</label>
+            <input type="range" id="eBrushSizeY" min="1" max="10" value="2">
+            <label for="eBrushSizeZ">Brush Height</label>
+            <input type="range" id="eBrushSizeZ" min="1" max="20" value="5">
+
+            <label for="perlinScale">Perlin Scale</label>
+            <input type="number" id="perlinScale" min="1" max="100" value="10">
+
+            <label for="perlinAmplitude">Perlin Amplitude</label>
+            <input type="number" id="perlinAmplitude" min="1" max="100" value="100">
+
+            <button id="perlinBtn">Generate Perlin Terrain</button>
+          </div>
+
+          <div id="flagControls" class="tool-panel" style="display:none">
+            <label for="flagSelect">Flag</label>
+            <select id="flagSelect">
+              <option value="red-a">Red A</option>
+              <option value="red-b">Red B</option>
+              <option value="red-c">Red C</option>
+              <option value="red-d">Red D</option>
+              <option value="blue-a">Blue A</option>
+              <option value="blue-b">Blue B</option>
+              <option value="blue-c">Blue C</option>
+              <option value="blue-d">Blue D</option>
+            </select>
+            <p class="instructions">Select a flag then click the map to place it.</p>
+          </div>
+
             <label for="mode">Edit Mode</label>
             <select id="mode">
               <option value="ground">Ground</option>
@@ -146,6 +207,8 @@
             <input type="checkbox" id="lockCamera">
             <p class="field-desc">Prevent accidental camera movement.</p>
 
+          <button id="saveTerrainBtn">Save Map</button>
+          <button id="cancelEditBtn">Cancel</button>
             <h3>Ground Types</h3>
             <p class="field-desc">Existing types for painting. Click to select.</p>
             <div id="groundTypesList" class="ground-types"></div>

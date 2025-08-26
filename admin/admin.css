@@ -1,6 +1,5 @@
 /* admin.css
-   Summary: Styling for Tanks admin pages with tank-themed cards, forms, sidebar navigation, terrain tables, 3D terrain editor layout and inline field descriptions.
-   Structure: Flex layout with sidebar, reusable card styles, chart container for statistics, and helper text styling via .field-desc.
+
    Usage: Linked by all files in /admin for admin panel styling. */
 
 /* Admin pages use a clean flex layout with a sidebar and card-style forms.
@@ -84,27 +83,52 @@ body {
 /* Layout for terrain editor controls and previews */
 #editorCard {
   display: flex;
-  flex-wrap: wrap;
   gap: 20px;
+  height: calc(100vh - 140px);
 }
 
 #editorControls {
-  flex: 1;
+  flex: 0 0 320px;
   min-width: 220px;
-  max-width: 280px;
+  max-width: 320px;
+  overflow-y: auto;
 }
 
 #editorViews {
-  flex: 2;
+  flex: 1;
   min-width: 300px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
 }
 #editorViews #terrain3d {
   width: 100%;
-  /* enlarged 3D preview for better terrain detail */
-  height: 400px;
+  flex: 1;
+  /* expanded 3D preview fills remaining space */
+  min-height: 400px;
+}
+
+#toolTabs {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0;
+}
+
+.tool-tab {
+  flex: 1;
+  padding: 6px;
+  background: #2b361e;
+  color: #f5f5f5;
+  border: 1px solid #2b361e;
+  cursor: pointer;
+}
+
+.tool-tab.active {
+  background: #3e4b2e;
+  outline: 2px solid #fff;
+}
+
+.tool-panel {
+  margin-bottom: 10px;
 }
 
 .ground-types button {
