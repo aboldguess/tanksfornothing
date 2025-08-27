@@ -39,6 +39,8 @@ function defaultFlags() {
 }
 let flags = defaultFlags();
 window.getTerrainFlags = () => flags; // exposed for admin.js persistence
+window.getTerrainGround = () => groundGrid;
+window.getTerrainElevation = () => elevationGrid;
 
 // Render available ground types as selectable buttons
 function renderGroundTypes() {
@@ -98,10 +100,19 @@ function initializeTerrain() {
   mapWidthMeters = gridWidth * cellMeters;
   mapHeightMeters = gridHeight * cellMeters;
   console.debug('Initializing terrain', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
-  groundGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
-  elevationGrid = Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
   flags = window.existingFlags ? JSON.parse(JSON.stringify(window.existingFlags)) : defaultFlags();
-  update3DPlot();
+  groundGrid = window.existingGround
+    ? window.existingGround.map(row => row.slice())
+    : Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
+  elevationGrid = window.existingElevation
+    ? window.existingElevation.map(row => row.slice())
+    : Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+  if (!window.existingElevation) {
+    document.getElementById('perlinAmplitude').value = 20;
+    generatePerlinTerrain();
+  } else {
+    update3DPlot();
+  }
 }
 
 // Apply raised-cosine brush using X/Y size sliders and peak height
