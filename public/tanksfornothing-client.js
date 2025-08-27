@@ -1,6 +1,6 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tank and ammo
-//          selection, renders a dimensioned 3D tank based on server-supplied parameters,
+// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tabbed tank-class
+//          and ammo selection, renders a dimensioned 3D tank based on server-supplied parameters,
 //          handles user input, camera control and firing mechanics, uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
@@ -102,6 +102,8 @@ if (window.io) {
     tank.rotation.set(0, 0, 0);
     turret.rotation.set(0, 0, 0);
     if (gun) gun.rotation.set(0, 0, 0); // keep turret level; reset barrel pitch
+    cameraYaw = 0;
+    cameraPitch = 0;
     targetYaw = 0;
     targetPitch = 0;
     if (chassisBody) {
@@ -121,6 +123,8 @@ if (window.io) {
 const lobby = document.getElementById('lobby');
 const nationColumn = document.getElementById('nationColumn');
 const tankColumn = document.getElementById('tankColumn');
+const tankTabs = document.getElementById('tankTabs');
+const tankList = document.getElementById('tankList');
 const ammoColumn = document.getElementById('ammoColumn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
@@ -129,6 +133,7 @@ let availableTanks = [];
 let ammoDefs = [];
 let selectedNation = null;
 let selectedTank = null;
+let selectedClass = null; // current tank class tab
 const loadout = {};
 
 // Populate lobby columns from server data
@@ -165,12 +170,37 @@ function highlightSelection(container, el) {
 }
 
 function renderTanks() {
-  tankColumn.innerHTML = '';
+  tankTabs.innerHTML = '';
+  tankList.innerHTML = '';
   ammoColumn.innerHTML = '';
   selectedTank = null;
   if (!selectedNation) return;
+
+  // Build tab list from tank classes available to the chosen nation
   const filtered = availableTanks.filter(t => t.nation === selectedNation.name);
-  filtered.forEach(t => {
+  const classes = [...new Set(filtered.map(t => t.class))];
+  selectedClass = classes[0];
+
+  classes.forEach(cls => {
+    const tab = document.createElement('button');
+    tab.textContent = cls;
+    tab.className = 'tab';
+    if (cls === selectedClass) tab.classList.add('selected');
+    tab.addEventListener('click', () => {
+      selectedClass = cls;
+      highlightSelection(tankTabs, tab);
+      renderTankList(filtered.filter(t => t.class === selectedClass));
+    });
+    tankTabs.appendChild(tab);
+  });
+
+  renderTankList(filtered.filter(t => t.class === selectedClass));
+}
+
+// Render clickable tank thumbnails for the active class
+function renderTankList(list) {
+  tankList.innerHTML = '';
+  list.forEach(t => {
     const img = document.createElement('img');
     img.src = t.thumbnail || 'https://placehold.co/80x60?text=Tank';
     img.alt = t.name;
@@ -178,9 +208,9 @@ function renderTanks() {
     img.addEventListener('click', () => {
       selectedTank = t;
       renderAmmo();
-      highlightSelection(tankColumn, img);
+      highlightSelection(tankList, img);
     });
-    tankColumn.appendChild(img);
+    tankList.appendChild(img);
   });
 }
 
@@ -275,9 +305,14 @@ let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
 
-// Target angles driven by mouse movement; turret/gun ease toward these each frame
-let targetYaw = 0;
-let targetPitch = 0;
+// Target angles driven by mouse movement; turret/gun ease toward these each frame.
+// cameraYaw/cameraPitch represent the desired view orientation and can spin freely.
+// targetYaw/targetPitch clamp those angles to the turret's mechanical limits so the
+// turret gradually chases the camera.
+let cameraYaw = 0; // radians around the Y axis for the view
+let cameraPitch = 0; // radians around the X axis for the view
+let targetYaw = 0; // turret yaw target (limited)
+let targetPitch = 0; // turret pitch target (limited)
 let cameraDistance = 10;
 const keys = {};
 const DEBUG_MOVEMENT = false;
@@ -495,7 +530,9 @@ function applyTankConfig(t) {
   MAX_TURRET_TRAVERSE = traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
 
-  // Reset turret orientation targets for new tank stats
+  // Reset orientation targets so camera and turret start aligned for new stats
+  cameraYaw = 0;
+  cameraPitch = 0;
   targetYaw = 0;
   targetPitch = 0;
   turret.rotation.set(0, 0, 0);
@@ -537,14 +574,25 @@ function applyTankConfig(t) {
 }
 
 function onMouseMove(e) {
-  const sensitivity = 0.002;
+  const sensitivity = 0.002; // radians per pixel of mouse movement
+  // Update the free camera orientation. Horizontal wraps at 2π to avoid number growth.
+  cameraYaw -= e.movementX * sensitivity;
+  cameraYaw = THREE.MathUtils.euclideanModulo(cameraYaw + Math.PI, Math.PI * 2) - Math.PI;
+  // Vertical movement is inverted so dragging up looks up. Clamp to avoid flipping.
+  cameraPitch = THREE.MathUtils.clamp(
+    cameraPitch + e.movementY * sensitivity,
+    -Math.PI / 2 + 0.01,
+    Math.PI / 2 - 0.01
+  );
+
+  // Turret targets chase the camera orientation but respect mechanical limits.
   targetYaw = THREE.MathUtils.clamp(
-    targetYaw - e.movementX * sensitivity,
+    cameraYaw,
     -MAX_TURRET_TRAVERSE,
     MAX_TURRET_TRAVERSE
   );
   targetPitch = THREE.MathUtils.clamp(
-    targetPitch - e.movementY * sensitivity,
+    cameraPitch,
     -MAX_TURRET_DECLINE,
     MAX_TURRET_INCLINE
   );
@@ -680,8 +728,10 @@ function animate() {
  * orbit; first person locks the view to the target orientation.
  */
 function updateCamera() {
-  const yaw = tank.rotation.y + targetYaw; // world yaw the camera should face
-  const pitch = targetPitch; // world pitch the camera should face
+  // Camera orientation is driven directly by mouse input (cameraYaw/cameraPitch).
+  // The turret will ease toward targetYaw/targetPitch separately.
+  const yaw = tank.rotation.y + cameraYaw; // world yaw the camera should face
+  const pitch = cameraPitch; // world pitch the camera should face
 
   if (cameraMode === 'third') {
     // Orbit around the tank using spherical coordinates so the view rotates

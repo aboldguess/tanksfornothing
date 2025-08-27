@@ -181,6 +181,7 @@ body.login-page {
   padding: 4px;
   text-align: left;
 }
+#nationTable th { cursor: pointer; }
 #nationTable .flag-cell {
   font-size: 1.5em;
 }
@@ -220,6 +221,35 @@ body.login-page {
 }
 #tanksTable th {
   cursor: pointer; /* allow sorting */
+}
+
+/* Small top-down preview canvas for tanks */
+.tank-thumb {
+  width: 60px;
+  height: 30px;
+  display: block;
+}
+
+/* Ammo CRUD layout ------------------------------------------------------- */
+#ammoTable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 15px;
+}
+#ammoTable th,
+#ammoTable td {
+  border: 1px solid #2b361e;
+  padding: 4px;
+  text-align: left;
+}
+#ammoTable th {
+  cursor: pointer;
+}
+.ammo-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  display: block;
 }
 
 #tankForm .form-row {

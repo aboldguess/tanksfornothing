@@ -5,6 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { promises as fs } from 'fs';
+import { generateGentleHills } from '../utils/terrain-noise.js';
 const dataDir = new URL('../data/', import.meta.url);
 const tanksFile = new URL('tanks.json', dataDir);
 const nationsFile = new URL('nations.json', dataDir);
@@ -101,22 +102,26 @@ async function init() {
     await fs.access(terrainFile);
     console.log('terrains.json already exists');
   } catch {
+    const elevation = generateGentleHills(20, 20);
+    const ground = Array.from({ length: 20 }, () => Array(20).fill(0));
     const terrainData = {
       _comment: [
         'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
-        'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags}.',
+        'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags,ground,elevation}.',
         'Usage: Managed automatically by server; do not edit manually.'
       ],
       current: 0,
       terrains: [
         {
-          name: 'flat',
-          type: 'default',
+          name: 'Gentle Hills',
+          type: 'fields',
           size: { x: 1, y: 1 },
           flags: {
             red: { a: null, b: null, c: null, d: null },
             blue: { a: null, b: null, c: null, d: null }
-          }
+          },
+          ground,
+          elevation
         }
       ]
     };

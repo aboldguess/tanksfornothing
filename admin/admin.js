@@ -49,8 +49,14 @@ let editingAmmoIndex = null;
 let editingTerrainIndex = null;
 let currentTerrainIndex = 0;
 let tankNationChart = null;
+
+// Table sorting state
 let tankSortKey = 'name';
 let tankSortAsc = true;
+let nationSortKey = 'name';
+let nationSortAsc = true;
+let ammoSortKey = 'name';
+let ammoSortAsc = true;
 let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurret, previewClock;
 const FLAG_LIST = getFlagList();
 
@@ -79,19 +85,16 @@ async function loadData() {
       FLAG_LIST.map(f => `<option value="${f.emoji}">${f.emoji} ${f.name}</option>`).join('');
   }
 
-  // Render nation list inside a table body for clearer presentation
-  const nationBody = document.getElementById('nationList');
-  if (nationBody) {
-    nationBody.innerHTML = nationsCache.map((n, i) =>
-      `<tr><td class="flag-cell">${n.flag || ''}</td><td>${n.name}</td>` +
-      `<td><button data-i="${i}" class="edit-nation">Edit</button>` +
-      `<button data-i="${i}" class="del-nation">Delete</button></td></tr>`
-    ).join('');
-    nationBody.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
-    nationBody.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
-  }
+  // Render lists on each page
+  const nationHeaders = document.querySelectorAll('#nationTable th[data-sort]');
+  nationHeaders.forEach(th => th.onclick = () => {
+    const key = th.dataset.sort;
+    if (nationSortKey === key) nationSortAsc = !nationSortAsc; else { nationSortKey = key; nationSortAsc = true; }
+    renderNationTable();
+  });
+  renderNationTable();
 
-  // Render tank table and enable column sorting
+  // Set up tank sorting headers once then draw table
   const tankHeaders = document.querySelectorAll('#tanksTable th[data-sort]');
   tankHeaders.forEach(th => th.onclick = () => {
     const key = th.dataset.sort;
@@ -100,14 +103,14 @@ async function loadData() {
   });
   renderTankTable();
 
-  const ammoDiv = document.getElementById('ammoList');
-  if (ammoDiv) {
-    ammoDiv.innerHTML = ammoCache.map((a, i) =>
-      `<div>${a.name} (${a.nation} - ${a.type}) <button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></div>`
-    ).join('');
-    ammoDiv.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
-    ammoDiv.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
-  }
+  // Set up ammo sorting and render table
+  const ammoHeaders = document.querySelectorAll('#ammoTable th[data-sort]');
+  ammoHeaders.forEach(th => th.onclick = () => {
+    const key = th.dataset.sort;
+    if (ammoSortKey === key) ammoSortAsc = !ammoSortAsc; else { ammoSortKey = key; ammoSortAsc = true; }
+    renderAmmoTable();
+  });
+  renderAmmoTable();
 
   // Populate user stats table when on Users page
   const userTable = document.getElementById('userTableBody');
@@ -127,6 +130,28 @@ async function loadData() {
     document.getElementById('editorCard').style.display = 'none';
   }
   updateStats();
+}
+
+function renderNationTable() {
+  const tbody = document.getElementById('nationList');
+  if (!tbody) return;
+  const rows = nationsCache.map((n, i) => ({ n, i }));
+  rows.sort((a, b) => {
+    let av = a.n[nationSortKey];
+    let bv = b.n[nationSortKey];
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return nationSortAsc ? -1 : 1;
+    if (av > bv) return nationSortAsc ? 1 : -1;
+    return 0;
+  });
+  tbody.innerHTML = rows.map(({ n, i }) =>
+    `<tr><td class="flag-cell">${n.flag || ''}</td><td>${n.name}</td>` +
+    `<td><button data-i="${i}" class="edit-nation">Edit</button>` +
+    `<button data-i="${i}" class="del-nation">Delete</button></td></tr>`
+  ).join('');
+  tbody.querySelectorAll('.edit-nation').forEach(btn => btn.addEventListener('click', () => editNation(btn.dataset.i)));
+  tbody.querySelectorAll('.del-nation').forEach(btn => btn.addEventListener('click', () => deleteNation(btn.dataset.i)));
 }
 
 function collectNationForm() {
@@ -231,6 +256,7 @@ function renderTankTable() {
   });
   tbody.innerHTML = rows.map(({ t, i }) =>
     `<tr>
+      <td><canvas id="tank-thumb-${i}" class="tank-thumb" width="60" height="30" aria-label="Tank thumbnail"></canvas></td>
       <td>${t.name}</td>
       <td>${t.nation}</td>
       <td>${t.br}</td>
@@ -248,8 +274,30 @@ function renderTankTable() {
       <td><button data-i="${i}" class="edit-tank">Edit</button><button data-i="${i}" class="del-tank">Delete</button></td>
     </tr>`
   ).join('');
+  rows.forEach(({ t, i }) => {
+    const canvas = document.getElementById(`tank-thumb-${i}`);
+    if (canvas) drawTankThumb(canvas, t);
+  });
   tbody.querySelectorAll('.edit-tank').forEach(btn => btn.addEventListener('click', () => editTank(btn.dataset.i)));
   tbody.querySelectorAll('.del-tank').forEach(btn => btn.addEventListener('click', () => deleteTank(btn.dataset.i)));
+}
+
+function drawTankThumb(canvas, t) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const scale = Math.min(canvas.width / (t.bodyLength || 1), canvas.height / (t.bodyWidth || 1));
+  const bodyW = (t.bodyLength || 1) * scale;
+  const bodyH = (t.bodyWidth || 1) * scale;
+  const bodyX = (canvas.width - bodyW) / 2;
+  const bodyY = (canvas.height - bodyH) / 2;
+  ctx.fillStyle = '#556b2f';
+  ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
+  const turretW = (t.turretLength || 1) * scale;
+  const turretH = (t.turretWidth || 1) * scale;
+  const turretX = canvas.width / 2 - turretW / 2;
+  const turretY = canvas.height / 2 - turretH / 2;
+  ctx.fillStyle = '#6b8e23';
+  ctx.fillRect(turretX, turretY, turretW, turretH);
 }
 
 function editTank(i) {
@@ -374,6 +422,35 @@ async function updatePreview() {
 }
 window.updatePreview = updatePreview;
 
+function renderAmmoTable() {
+  const tbody = document.getElementById('ammoTableBody');
+  if (!tbody) return;
+  const rows = ammoCache.map((a, i) => ({ a, i }));
+  rows.sort((x, y) => {
+    let av = x.a[ammoSortKey];
+    let bv = y.a[ammoSortKey];
+    if (typeof av === 'string') av = av.toLowerCase();
+    if (typeof bv === 'string') bv = bv.toLowerCase();
+    if (av < bv) return ammoSortAsc ? -1 : 1;
+    if (av > bv) return ammoSortAsc ? 1 : -1;
+    return 0;
+  });
+  tbody.innerHTML = rows.map(({ a, i }) =>
+    `<tr>
+      <td>${a.image ? `<img src="${a.image}" alt="${a.name}" class="ammo-thumb">` : ''}</td>
+      <td>${a.name}</td>
+      <td>${a.nation}</td>
+      <td>${a.type}</td>
+      <td>${a.caliber}</td>
+      <td>${a.armorPen}</td>
+      <td>${a.explosionRadius}</td>
+      <td><button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></td>
+    </tr>`
+  ).join('');
+  tbody.querySelectorAll('.edit-ammo').forEach(btn => btn.addEventListener('click', () => editAmmo(btn.dataset.i)));
+  tbody.querySelectorAll('.del-ammo').forEach(btn => btn.addEventListener('click', () => deleteAmmo(btn.dataset.i)));
+}
+
 function collectAmmoForm() {
   const fd = new FormData();
   fd.append('name', document.getElementById('ammoName').value);
@@ -443,7 +520,9 @@ function collectTerrainForm() {
       x: parseFloat(document.getElementById('sizeX').value),
       y: parseFloat(document.getElementById('sizeY').value)
     },
-    flags: window.getTerrainFlags ? window.getTerrainFlags() : null
+    flags: window.getTerrainFlags ? window.getTerrainFlags() : null,
+    ground: window.getTerrainGround ? window.getTerrainGround() : null,
+    elevation: window.getTerrainElevation ? window.getTerrainElevation() : null
   };
 }
 
@@ -469,6 +548,8 @@ function openTerrainEditor(i) {
     editingTerrainIndex = null;
     clearTerrainForm();
     window.existingFlags = null;
+    window.existingGround = null;
+    window.existingElevation = null;
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
@@ -478,6 +559,8 @@ function openTerrainEditor(i) {
     document.getElementById('sizeX').value = t.size.x;
     document.getElementById('sizeY').value = t.size.y;
     window.existingFlags = t.flags || null;
+    window.existingGround = t.ground || null;
+    window.existingElevation = t.elevation || null;
     document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
   }
   document.dispatchEvent(new Event('terrain-editor-opened'));
@@ -494,6 +577,8 @@ function clearTerrainForm() {
   document.getElementById('sizeX').value = '1';
   document.getElementById('sizeY').value = '1';
   window.existingFlags = null;
+  window.existingGround = null;
+  window.existingElevation = null;
 }
 
 function setCurrentTerrain(i) {

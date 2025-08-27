@@ -35,36 +35,92 @@ body {
   /* Occupy 80% of the viewport to create a prominent splash screen */
   width: 80vw;
   height: 80vh;
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 #selectionRow {
   display: flex;
   gap: 10px;
   margin-bottom: 10px;
+  flex: 1;
 }
 
 #nationColumn, #tankColumn, #ammoColumn {
   flex: 1;
-  max-height: 200px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
-#nationColumn .flag, #tankColumn img {
-  width: 100%;
-  cursor: pointer;
-  margin-bottom: 5px;
-  border: 2px solid transparent;
-  display: block;
-  text-align: center;
+#nationColumn {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: 5px;
 }
 
 #nationColumn .flag {
   font-size: 48px;
+  cursor: pointer;
+  border: 2px solid transparent;
 }
 
-#nationColumn .flag.selected, #tankColumn img.selected {
+#nationColumn .flag.selected {
   border-color: #fff;
+}
+
+#tankColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+#tankTabs {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  margin-bottom: 5px;
+}
+
+#tankTabs .tab {
+  background: #3e4b2e;
+  color: #fff;
+  border: 1px solid #fff;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+#tankTabs .tab.selected {
+  background: #fff;
+  color: #3e4b2e;
+}
+
+#tankList {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 5px;
+  flex: 1;
+}
+
+#tankList img {
+  width: 80px;
+  cursor: pointer;
+  border: 2px solid transparent;
+}
+
+#tankList img.selected {
+  border-color: #fff;
+}
+
+#ammoColumn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
 }
 
 #ammoColumn .ammo-item {
