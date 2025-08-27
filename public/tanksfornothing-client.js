@@ -299,7 +299,9 @@ let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret rad
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
 let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
-let MAX_TURRET_TRAVERSE = Infinity; // radians; Infinity allows full rotation
+// Turret traverse limit in radians. Non-tank-destroyers keep Infinity to allow
+// unrestricted rotation, while tank destroyers use their defined limits.
+let MAX_TURRET_TRAVERSE = Infinity;
 // Acceleration used when W/S are pressed. Tuned so max speed is reached in a few seconds.
 let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
@@ -526,8 +528,13 @@ function applyTankConfig(t) {
   TURRET_ROT_SPEED = (2 * Math.PI) / (t.turretRotation ?? defaultTank.turretRotation);
   MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
   MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
-  const traverseDeg = t.horizontalTraverse ?? defaultTank.horizontalTraverse;
-  MAX_TURRET_TRAVERSE = traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
+  // Only apply horizontal traverse limits for tank destroyers; other classes rotate freely.
+  const traverseDeg =
+    t.class === 'Tank Destroyer'
+      ? t.horizontalTraverse ?? defaultTank.horizontalTraverse
+      : 0;
+  MAX_TURRET_TRAVERSE =
+    traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
 
   // Reset orientation targets so camera and turret start aligned for new stats

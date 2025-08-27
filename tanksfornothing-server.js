@@ -183,7 +183,14 @@ async function safeWriteJson(file, data) {
 
 async function loadTanks() {
   const data = await safeReadJson(TANKS_FILE, { tanks: [] });
-  if (Array.isArray(data.tanks)) tanks = data.tanks;
+  if (Array.isArray(data.tanks)) {
+    // Only tank destroyers should retain a horizontal traverse limit; all other
+    // classes rotate freely so we normalize their value to 0 (meaning unlimited).
+    tanks = data.tanks.map(t => ({
+      ...t,
+      horizontalTraverse: t.class === 'Tank Destroyer' ? t.horizontalTraverse : 0
+    }));
+  }
 }
 
 async function saveTanks() {
@@ -487,7 +494,8 @@ function validateTank(t) {
     turretRotation: t.turretRotation,
     maxTurretIncline: t.maxTurretIncline,
     maxTurretDecline: t.maxTurretDecline,
-    horizontalTraverse: t.horizontalTraverse,
+    // Preserve traverse limits only for tank destroyers; others rotate freely.
+    horizontalTraverse: t.class === 'Tank Destroyer' ? t.horizontalTraverse : 0,
     bodyWidth: t.bodyWidth,
     bodyLength: t.bodyLength,
     bodyHeight: t.bodyHeight,
