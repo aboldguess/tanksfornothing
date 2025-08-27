@@ -711,4 +711,13 @@ async function checkAdmin() {
   window.location.href = 'login.html';
 }
 
-document.addEventListener('DOMContentLoaded', initAdmin);
+// Ensure admin logic always runs. When this module loads after the
+// DOMContentLoaded event has already fired (e.g. cached module at the
+// end of the body), adding a listener would never trigger. Check the
+// document state and call immediately if necessary so the tank table
+// and form handlers are reliably initialised.
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initAdmin);
+} else {
+  initAdmin();
+}
