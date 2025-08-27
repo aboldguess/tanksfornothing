@@ -1,9 +1,10 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tank and ammo selection,
-//          renders a dimensioned 3D tank based on server-supplied parameters,
-//          handles user input and firing mechanics, uses Cannon.js for simple
-//          collision physics, force-based tank movement and synchronizes state
-//          with a server via Socket.IO.
+// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tank and ammo
+//          selection, renders a dimensioned 3D tank based on server-supplied parameters,
+//          handles user input, camera control and firing mechanics, uses Cannon.js for
+//          simple collision physics, force-based tank movement and synchronizes state
+//          with a server via Socket.IO. Camera immediately reflects mouse movement while
+//          turret and gun lag behind to emulate realistic traverse.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -672,19 +673,39 @@ function animate() {
   }
 }
 
+/**
+ * updateCamera positions the view based on mouse-driven target angles. The
+ * camera responds instantly to mouse movement while the turret eases toward
+ * the same target yaw/pitch values. Third person uses a simple spherical
+ * orbit; first person locks the view to the target orientation.
+ */
 function updateCamera() {
+  const yaw = tank.rotation.y + targetYaw; // world yaw the camera should face
+  const pitch = targetPitch; // world pitch the camera should face
+
   if (cameraMode === 'third') {
-    const offset = new THREE.Vector3(0, 3, cameraDistance);
-    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y);
+    // Orbit around the tank using spherical coordinates so the view rotates
+    // immediately with the mouse.
+    const radius = cameraDistance;
+    const offset = new THREE.Vector3(
+      radius * Math.sin(yaw) * Math.cos(pitch),
+      3 + radius * Math.sin(pitch),
+      radius * Math.cos(yaw) * Math.cos(pitch)
+    );
     camera.position.copy(tank.position).add(offset);
     camera.lookAt(tank.position);
   } else {
-    const offset = new THREE.Vector3(0, 1, 0);
-    offset.applyAxisAngle(new THREE.Vector3(0, 1, 0), tank.rotation.y + turret.rotation.y);
-    camera.position.copy(tank.position).add(offset);
-    const look = new THREE.Vector3(0, 0, -1)
-      .applyQuaternion(tank.quaternion)
-      .applyAxisAngle(new THREE.Vector3(0, 1, 0), turret.rotation.y);
+    // First-person camera positioned at turret height. Orientation is derived
+    // from the target angles so the view snaps immediately while the turret
+    // model lags behind.
+    const baseOffset = new THREE.Vector3(0, 1, 0)
+      .applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
+    camera.position.copy(tank.position).add(baseOffset);
+
+    const orientation = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(pitch, yaw, 0, 'YXZ')
+    );
+    const look = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation);
     camera.lookAt(camera.position.clone().add(look));
   }
 }
