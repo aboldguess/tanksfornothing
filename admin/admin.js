@@ -61,13 +61,40 @@ let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurre
 const FLAG_LIST = getFlagList();
 
 async function loadData() {
-  nationsCache = await fetch('/api/nations').then(r => r.json());
-  tanksCache = await fetch('/api/tanks').then(r => r.json());
-  ammoCache = await fetch('/api/ammo').then(r => r.json());
-  usersCache = await fetch('/api/users').then(r => r.json());
-  const terrainData = await fetch('/api/terrains').then(r => r.json());
-  terrainsCache = terrainData.terrains;
-  currentTerrainIndex = terrainData.current ?? 0;
+  // Pull latest definitions from the server. Include credentials so the
+  // admin auth cookie is always sent and wrap in Promise.all so a slow
+  // endpoint doesn't block others. Each fetch falls back to a safe empty
+  // structure if the request fails so the UI never crashes on network
+  // issues.
+  try {
+    const [nations, tanks, ammo, users, terrainData] = await Promise.all([
+      fetch('/api/nations', { credentials: 'include' })
+        .then(r => r.json())
+        .catch(() => []),
+      fetch('/api/tanks', { credentials: 'include' })
+        .then(r => r.json())
+        .catch(() => []),
+      fetch('/api/ammo', { credentials: 'include' })
+        .then(r => r.json())
+        .catch(() => []),
+      fetch('/api/users', { credentials: 'include' })
+        .then(r => (r.ok ? r.json() : []))
+        .catch(() => []),
+      fetch('/api/terrains', { credentials: 'include' })
+        .then(r => (r.ok ? r.json() : { terrains: [], current: 0 }))
+        .catch(() => ({ terrains: [], current: 0 }))
+    ]);
+
+    nationsCache = Array.isArray(nations) ? nations : [];
+    tanksCache = Array.isArray(tanks) ? tanks : [];
+    ammoCache = Array.isArray(ammo) ? ammo : [];
+    usersCache = Array.isArray(users) ? users : [];
+    terrainsCache = Array.isArray(terrainData.terrains) ? terrainData.terrains : [];
+    currentTerrainIndex = terrainData.current ?? 0;
+  } catch (err) {
+    console.error('Failed to load admin data', err);
+    return; // Abort initialisation if we cannot get base data
+  }
 
   // Populate nation selects for tank and ammo forms
   const nationOptions = nationsCache.map(n => `<option value="${n.name}">${n.name}</option>`).join('');
