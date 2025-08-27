@@ -1,6 +1,6 @@
 // tanksfornothing-client.js
-// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tank and ammo
-//          selection, renders a dimensioned 3D tank based on server-supplied parameters,
+// Summary: Browser client for Tanks for Nothing. Provides lobby flag, tabbed tank-class
+//          and ammo selection, renders a dimensioned 3D tank based on server-supplied parameters,
 //          handles user input, camera control and firing mechanics, uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
@@ -123,6 +123,8 @@ if (window.io) {
 const lobby = document.getElementById('lobby');
 const nationColumn = document.getElementById('nationColumn');
 const tankColumn = document.getElementById('tankColumn');
+const tankTabs = document.getElementById('tankTabs');
+const tankList = document.getElementById('tankList');
 const ammoColumn = document.getElementById('ammoColumn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
@@ -131,6 +133,7 @@ let availableTanks = [];
 let ammoDefs = [];
 let selectedNation = null;
 let selectedTank = null;
+let selectedClass = null; // current tank class tab
 const loadout = {};
 
 // Populate lobby columns from server data
@@ -167,12 +170,37 @@ function highlightSelection(container, el) {
 }
 
 function renderTanks() {
-  tankColumn.innerHTML = '';
+  tankTabs.innerHTML = '';
+  tankList.innerHTML = '';
   ammoColumn.innerHTML = '';
   selectedTank = null;
   if (!selectedNation) return;
+
+  // Build tab list from tank classes available to the chosen nation
   const filtered = availableTanks.filter(t => t.nation === selectedNation.name);
-  filtered.forEach(t => {
+  const classes = [...new Set(filtered.map(t => t.class))];
+  selectedClass = classes[0];
+
+  classes.forEach(cls => {
+    const tab = document.createElement('button');
+    tab.textContent = cls;
+    tab.className = 'tab';
+    if (cls === selectedClass) tab.classList.add('selected');
+    tab.addEventListener('click', () => {
+      selectedClass = cls;
+      highlightSelection(tankTabs, tab);
+      renderTankList(filtered.filter(t => t.class === selectedClass));
+    });
+    tankTabs.appendChild(tab);
+  });
+
+  renderTankList(filtered.filter(t => t.class === selectedClass));
+}
+
+// Render clickable tank thumbnails for the active class
+function renderTankList(list) {
+  tankList.innerHTML = '';
+  list.forEach(t => {
     const img = document.createElement('img');
     img.src = t.thumbnail || 'https://placehold.co/80x60?text=Tank';
     img.alt = t.name;
@@ -180,9 +208,9 @@ function renderTanks() {
     img.addEventListener('click', () => {
       selectedTank = t;
       renderAmmo();
-      highlightSelection(tankColumn, img);
+      highlightSelection(tankList, img);
     });
-    tankColumn.appendChild(img);
+    tankList.appendChild(img);
   });
 }
 
