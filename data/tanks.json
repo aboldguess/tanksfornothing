@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Summary: Persisted tank definitions for Tanks for Nothing.",
-    "Structure: JSON object with _comment array and tanks list.",
+    "Structure: JSON object with _comment array and tanks list including ammoCapacity (rounds).",
     "Usage: Managed automatically by server; do not edit manually."
   ],
   "tanks": [
@@ -19,6 +19,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 250,
       "maxSpeed": 58,
@@ -39,7 +40,7 @@
     {
       "name": "M3 Stuart",
       "nation": "USA",
-      "br": 2.0,
+      "br": 2,
       "class": "Light/Scout",
       "armor": 30,
       "turretArmor": 30,
@@ -50,6 +51,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 250,
       "maxSpeed": 58,
@@ -81,6 +83,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 400,
       "maxSpeed": 48,
@@ -112,6 +115,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 500,
       "maxSpeed": 35,
@@ -143,6 +147,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 375,
       "maxSpeed": 48,
@@ -174,6 +179,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 450,
       "maxSpeed": 72,
@@ -205,6 +211,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 500,
       "maxSpeed": 48,
@@ -225,7 +232,7 @@
     {
       "name": "M46 Patton",
       "nation": "USA",
-      "br": 7.0,
+      "br": 7,
       "class": "Medium/MBT",
       "armor": 102,
       "turretArmor": 102,
@@ -236,6 +243,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 810,
       "maxSpeed": 48,
@@ -267,6 +275,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 810,
       "maxSpeed": 48,
@@ -298,6 +307,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 750,
       "maxSpeed": 48,
@@ -318,7 +328,7 @@
     {
       "name": "Panzer II",
       "nation": "Germany",
-      "br": 1.0,
+      "br": 1,
       "class": "Light/Scout",
       "armor": 20,
       "turretArmor": 20,
@@ -329,6 +339,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 140,
       "maxSpeed": 40,
@@ -360,6 +371,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 300,
       "maxSpeed": 40,
@@ -391,6 +403,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 300,
       "maxSpeed": 40,
@@ -422,6 +435,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 700,
       "maxSpeed": 55,
@@ -453,6 +467,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 650,
       "maxSpeed": 40,
@@ -484,6 +499,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 700,
       "maxSpeed": 38,
@@ -515,6 +531,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 440,
       "maxSpeed": 40,
@@ -535,7 +552,7 @@
     {
       "name": "Jagdtiger",
       "nation": "Germany",
-      "br": 7.0,
+      "br": 7,
       "class": "Tank Destroyer",
       "armor": 150,
       "turretArmor": 150,
@@ -546,6 +563,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 6,
       "engineHp": 700,
       "maxSpeed": 38,
@@ -577,6 +595,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 830,
       "maxSpeed": 65,
@@ -597,7 +616,7 @@
     {
       "name": "Leopard 2A4",
       "nation": "Germany",
-      "br": 9.0,
+      "br": 9,
       "class": "Medium/MBT",
       "armor": 120,
       "turretArmor": 120,
@@ -608,6 +627,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 1000,
       "maxSpeed": 72,
@@ -628,7 +648,7 @@
     {
       "name": "T-26",
       "nation": "USSR",
-      "br": 1.0,
+      "br": 1,
       "class": "Light/Scout",
       "armor": 15,
       "turretArmor": 15,
@@ -639,6 +659,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 100,
       "maxSpeed": 30,
@@ -670,6 +691,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 450,
       "maxSpeed": 65,
@@ -701,6 +723,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 500,
       "maxSpeed": 53,
@@ -721,7 +744,7 @@
     {
       "name": "KV-1",
       "nation": "USSR",
-      "br": 4.0,
+      "br": 4,
       "class": "Heavy",
       "armor": 90,
       "turretArmor": 90,
@@ -732,6 +755,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 600,
       "maxSpeed": 35,
@@ -752,7 +776,7 @@
     {
       "name": "IS-1",
       "nation": "USSR",
-      "br": 5.0,
+      "br": 5,
       "class": "Heavy",
       "armor": 120,
       "turretArmor": 120,
@@ -763,6 +787,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 600,
       "maxSpeed": 37,
@@ -794,6 +819,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 700,
       "maxSpeed": 37,
@@ -825,6 +851,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 500,
       "maxSpeed": 55,
@@ -856,6 +883,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 600,
       "maxSpeed": 43,
@@ -887,6 +915,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 520,
       "maxSpeed": 50,
@@ -918,6 +947,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 580,
       "maxSpeed": 50,
@@ -949,6 +979,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 340,
       "maxSpeed": 48,
@@ -980,6 +1011,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 190,
       "maxSpeed": 24,
@@ -1000,7 +1032,7 @@
     {
       "name": "Churchill III",
       "nation": "Great Britain",
-      "br": 4.0,
+      "br": 4,
       "class": "Heavy",
       "armor": 102,
       "turretArmor": 102,
@@ -1011,6 +1043,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 350,
       "maxSpeed": 25,
@@ -1042,6 +1075,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 600,
       "maxSpeed": 64,
@@ -1073,6 +1107,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 600,
       "maxSpeed": 51,
@@ -1104,6 +1139,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 650,
       "maxSpeed": 35,
@@ -1135,6 +1171,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 635,
       "maxSpeed": 35,
@@ -1166,6 +1203,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 720,
       "maxSpeed": 40,
@@ -1186,7 +1224,7 @@
     {
       "name": "Challenger 1",
       "nation": "Great Britain",
-      "br": 9.0,
+      "br": 9,
       "class": "Medium/MBT",
       "armor": 120,
       "turretArmor": 120,
@@ -1197,6 +1235,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 1000,
       "maxSpeed": 56,
@@ -1228,6 +1267,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 1000,
       "maxSpeed": 59,
@@ -1248,7 +1288,7 @@
     {
       "name": "Ha-Go",
       "nation": "Japan",
-      "br": 1.0,
+      "br": 1,
       "class": "Light/Scout",
       "armor": 12,
       "turretArmor": 12,
@@ -1259,6 +1299,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 120,
       "maxSpeed": 40,
@@ -1290,6 +1331,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 170,
       "maxSpeed": 38,
@@ -1321,6 +1363,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 240,
       "maxSpeed": 39,
@@ -1352,6 +1395,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 400,
       "maxSpeed": 45,
@@ -1372,7 +1416,7 @@
     {
       "name": "Chi-Ri",
       "nation": "Japan",
-      "br": 5.0,
+      "br": 5,
       "class": "Medium/MBT",
       "armor": 75,
       "turretArmor": 75,
@@ -1383,6 +1427,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 550,
       "maxSpeed": 42,
@@ -1414,6 +1459,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 5,
       "engineHp": 250,
       "maxSpeed": 38,
@@ -1445,6 +1491,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 600,
       "maxSpeed": 45,
@@ -1476,6 +1523,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 4,
       "engineHp": 720,
       "maxSpeed": 53,
@@ -1507,6 +1555,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 1000,
       "maxSpeed": 70,
@@ -1527,7 +1576,7 @@
     {
       "name": "Type 10",
       "nation": "Japan",
-      "br": 10.0,
+      "br": 10,
       "class": "Medium/MBT",
       "armor": 100,
       "turretArmor": 100,
@@ -1538,6 +1587,7 @@
         "HEAT",
         "Smoke"
       ],
+      "ammoCapacity": 40,
       "crew": 3,
       "engineHp": 1000,
       "maxSpeed": 70,

@@ -1,6 +1,10 @@
 <!-- tanks.html
      Summary: Admin page for creating, listing and editing tanks with live preview.
      Structure: navbar with profile menu, sidebar navigation and tank CRUD card
+                containing a sortable table and a multi-column form grouped into
+                Armament, Survivability, Maneuverability and Dimensions sections. The
+                Armament section now includes an ammo capacity slider while the
+                Survivability section includes chassis and turret armor sliders.
                 containing a sortable table with thumbnails and a multi-column form
                 grouped into Armament, Survivability, Maneuverability and Dimensions
                 sections. The Survivability section now includes chassis and turret
@@ -55,6 +59,7 @@
               <th data-sort="class">Class</th>
               <th data-sort="armor">Chassis Armor</th>
               <th data-sort="cannonCaliber">Caliber</th>
+              <th data-sort="ammoCapacity">Ammo Cap</th>
               <th data-sort="crew">Crew</th>
               <th data-sort="engineHp">HP</th>
               <th data-sort="maxSpeed">Speed</th>
@@ -95,6 +100,10 @@
                 <label><input type="checkbox" name="tankAmmo" value="AP"> AP</label>
                 <label><input type="checkbox" name="tankAmmo" value="Smoke"> Smoke</label>
               </div>
+              <label>Ammo Capacity (rounds)
+                <input id="tankAmmoCapacity" type="range" min="1" max="120" step="1" oninput="document.getElementById('ammoCapVal').innerText=this.value">
+                <span id="ammoCapVal"></span>
+              </label>
               <label>Turret Rotation Time (s/360°)
                 <input id="tankTurretRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
                 <span id="turretRotVal"></span>
