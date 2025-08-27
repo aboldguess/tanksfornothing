@@ -3,8 +3,8 @@
 // This script sets up an Express web server with Socket.IO for real-time tank and projectile
 // updates, handles image uploads for ammo types, stores flag emojis for nations,
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
-// to disk and enforces Battle
-// Rating constraints when players join.
+// to disk and enforces Battle Rating constraints when players join. Tank definitions
+// now also store an ammoCapacity value to limit carried rounds.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
@@ -424,6 +424,8 @@ function validateTank(t) {
   if (typeof t.turretArmor !== 'number' || t.turretArmor < 10 || t.turretArmor > 150) return 'turretArmor out of range'; // turret protection
   if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber < 20 || t.cannonCaliber > 150) return 'caliber out of range';
   if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
+  if (typeof t.ammoCapacity !== 'number' || t.ammoCapacity < 1 || t.ammoCapacity > 120 || t.ammoCapacity % 1 !== 0)
+    return 'invalid ammo capacity'; // ensure finite round count
   if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
   if (typeof t.engineHp !== 'number' || t.engineHp < 100 || t.engineHp > 1000) return 'invalid engine hp';
   if (typeof t.maxSpeed !== 'number' || t.maxSpeed < 10 || t.maxSpeed > 100 || t.maxSpeed % 1 !== 0) return 'invalid max speed';
@@ -450,6 +452,7 @@ function validateTank(t) {
     turretArmor: t.turretArmor,
     cannonCaliber: t.cannonCaliber,
     ammo: t.ammo,
+    ammoCapacity: t.ammoCapacity, // rounds carried
     crew: t.crew,
     engineHp: t.engineHp,
     maxSpeed: t.maxSpeed,

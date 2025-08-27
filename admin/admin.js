@@ -2,8 +2,9 @@
 // Summary: Handles CRUD actions for nations, tanks, ammo and terrain across
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
-//          preview with independently rotating chassis and turret based on rotation times, and
-//          range inputs auto-populate mid-scale defaults for consistent layout. Nation management
+//          preview with independently rotating chassis and turret based on rotation times,
+//          and now includes an ammo capacity slider. Range inputs auto-populate mid-scale
+//          defaults for consistent layout. Nation management
 //          uses a drop-down list for choosing flag emojis.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
@@ -180,6 +181,7 @@ function collectTankForm() {
     turretArmor: parseInt(document.getElementById('tankTurretArmor').value, 10),
     cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
     ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
+    ammoCapacity: parseInt(document.getElementById('tankAmmoCapacity').value, 10),
     crew: parseInt(document.getElementById('tankCrew').value, 10),
     engineHp: parseInt(document.getElementById('tankHP').value, 10),
     maxSpeed: parseInt(document.getElementById('tankMaxSpeed').value, 10),
@@ -235,6 +237,7 @@ function renderTankTable() {
       <td>${t.class}</td>
       <td>${t.armor}</td>
       <td>${t.cannonCaliber}</td>
+      <td>${t.ammoCapacity}</td>
       <td>${t.crew}</td>
       <td>${t.engineHp}</td>
       <td>${t.maxSpeed}</td>
@@ -259,6 +262,7 @@ function editTank(i) {
   document.getElementById('tankTurretArmor').value = t.turretArmor ?? 80; document.getElementById('turretArmorVal').innerText = t.turretArmor ?? 80;
   document.getElementById('tankCaliber').value = t.cannonCaliber; document.getElementById('caliberVal').innerText = t.cannonCaliber;
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
+  document.getElementById('tankAmmoCapacity').value = t.ammoCapacity ?? 40; document.getElementById('ammoCapVal').innerText = t.ammoCapacity ?? 40;
   document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
   document.getElementById('tankHP').value = t.engineHp; document.getElementById('hpVal').innerText = t.engineHp;
   document.getElementById('tankMaxSpeed').value = t.maxSpeed ?? 10; document.getElementById('maxSpeedVal').innerText = t.maxSpeed ?? 10;
