@@ -9,7 +9,7 @@
   "description": "Blocky multiplayer tank game",
   "main": "tanksfornothing-server.js",
   "scripts": {
-    "test": "node -e \"console.log('no tests yet')\"",
+    "test": "node --test",
     "start": "node tanksfornothing-server.js",
     "dev": "node --watch tanksfornothing-server.js",
     "setup": "node scripts/init-data.js"

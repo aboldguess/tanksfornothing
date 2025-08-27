@@ -21,6 +21,7 @@ import cookie from 'cookie';
 import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { generateGentleHills } from './utils/terrain-noise.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -110,9 +111,23 @@ function sanitizeFlags(f) {
   });
   return res;
 }
-let terrains = [{ name: 'flat', type: 'default', size: { x: 1, y: 1 }, flags: defaultFlags() }];
+
+function sanitizeGrid(g) {
+  if (!Array.isArray(g)) return [];
+  return g.map(row =>
+    Array.isArray(row) ? row.map(v => (typeof v === 'number' ? v : 0)) : []
+  );
+}
+let terrains = [{
+  name: 'Gentle Hills',
+  type: 'fields',
+  size: { x: 1, y: 1 },
+  flags: defaultFlags(),
+  ground: Array.from({ length: 20 }, () => Array(20).fill(0)),
+  elevation: generateGentleHills(20, 20)
+}];
 let currentTerrain = 0; // index into terrains
-let terrain = 'flat'; // currently active terrain name
+let terrain = 'Gentle Hills'; // currently active terrain name
 let baseBR = null; // Battle Rating of first player
 // Nations persisted separately; maintain array and Set for validation
 let nations = []; // CRUD via admin, loaded from JSON file
@@ -207,25 +222,35 @@ async function saveNations() {
 async function loadTerrains() {
   const defaults = {
     current: 0,
-    terrains: [{ name: 'flat', type: 'default', size: { x: 1, y: 1 }, flags: defaultFlags() }]
+    terrains: [{
+      name: 'Gentle Hills',
+      type: 'fields',
+      size: { x: 1, y: 1 },
+      flags: defaultFlags(),
+      ground: Array.from({ length: 20 }, () => Array(20).fill(0)),
+      elevation: generateGentleHills(20, 20)
+    }]
   };
   const data = await safeReadJson(TERRAIN_FILE, defaults);
   if (Array.isArray(data.terrains)) {
-    terrains = data.terrains.map(t =>
-      typeof t === 'string'
-        ? { name: t, type: 'default', size: { x: 1, y: 1 }, flags: defaultFlags() }
-        : { ...t, flags: sanitizeFlags(t.flags) }
-    );
+    terrains = data.terrains.map(t => ({
+      name: t.name || 'Unnamed',
+      type: t.type || 'fields',
+      size: t.size || { x: 1, y: 1 },
+      flags: sanitizeFlags(t.flags),
+      ground: sanitizeGrid(t.ground),
+      elevation: sanitizeGrid(t.elevation)
+    }));
   }
   if (typeof data.current === 'number') currentTerrain = data.current;
-  terrain = terrains[currentTerrain]?.name || 'flat';
+  terrain = terrains[currentTerrain]?.name || 'Gentle Hills';
 }
 
 async function saveTerrains() {
   const data = {
     _comment: [
       'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
-      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags}.',
+      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags,ground,elevation}.',
       'Usage: Managed automatically by server; do not edit manually.'
     ],
     current: currentTerrain,
@@ -597,12 +622,14 @@ app.post('/api/terrains', requireAdmin, async (req, res) => {
   const type = (req.body.type || '').trim();
   const size = req.body.size;
   const flags = sanitizeFlags(req.body.flags);
+  const ground = sanitizeGrid(req.body.ground);
+  const elevation = sanitizeGrid(req.body.elevation);
   if (!name) return res.status(400).json({ error: 'invalid name' });
   if (!type) return res.status(400).json({ error: 'invalid type' });
   if (!size || typeof size.x !== 'number' || typeof size.y !== 'number') {
     return res.status(400).json({ error: 'invalid size' });
   }
-  terrains.push({ name, type, size, flags });
+  terrains.push({ name, type, size, flags, ground, elevation });
   await saveTerrains();
   res.json({ success: true });
 });
@@ -613,10 +640,12 @@ app.put('/api/terrains/:idx', requireAdmin, async (req, res) => {
   const type = (req.body.type || '').trim();
   const size = req.body.size;
   const flags = sanitizeFlags(req.body.flags);
+  const ground = sanitizeGrid(req.body.ground);
+  const elevation = sanitizeGrid(req.body.elevation);
   if (!name || !type || typeof size?.x !== 'number' || typeof size?.y !== 'number') {
     return res.status(400).json({ error: 'invalid data' });
   }
-  terrains[idx] = { name, type, size, flags };
+  terrains[idx] = { name, type, size, flags, ground, elevation };
   await saveTerrains();
   res.json({ success: true });
 });
@@ -780,6 +809,8 @@ setInterval(() => {
       projectiles.delete(id);
     }
   }
-}, 50);
+}, 50).unref();
 
 server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
+
+export { app, server };

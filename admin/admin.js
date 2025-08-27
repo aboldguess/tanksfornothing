@@ -439,7 +439,9 @@ function collectTerrainForm() {
       x: parseFloat(document.getElementById('sizeX').value),
       y: parseFloat(document.getElementById('sizeY').value)
     },
-    flags: window.getTerrainFlags ? window.getTerrainFlags() : null
+    flags: window.getTerrainFlags ? window.getTerrainFlags() : null,
+    ground: window.getTerrainGround ? window.getTerrainGround() : null,
+    elevation: window.getTerrainElevation ? window.getTerrainElevation() : null
   };
 }
 
@@ -465,6 +467,8 @@ function openTerrainEditor(i) {
     editingTerrainIndex = null;
     clearTerrainForm();
     window.existingFlags = null;
+    window.existingGround = null;
+    window.existingElevation = null;
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
@@ -474,6 +478,8 @@ function openTerrainEditor(i) {
     document.getElementById('sizeX').value = t.size.x;
     document.getElementById('sizeY').value = t.size.y;
     window.existingFlags = t.flags || null;
+    window.existingGround = t.ground || null;
+    window.existingElevation = t.elevation || null;
     document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
   }
   document.dispatchEvent(new Event('terrain-editor-opened'));
@@ -490,6 +496,8 @@ function clearTerrainForm() {
   document.getElementById('sizeX').value = '1';
   document.getElementById('sizeY').value = '1';
   window.existingFlags = null;
+  window.existingGround = null;
+  window.existingElevation = null;
 }
 
 function setCurrentTerrain(i) {
