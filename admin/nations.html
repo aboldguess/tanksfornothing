@@ -1,7 +1,7 @@
 <!-- nations.html
      Summary: Admin page for creating and editing nations with flag emoji selection.
      Structure: navbar with profile menu, sidebar navigation and a card containing a
-                table of nations and a form for adding/updating entries.
+                sortable table of nations and a form for adding/updating entries.
      Usage: Visit /admin/nations.html to manage nations. Choose a flag emoji from the
             drop-down list to represent each nation. -->
 <!DOCTYPE html>
@@ -44,7 +44,7 @@
         <p class="instructions">Add, edit or delete nations. Select a flag emoji to represent each nation.</p>
         <table id="nationTable">
           <thead>
-            <tr><th>Flag</th><th>Name</th><th>Actions</th></tr>
+            <tr><th data-sort="flag">Flag</th><th data-sort="name">Name</th><th>Actions</th></tr>
           </thead>
           <tbody id="nationList"></tbody>
         </table>
