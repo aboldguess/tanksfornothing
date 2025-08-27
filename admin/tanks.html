@@ -1,9 +1,10 @@
 <!-- tanks.html
      Summary: Admin page for creating, listing and editing tanks with live preview.
      Structure: navbar with profile menu, sidebar navigation and tank CRUD card
-                containing a sortable table and a multi-column form grouped into
-                Armament, Survivability, Maneuverability and Dimensions sections. The
-                Survivability section now includes chassis and turret armor sliders.
+                containing a sortable table with thumbnails and a multi-column form
+                grouped into Armament, Survivability, Maneuverability and Dimensions
+                sections. The Survivability section now includes chassis and turret
+                armor sliders.
      Usage: Visit /admin/tanks.html to manage tank definitions. Slider values display
             defaults at midpoints to maintain consistent layout. -->
 <!DOCTYPE html>
@@ -47,6 +48,7 @@
         <table id="tanksTable">
           <thead>
             <tr>
+              <th>Thumb</th>
               <th data-sort="name">Name</th>
               <th data-sort="nation">Nation</th>
               <th data-sort="br">BR</th>

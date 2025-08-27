@@ -1,6 +1,8 @@
 <!-- ammo.html
      Summary: Admin page for creating and editing ammunition with images.
-     Structure: navbar with profile menu, sidebar navigation and ammo CRUD card.
+     Structure: navbar with profile menu, sidebar navigation and ammo CRUD card
+                containing a sortable table of ammunition with thumbnails and a
+                form for adding or updating entries.
      Usage: Visit /admin/ammo.html to manage ammunition types. -->
 <!DOCTYPE html>
 <html lang="en">
@@ -40,7 +42,21 @@
       <section class="card">
         <h2>Ammo</h2>
         <p class="instructions">Manage ammunition statistics and images.</p>
-        <div id="ammoList"></div>
+        <table id="ammoTable">
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th data-sort="name">Name</th>
+              <th data-sort="nation">Nation</th>
+              <th data-sort="type">Type</th>
+              <th data-sort="caliber">Caliber</th>
+              <th data-sort="armorPen">Pen</th>
+              <th data-sort="explosionRadius">Radius</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="ammoTableBody"></tbody>
+        </table>
         <input id="ammoName" placeholder="Name">
         <input type="file" id="ammoImage" accept="image/*">
         <select id="ammoNation"></select>
