@@ -61,6 +61,42 @@ let ammoSortAsc = true;
 let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurret, previewClock;
 const FLAG_LIST = getFlagList();
 
+// Centralised error handler so all async operations can surface problems to users
+// immediately. Messages are logged to the console for developers and shown via
+// alert to keep administrators informed without needing dev tools.
+function showError(message, err) {
+  console.error(message, err);
+  alert(`${message}: ${err.message}`);
+}
+
+// Safe wrappers around core functions. They prevent unhandled rejections and
+// ensure UI feedback when something goes wrong during data loading or editor
+// initialisation.
+async function safeLoadData() {
+  try {
+    await loadData();
+    // On the terrain page, show the editor automatically when no terrains are
+    // available so users are guided to create one immediately.
+    const list = document.getElementById('terrainList');
+    if (list && terrainsCache.length === 0) {
+      const hint = document.getElementById('noTerrainMsg');
+      if (hint) hint.style.display = 'block';
+      const card = document.getElementById('editorCard');
+      if (card) card.style.display = 'flex';
+    }
+  } catch (err) {
+    showError('Failed to load data', err);
+  }
+}
+
+function safeOpenTerrainEditor(i) {
+  try {
+    openTerrainEditor(i);
+  } catch (err) {
+    showError('Failed to open terrain editor', err);
+  }
+}
+
 async function loadData() {
   // Pull latest definitions from the server. Include credentials so the
   // admin auth cookie is always sent and wrap in Promise.all so a slow
@@ -201,7 +237,7 @@ async function addNation() {
   editingNationIndex = null;
   document.getElementById('addNationBtn').innerText = 'Add Nation';
   clearNationForm();
-  loadData();
+  safeLoadData();
 }
 
 function editNation(i) {
@@ -215,7 +251,7 @@ function editNation(i) {
 
 async function deleteNation(i) {
   await fetch(`/api/nations/${i}`, { method: 'DELETE' });
-  loadData();
+  safeLoadData();
 }
 
 function clearNationForm() {
@@ -270,7 +306,7 @@ async function addTank() {
   editingTankIndex = null;
   document.getElementById('addTankBtn').innerText = 'Add Tank';
   clearTankForm();
-  loadData();
+  safeLoadData();
 }
 
 function renderTankTable() {
@@ -366,7 +402,7 @@ function editTank(i) {
 
 async function deleteTank(i) {
   await fetch(`/api/tanks/${i}`, { method: 'DELETE' });
-  loadData();
+  safeLoadData();
 }
 
 function resetSlider(el) {
@@ -509,7 +545,7 @@ async function addAmmo() {
   editingAmmoIndex = null;
   document.getElementById('addAmmoBtn').innerText = 'Add Ammo';
   clearAmmoForm();
-  loadData();
+  safeLoadData();
 }
 
 function editAmmo(i) {
@@ -529,7 +565,7 @@ function editAmmo(i) {
 
 async function deleteAmmo(i) {
   await fetch(`/api/ammo/${i}`, { method: 'DELETE' });
-  loadData();
+  safeLoadData();
 }
 
 function clearAmmoForm() {
@@ -570,13 +606,15 @@ async function saveTerrain() {
   editingTerrainIndex = null;
   document.getElementById('editorCard').style.display = 'none';
   clearTerrainForm();
-  loadData();
+  safeLoadData();
 }
 
 function openTerrainEditor(i) {
   const card = document.getElementById('editorCard');
   card.style.display = 'flex';
+  const cache = Array.isArray(terrainsCache) ? terrainsCache : [];
   if (i === undefined) {
+    // Opening a blank editor for a new terrain.
     editingTerrainIndex = null;
     clearTerrainForm();
     window.existingFlags = null;
@@ -585,22 +623,33 @@ function openTerrainEditor(i) {
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
-    const t = terrainsCache[editingTerrainIndex];
-    document.getElementById('terrainName').value = t.name;
-    document.getElementById('terrainType').value = t.type;
-    document.getElementById('sizeX').value = t.size.x;
-    document.getElementById('sizeY').value = t.size.y;
-    window.existingFlags = t.flags || null;
-    window.existingGround = t.ground || null;
-    window.existingElevation = t.elevation || null;
-    document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
+    const t = cache[editingTerrainIndex];
+    if (!t) {
+      // Cache missing or index invalid; fall back to new terrain mode so the
+      // editor still opens even when API data failed.
+      editingTerrainIndex = null;
+      clearTerrainForm();
+      window.existingFlags = null;
+      window.existingGround = null;
+      window.existingElevation = null;
+      document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
+    } else {
+      document.getElementById('terrainName').value = t.name;
+      document.getElementById('terrainType').value = t.type;
+      document.getElementById('sizeX').value = t.size.x;
+      document.getElementById('sizeY').value = t.size.y;
+      window.existingFlags = t.flags || null;
+      window.existingGround = t.ground || null;
+      window.existingElevation = t.elevation || null;
+      document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
+    }
   }
   document.dispatchEvent(new Event('terrain-editor-opened'));
 }
 
 async function deleteTerrain(i) {
   await fetch(`/api/terrains/${i}`, { method: 'DELETE' });
-  loadData();
+  safeLoadData();
 }
 
 function clearTerrainForm() {
@@ -628,7 +677,7 @@ async function restartGame() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ index: currentTerrainIndex })
   });
-  loadData();
+  safeLoadData();
 }
 
 // Initialise camera settings form on the Game Settings page. Values persist in
@@ -669,7 +718,7 @@ function renderTerrainTable() {
       <td><button data-i="${i}" class="use-terrain">Use</button><button data-i="${i}" class="edit-terrain">Edit</button><button data-i="${i}" class="del-terrain">Delete</button></td>
     </tr>`
   ).join('');
-  tbody.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => openTerrainEditor(btn.dataset.i)));
+  tbody.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => safeOpenTerrainEditor(btn.dataset.i)));
   tbody.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
   tbody.querySelectorAll('.use-terrain').forEach(btn => btn.addEventListener('click', () => setCurrentTerrain(btn.dataset.i)));
   terrainsCache.forEach((t, i) => renderThumbnail(`thumb-${i}`, t));
@@ -745,7 +794,7 @@ function initAdmin() {
   if (addAmmoBtn) addAmmoBtn.addEventListener('click', addAmmo);
 
   const newTerrainBtn = document.getElementById('newTerrainBtn');
-  if (newTerrainBtn) newTerrainBtn.addEventListener('click', () => openTerrainEditor());
+  if (newTerrainBtn) newTerrainBtn.addEventListener('click', () => safeOpenTerrainEditor());
 
   const saveTerrainBtn = document.getElementById('saveTerrainBtn');
   if (saveTerrainBtn) saveTerrainBtn.addEventListener('click', saveTerrain);
@@ -773,7 +822,7 @@ async function checkAdmin() {
   try {
     const res = await fetch('/admin/status');
     if (res.ok) {
-      loadData();
+      safeLoadData();
       return;
     }
   } catch (err) {
