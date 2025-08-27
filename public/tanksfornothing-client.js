@@ -14,7 +14,7 @@ import * as THREE from './libs/three.module.js';
 // cannon-es provides lightweight rigid body physics with vehicle helpers.
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
-import { initHUD, updateHUD } from './hud.js';
+import { initHUD, updateHUD, showCrosshair } from './hud.js';
 
 // Utility: render fatal errors directly on screen for easier debugging.
 function showError(message) {
@@ -252,6 +252,7 @@ joinBtn.addEventListener('click', () => {
   }
   lobby.style.display = 'none';
   instructions.style.display = 'block';
+  showCrosshair(true);
   applyTankConfig(selectedTank);
   if (socket) socket.emit('join', { tank: selectedTank, loadout });
 });
@@ -473,8 +474,9 @@ function init() {
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
-  // Build HUD overlay to display runtime metrics
+  // Build HUD overlay to display runtime metrics and hide crosshair until gameplay
   initHUD();
+  showCrosshair(false);
 
   // Only engage pointer lock once the lobby is hidden so menu interactions
   // don't immediately start controlling the tank.
@@ -514,6 +516,7 @@ function init() {
   // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
     if (document.pointerLockElement && socket && selectedAmmo) {
+      console.debug('Firing', selectedAmmo.name);
       socket.emit('fire', selectedAmmo.name);
     }
   });
