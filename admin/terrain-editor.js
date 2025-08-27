@@ -2,7 +2,7 @@
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
 //          perspective control, shading, Perlin-noise-based terrain generation (with adjustable scale
 //          and amplitude controls) and capture-the-flag position placement. Ground, elevation and flag
-//          tools are separated via a tabbed interface.
+//          tools are separated via a tabbed interface. Displays a friendly message if Plotly is unavailable.
 // Structure: state setup -> ground type management -> terrain initialization -> raised-cosine painting ->
 //            Perlin noise generation -> 3D plot with camera controls -> event wiring.
 // Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and
@@ -252,7 +252,14 @@ function generatePerlinTerrain() {
 
 // Render 3D surface using Plotly with ground type colors
 function update3DPlot() {
-  if (!window.Plotly || gridWidth === 0 || gridHeight === 0) return;
+  // If Plotly failed to load from the CDN, inform the user and skip rendering
+  if (typeof Plotly === 'undefined') {
+    console.warn('Plotly library unavailable; 3-D preview disabled');
+    const placeholder = document.getElementById('terrain3d');
+    if (placeholder) placeholder.textContent = '3-D preview unavailable';
+    return;
+  }
+  if (gridWidth === 0 || gridHeight === 0) return;
   const colorIndices = groundGrid.map(row => row.map(i => i));
   const colorscale = groundTypes.map((g, i) => [
     groundTypes.length === 1 ? 0 : i / (groundTypes.length - 1),
