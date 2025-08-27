@@ -1,8 +1,8 @@
 <!-- index.html
      Summary: Client entry and lobby page for Tanks for Nothing.
-     Structure: lobby with flag, tank and ammo selection columns, then canvas for Three.js rendering and
-                overlay for controls.
-     Usage: Open in browser, choose nation, tank and ammo, then click Join Game to play. -->
+     Structure: Lobby with nation flags, tabbed tank-class selection and ammo sliders, then canvas for
+                Three.js rendering and overlay for controls.
+     Usage: Open in browser, choose nation, pick a tank class and tank, load ammo and click Join Game to play. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -28,7 +28,10 @@
   <div id="lobby">
     <div id="selectionRow">
       <div id="nationColumn"></div>
-      <div id="tankColumn"></div>
+      <div id="tankColumn">
+        <div id="tankTabs"></div>
+        <div id="tankList"></div>
+      </div>
       <div id="ammoColumn"></div>
     </div>
     <button id="joinBtn">Join Game</button>
