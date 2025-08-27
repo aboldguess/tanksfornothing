@@ -624,6 +624,13 @@ function renderTerrainTable() {
 function renderThumbnail(id, terrain) {
   const el = document.getElementById(id);
   if (!el) return;
+  // Plotly is loaded via CDN on terrain.html. If the network fails or the
+  // library is missing, skip rendering to avoid a fatal ReferenceError that
+  // would hide the entire terrain table.
+  if (typeof Plotly === 'undefined') {
+    el.textContent = 'preview unavailable';
+    return;
+  }
   const z = [
     [0, 0],
     [0, 0]
