@@ -4,8 +4,9 @@
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
 //          preview with independently rotating chassis and turret based on rotation times,
 //          and now includes an ammo capacity slider. Range inputs auto-populate mid-scale
-//          defaults for consistent layout. Nation management
-//          uses a drop-down list for choosing flag emojis.
+//          defaults for consistent layout. Nation management uses a drop-down list for
+//          choosing flag emojis. The Game Settings page offers camera distance and height
+//          controls stored in localStorage for per-admin experimentation.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
@@ -630,6 +631,32 @@ async function restartGame() {
   loadData();
 }
 
+// Initialise camera settings form on the Game Settings page. Values persist in
+// localStorage so individual admins can experiment without affecting others.
+function initCameraSettings() {
+  const heightInput = document.getElementById('cameraTargetHeight');
+  const distanceInput = document.getElementById('cameraDistance');
+  const saveBtn = document.getElementById('saveCameraSettings');
+  if (!heightInput || !distanceInput || !saveBtn) return; // not on settings page
+
+  // Populate fields from storage, falling back to safe defaults.
+  heightInput.value = localStorage.getItem('cameraTargetHeight') || '3';
+  distanceInput.value = localStorage.getItem('cameraDistance') || '10';
+
+  saveBtn.addEventListener('click', () => {
+    const height = parseFloat(heightInput.value);
+    const distance = parseFloat(distanceInput.value);
+    if (!Number.isFinite(height) || !Number.isFinite(distance)) {
+      alert('Please enter valid numbers.');
+      return;
+    }
+    localStorage.setItem('cameraTargetHeight', String(height));
+    localStorage.setItem('cameraDistance', String(distance));
+    console.info('Camera settings saved', { height, distance });
+    alert('Camera settings saved.');
+  });
+}
+
 function renderTerrainTable() {
   const tbody = document.getElementById('terrainList');
   if (!tbody) return;
@@ -730,6 +757,9 @@ function initAdmin() {
       document.getElementById('editorCard').style.display = 'none';
     });
   }
+
+  // Camera settings appear only on the Game Settings page.
+  initCameraSettings();
 
   const restartBtn = document.getElementById('restartBtn');
   if (restartBtn) restartBtn.addEventListener('click', restartGame);

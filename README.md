@@ -8,6 +8,7 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Mouse wheel zoom
 - Modern admin dashboard with CRUD for nations, tanks, ammo and terrain plus live statistics
 - Secure player accounts with signup/login and persistent tracking of games, kills and deaths
+- Adjustable third-person camera height and distance via Game Settings page
 
 ## Requirements
 - Node.js 18+ and npm
@@ -44,7 +45,7 @@ Set `JWT_SECRET` to a long random string to sign authentication tokens.
  - Create an account at `http://localhost:3000/signup.html` then log in via `http://localhost:3000/login.html`.
  - Open `http://localhost:3000` in a modern browser after logging in to join the battle.
  - Click the screen to capture the mouse and drive the tank.
-- Visit `http://localhost:3000/admin/admin.html` for the admin dashboard. A sidebar links to dedicated pages for Nations, Tanks, Ammo, Terrain and Game Settings. Manage nations, then create tanks and ammo tied to those nations. The tank form provides class dropdowns, a BR slider, separate chassis and turret armor sliders, a cannon caliber slider, an ammo capacity slider, checkboxes for HE/HEAT/AP/Smoke ammo types, crew and engine horsepower sliders, separate sliders for maximum forward and reverse speeds, and controls for incline and rotation times. The ammo form captures name, nation, caliber, armor penetration, type, explosion radius and penetration at 0m/100m. Data persists across restarts.
+- Visit `http://localhost:3000/admin/admin.html` for the admin dashboard. A sidebar links to dedicated pages for Nations, Tanks, Ammo, Terrain and Game Settings. The Game Settings page exposes sliders for default camera distance and height. Manage nations, then create tanks and ammo tied to those nations. The tank form provides class dropdowns, a BR slider, separate chassis and turret armor sliders, a cannon caliber slider, an ammo capacity slider, checkboxes for HE/HEAT/AP/Smoke ammo types, crew and engine horsepower sliders, separate sliders for maximum forward and reverse speeds, and controls for incline and rotation times. The ammo form captures name, nation, caliber, armor penetration, type, explosion radius and penetration at 0m/100m. Data persists across restarts.
 
 ### Tank geometry and turret limits
 The tank editor now includes additional sliders for turret elevation limits and chassis/turret dimensions. Configure:

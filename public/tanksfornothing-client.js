@@ -1,7 +1,8 @@
 // tanksfornothing-client.js
 // Summary: Browser client for Tanks for Nothing. Provides lobby flag, tabbed tank-class
 //          and ammo selection, renders a dimensioned 3D tank based on server-supplied parameters,
-//          handles user input, camera control and firing mechanics, uses Cannon.js for
+//          handles user input, camera control and firing mechanics. Camera defaults
+//          (height/distance) can be adjusted via the admin settings page. Uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
 //          turret and gun lag behind to emulate realistic traverse.
@@ -316,7 +317,12 @@ let cameraYaw = 0; // radians around the Y axis for the view
 let cameraPitch = 0; // radians around the X axis for the view
 let targetYaw = 0; // turret yaw target (limited)
 let targetPitch = 0; // turret pitch target (limited)
-let cameraDistance = 10;
+// Default camera spacing and the height of the point the camera tracks above the
+// tank. Values load from localStorage so admins can tweak behaviour from the
+// settings page without touching code.
+let cameraDistance = parseFloat(localStorage.getItem('cameraDistance') || '10');
+let cameraTargetHeight = parseFloat(localStorage.getItem('cameraTargetHeight') || '3');
+console.debug('[camera] init', { cameraDistance, cameraTargetHeight });
 const keys = {};
 const DEBUG_MOVEMENT = false;
 const logMovement = (...args) => { if (DEBUG_MOVEMENT) console.debug('[movement]', ...args); };
@@ -511,6 +517,7 @@ function init() {
 
   window.addEventListener('wheel', (e) => {
     cameraDistance = Math.min(Math.max(cameraDistance + e.deltaY * 0.01, 5), 20);
+    localStorage.setItem('cameraDistance', String(cameraDistance));
   });
 
   // Require pointer lock before firing so lobby clicks can't trigger shots.
@@ -745,15 +752,18 @@ function updateCamera() {
 
   if (cameraMode === 'third') {
     // Orbit around the tank using spherical coordinates so the view rotates
-    // immediately with the mouse.
+    // immediately with the mouse. The camera tracks a point above the tank
+    // so players see more of the battlefield. Raising the focal point is
+    // especially useful on hilly terrain.
     const radius = cameraDistance;
+    const target = tank.position.clone().add(new THREE.Vector3(0, cameraTargetHeight, 0));
     const offset = new THREE.Vector3(
       radius * Math.sin(yaw) * Math.cos(pitch),
-      3 + radius * Math.sin(pitch),
+      radius * Math.sin(pitch),
       radius * Math.cos(yaw) * Math.cos(pitch)
     );
-    camera.position.copy(tank.position).add(offset);
-    camera.lookAt(tank.position);
+    camera.position.copy(target).add(offset);
+    camera.lookAt(target);
   } else {
     // First-person camera positioned at turret height. Orientation is derived
     // from the target angles so the view snaps immediately while the turret
