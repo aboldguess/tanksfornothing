@@ -197,11 +197,12 @@ function clearNationForm() {
 }
 
 function collectTankForm() {
+  const cls = document.getElementById('tankClass').value;
   return {
     name: document.getElementById('tankName').value,
     nation: document.getElementById('tankNation').value,
     br: parseFloat(document.getElementById('tankBR').value),
-    class: document.getElementById('tankClass').value,
+    class: cls,
     armor: parseInt(document.getElementById('tankChassisArmor').value, 10),
     turretArmor: parseInt(document.getElementById('tankTurretArmor').value, 10),
     cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
@@ -214,7 +215,10 @@ function collectTankForm() {
     incline: parseInt(document.getElementById('tankIncline').value, 10),
     bodyRotation: parseInt(document.getElementById('tankBodyRot').value, 10),
     turretRotation: parseInt(document.getElementById('tankTurretRot').value, 10),
-    horizontalTraverse: parseInt(document.getElementById('tankHorizontalTraverse').value, 10),
+    // Only retain horizontal traverse input for tank destroyers; other classes rotate freely.
+    horizontalTraverse: cls === 'Tank Destroyer'
+      ? parseInt(document.getElementById('tankHorizontalTraverse').value, 10)
+      : 0,
     maxTurretIncline: parseInt(document.getElementById('tankMaxTurretIncline').value, 10),
     maxTurretDecline: parseInt(document.getElementById('tankMaxTurretDecline').value, 10),
     bodyWidth: parseFloat(document.getElementById('tankBodyWidth').value),
