@@ -61,40 +61,47 @@ let ammoSortAsc = true;
 let previewRenderer, previewScene, previewCamera, previewTankGroup, previewTurret, previewClock;
 const FLAG_LIST = getFlagList();
 
-async function loadData() {
-  // Pull latest definitions from the server. Include credentials so the
-  // admin auth cookie is always sent and wrap in Promise.all so a slow
-  // endpoint doesn't block others. Each fetch falls back to a safe empty
-  // structure if the request fails so the UI never crashes on network
-  // issues.
+// Generic helper to fetch JSON from the server with admin credentials.
+// Errors are logged and a safe fallback is returned so the UI continues
+// to function even if an endpoint fails. This aids debugging when the
+// admin pages appear empty due to bad data or network issues.
+async function fetchJson(url, fallback) {
   try {
-    const [nations, tanks, ammo, users, terrainData] = await Promise.all([
-      fetch('/api/nations', { credentials: 'include' })
-        .then(r => r.json())
-        .catch(() => []),
-      fetch('/api/tanks', { credentials: 'include' })
-        .then(r => r.json())
-        .catch(() => []),
-      fetch('/api/ammo', { credentials: 'include' })
-        .then(r => r.json())
-        .catch(() => []),
-      fetch('/api/users', { credentials: 'include' })
-        .then(r => (r.ok ? r.json() : []))
-        .catch(() => []),
-      fetch('/api/terrains', { credentials: 'include' })
-        .then(r => (r.ok ? r.json() : { terrains: [], current: 0 }))
-        .catch(() => ({ terrains: [], current: 0 }))
-    ]);
-
-    nationsCache = Array.isArray(nations) ? nations : [];
-    tanksCache = Array.isArray(tanks) ? tanks : [];
-    ammoCache = Array.isArray(ammo) ? ammo : [];
-    usersCache = Array.isArray(users) ? users : [];
-    terrainsCache = Array.isArray(terrainData.terrains) ? terrainData.terrains : [];
-    currentTerrainIndex = terrainData.current ?? 0;
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
   } catch (err) {
-    console.error('Failed to load admin data', err);
-    return; // Abort initialisation if we cannot get base data
+    console.error(`Failed to fetch ${url}`, err);
+    return fallback;
+  }
+}
+
+async function loadData() {
+  // Pull latest definitions from the server. Promise.all ensures a slow
+  // endpoint doesn't block others, and each call falls back to a safe
+  // structure so the UI never crashes on network issues.
+  const [nations, tanks, ammo, users, terrainData] = await Promise.all([
+    fetchJson('/api/nations', []),
+    fetchJson('/api/tanks', []),
+    fetchJson('/api/ammo', []),
+    fetchJson('/api/users', []),
+    fetchJson('/api/terrains', { terrains: [], current: 0 })
+  ]);
+
+  nationsCache = Array.isArray(nations) ? nations : [];
+  tanksCache = Array.isArray(tanks) ? tanks : [];
+  ammoCache = Array.isArray(ammo) ? ammo : [];
+  usersCache = Array.isArray(users) ? users : [];
+  terrainsCache = Array.isArray(terrainData.terrains) ? terrainData.terrains : [];
+  currentTerrainIndex = terrainData.current ?? 0;
+
+  console.info('Admin data loaded', {
+    nations: nationsCache.length,
+    tanks: tanksCache.length,
+    ammo: ammoCache.length
+  });
+  if (!nationsCache.length && !tanksCache.length && !ammoCache.length) {
+    alert('No game data loaded. Ensure the server data files exist.');
   }
 
   // Populate nation selects for tank and ammo forms
@@ -771,9 +778,9 @@ function initAdmin() {
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {
   try {
-    const res = await fetch('/admin/status');
+    const res = await fetch('/admin/status', { credentials: 'include' });
     if (res.ok) {
-      loadData();
+      await loadData();
       return;
     }
   } catch (err) {
