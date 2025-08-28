@@ -1,5 +1,6 @@
 /* admin.css
 
+   Summary: Styling for admin panel including forms, tables and debug utilities.
    Usage: Linked by all files in /admin for admin panel styling. */
 
 /* Admin pages use a clean flex layout with a sidebar and card-style forms.
@@ -275,4 +276,34 @@ body.login-page {
   background: #222;
   margin-top: 10px;
   border: 1px solid #2b361e;
+}
+
+/* Error and debug utilities ---------------------------------------------- */
+#errorBanner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  background: #b00020;
+  color: #fff;
+  padding: 10px;
+  text-align: center;
+  z-index: 1000;
+  display: none;
+}
+
+#debugPanel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 150px;
+  overflow-y: auto;
+  background: #1e1e1e;
+  color: #0f0;
+  font-family: monospace;
+  font-size: 12px;
+  padding: 5px;
+  z-index: 1000;
+  display: none;
 }
