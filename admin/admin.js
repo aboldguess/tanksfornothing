@@ -68,6 +68,15 @@ const FLAG_LIST = getFlagList();
 // to function even if an endpoint fails. This aids debugging when the
 // admin pages appear empty due to bad data or network issues.
 async function fetchJson(url, fallback) {
+  try {
+    const res = await fetch(url, { credentials: 'include' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    console.error(`Failed to fetch ${url}`, err);
+    return fallback;
+  }
+}
 
 // Centralised error handler so all async operations can surface problems to users
 // immediately. Messages are logged to the console for developers and shown via
@@ -102,22 +111,6 @@ function safeOpenTerrainEditor(i) {
     openTerrainEditor(i);
   } catch (err) {
     showError('Failed to open terrain editor', err);
-  }
-}
-
-async function loadData() {
-  // Pull latest definitions from the server. Include credentials so the
-  // admin auth cookie is always sent and wrap in Promise.all so a slow
-  // endpoint doesn't block others. Each fetch falls back to a safe empty
-  // structure if the request fails so the UI never crashes on network
-  // issues.
-  try {
-    const res = await fetch(url, { credentials: 'include' });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
-  } catch (err) {
-    console.error(`Failed to fetch ${url}`, err);
-    return fallback;
   }
 }
 
