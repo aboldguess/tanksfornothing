@@ -19,6 +19,7 @@ import { getFlagList } from './flag-utils.js';
 // Lazily load Three.js so admin features work even if the optional 3D library
 // fails to download. This keeps the admin panel functional even when the
 // preview renderer is unavailable.
+/* global Plotly, Chart */
 let THREE = null;
 async function ensureThree() {
   if (!THREE) {
@@ -733,10 +734,10 @@ function renderTerrainTable() {
   tbody.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => safeOpenTerrainEditor(btn.dataset.i)));
   tbody.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
   tbody.querySelectorAll('.use-terrain').forEach(btn => btn.addEventListener('click', () => setCurrentTerrain(btn.dataset.i)));
-  terrainsCache.forEach((t, i) => renderThumbnail(`thumb-${i}`, t));
+  terrainsCache.forEach((_, i) => renderThumbnail(`thumb-${i}`));
 }
 
-function renderThumbnail(id, terrain) {
+function renderThumbnail(id) {
   const el = document.getElementById(id);
   if (!el) return;
   // Plotly is loaded via CDN on terrain.html. If the network fails or the

@@ -153,7 +153,11 @@ async function safeReadJson(file, defaults) {
     try {
       const backup = await fs.readFile(bak, 'utf8');
       console.warn(`Recovered ${file.pathname} from backup`);
-      try { await fs.copyFile(bak, file); } catch {}
+      try {
+        await fs.copyFile(bak, file);
+      } catch (copyErr) {
+        console.warn(`Failed to restore ${file.pathname} from backup:`, copyErr.message);
+      }
       return JSON.parse(backup);
     } catch {
       console.warn(`No usable data for ${file.pathname}, using defaults`);
@@ -171,12 +175,19 @@ async function safeWriteJson(file, data) {
   await fs.writeFile(tmp, json);
   try {
     await fs.rename(file, bak);
-  } catch {}
+  } catch (renameErr) {
+    // It's acceptable if the original file does not exist yet.
+    console.warn(`No original file to backup for ${file.pathname}:`, renameErr.message);
+  }
   try {
     await fs.rename(tmp, file);
   } catch (err) {
     console.error(`Failed to write ${file.pathname}:`, err.message);
-    try { await fs.rename(bak, file); } catch {}
+    try {
+      await fs.rename(bak, file);
+    } catch (restoreErr) {
+      console.error(`Failed to restore backup for ${file.pathname}:`, restoreErr.message);
+    }
     throw err;
   }
 }
