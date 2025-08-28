@@ -1,15 +1,12 @@
-<!-- terrain.html
-     Summary: Admin page for managing terrain presets with a 3D editor. Users can sculpt ground,
-              elevation and capture-the-flag positions via dedicated tool tabs. Includes Perlin-noise
-              generator and camera controls. Preview updates automatically when map settings change.
-     Structure: navbar & profile menu -> sidebar navigation -> map table -> terrain editor with
-                settings panel, tool tabs and Plotly 3D preview with CDN/library fallbacks.
-     Usage: Visit /admin/terrain.html to manage terrains and design custom maps. -->
+<!-- map-crud.html
+     Summary: Modernized admin page for creating, updating and deleting maps with an improved side-by-side layout.
+     Structure: navbar & profile menu -> sidebar navigation -> grid containing map table and terrain editor with Plotly preview.
+     Usage: Visit /admin/map-crud.html to manage maps. Select a map or click Add Map; editor appears on the right. Use Cancel to close. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Manage Terrain</title>
+  <title>Map CRUD</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="admin.css">
 </head>
@@ -42,25 +39,24 @@
       <a href="settings.html">Game Settings</a>
     </aside>
     <main id="mainContent">
-      <section class="card">
-        <h2>Terrain</h2>
-        <p class="instructions">Manage saved maps. Click Add to create a new map or Edit to modify.</p>
-        <button id="newTerrainBtn">Add Map</button>
-        <p id="noTerrainMsg" class="instructions" style="display:none">No terrains loaded. Click 'Add Map' to open editor.</p>
-        <table id="terrainTable">
-          <thead>
-            <tr><th>Preview</th><th>Type</th><th>Size (km)</th><th>Name</th><th>Actions</th></tr>
-          </thead>
-          <tbody id="terrainList"></tbody>
-        </table>
-        <button id="restartBtn">Restart Game</button>
-      </section>
+      <section id="mapCrudLayout">
+        <section class="card" id="listCard">
+          <h2>Maps</h2>
+          <p class="instructions">Manage saved maps. Select a map or click Add Map; the editor opens to the right.</p>
+          <button id="newTerrainBtn">Add Map</button>
+          <p id="noTerrainMsg" class="instructions" style="display:none">No maps loaded. Click 'Add Map' to open the editor.</p>
+          <table id="terrainTable">
+            <thead>
+              <tr><th>Preview</th><th>Type</th><th>Size (km)</th><th>Name</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="terrainList"></tbody>
+          </table>
+          <button id="restartBtn">Restart Game</button>
+        </section>
 
-      <section class="card" id="editorCard" style="display:none">
-        <h2>Terrain Editor</h2>
-
-        <div id="editorControls">
-          <p class="instructions">Map preview updates automatically when size or terrain type changes.</p>
+        <section class="card" id="editorCard" style="display:none">
+          <h2>Map Editor</h2>
+          <p class="instructions">Map preview updates automatically when size or terrain type changes. Use Cancel to close without saving.</p>
           <label for="terrainName">Name</label>
           <input id="terrainName" placeholder="Name">
           <p class="field-desc">Unique label used to identify the map.</p>
@@ -119,75 +115,27 @@
 
             <label for="eBrushSizeY">Brush Size Y (cells)</label>
             <input type="range" id="eBrushSizeY" min="1" max="10" value="2">
-
-            <label for="eBrushSizeZ">Brush Height</label>
-            <input type="range" id="eBrushSizeZ" min="1" max="20" value="5">
-
-            <label for="perlinScale">Perlin Scale</label>
-            <input type="number" id="perlinScale" min="1" max="100" value="10">
-
-            <label for="perlinAmplitude">Perlin Amplitude</label>
-            <input type="number" id="perlinAmplitude" min="1" max="100" value="100">
-
-            <button id="perlinBtn">Generate Perlin Terrain</button>
           </div>
 
           <div id="flagControls" class="tool-panel" style="display:none">
-            <label for="flagSelect">Flag</label>
-            <select id="flagSelect">
-              <option value="red-a">Red A</option>
-              <option value="red-b">Red B</option>
-              <option value="red-c">Red C</option>
-              <option value="red-d">Red D</option>
-              <option value="blue-a">Blue A</option>
-              <option value="blue-b">Blue B</option>
-              <option value="blue-c">Blue C</option>
-              <option value="blue-d">Blue D</option>
-            </select>
-            <p class="instructions">Select a flag then click the map to place it.</p>
+            <p>Click on the 3D preview to place capture-the-flag positions.</p>
           </div>
 
-          <label for="showAxes">Show Axes</label>
-          <input type="checkbox" id="showAxes" checked>
-          <p class="field-desc">Toggle XYZ axis guides in the preview.</p>
-
-          <label for="viewSelect">View</label>
-          <select id="viewSelect">
-            <option value="iso">Isometric</option>
-            <option value="top">Top</option>
-            <option value="front">Front</option>
-            <option value="side">Side</option>
-          </select>
-          <p class="field-desc">Camera angle for the 3D preview.</p>
-
-          <label for="projectionType">Projection</label>
-          <select id="projectionType">
-            <option value="perspective">Perspective</option>
-            <option value="orthographic">Orthographic</option>
-          </select>
-          <p class="field-desc">Perspective mimics depth; orthographic keeps scale uniform.</p>
-
-          <label for="lockCamera">Lock Position</label>
-          <input type="checkbox" id="lockCamera">
-          <p class="field-desc">Prevent accidental camera movement.</p>
+          <div id="editorViews">
+            <div id="terrain3d"></div>
+          </div>
 
           <button id="saveTerrainBtn">Save Map</button>
-          <button id="cancelEditBtn">Cancel</button>
-        </div>
-
-        <div id="editorViews">
-          <div id="terrain3d"></div>
-        </div>
+          <button id="cancelTerrainBtn">Cancel</button>
+        </section>
       </section>
     </main>
   </div>
 
-  <script src="https://cdn.plot.ly/plotly-3.1.0.min.js"
-          onerror="this.onerror=null;this.src='/libs/plotly-3.1.0.min.js';"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js"
-          onerror="this.onerror=null;this.src='/libs/chart-4.5.0.min.js';"></script>
+  <script src="https://cdn.plot.ly/plotly-3.1.0.min.js" crossorigin="anonymous"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.0/dist/chart.umd.min.js" crossorigin="anonymous"></script>
   <script type="module" src="admin.js"></script>
   <script type="module" src="terrain-editor.js"></script>
+  <script type="module" src="map-crud.js"></script>
 </body>
 </html>
-

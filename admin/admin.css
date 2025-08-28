@@ -208,6 +208,19 @@ body.login-page {
   outline: 2px solid #fff;
 }
 
+/* Map CRUD layout: side-by-side map list and editor */
+#mapCrudLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+#mapCrudLayout #listCard {
+  max-height: calc(100vh - 140px);
+  overflow-y: auto;
+}
+
 /* Tank CRUD layout ------------------------------------------------------ */
 #tanksTable {
   width: 100%;

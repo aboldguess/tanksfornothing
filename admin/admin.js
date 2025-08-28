@@ -671,6 +671,9 @@ function clearTerrainForm() {
   window.existingElevation = null;
 }
 
+// Expose for external scripts like map-crud.js
+window.clearTerrainForm = clearTerrainForm;
+
 function setCurrentTerrain(i) {
   currentTerrainIndex = Number(i);
   renderTerrainTable();
