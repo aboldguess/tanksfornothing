@@ -12,20 +12,26 @@
     "test": "node --test",
     "start": "node tanksfornothing-server.js",
     "dev": "node --watch tanksfornothing-server.js",
-    "setup": "node scripts/init-data.js"
+    "setup": "node scripts/init-data.js",
+    "lint": "eslint ."
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
-    "cookie-parser": "^1.4.7",
-    "express": "^5.1.0",
     "bcryptjs": "^2.4.3",
     "cookie": "^0.6.0",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
+    "multer": "^1.4.5-lts.1",
     "socket.io": "^4.8.1",
-    "three": "^0.179.1",
-    "multer": "^1.4.5-lts.1"
+    "three": "^0.179.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.34.0",
+    "eslint": "^9.34.0",
+    "globals": "^16.3.0"
   }
 }

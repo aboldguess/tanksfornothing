@@ -1,0 +1,25 @@
+# Summary: CI workflow ensuring code quality via linting and tests for Tanks for Nothing.
+# Structure: Executes on pushes and pull requests, running npm ci, lint, and tests sequentially.
+# Usage: Automatically triggered by GitHub Actions to prevent commits with syntax or test errors.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
