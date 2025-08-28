@@ -7,6 +7,7 @@
 //            Perlin noise generation -> 3D plot with camera controls -> event wiring.
 // Usage: Imported by terrain.html; click or drag on the 3D plot to paint ground or elevation. Axes and
 //        camera settings are user configurable.
+/* global Plotly */
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [

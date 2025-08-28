@@ -123,7 +123,6 @@ if (window.io) {
 // Lobby DOM elements for tank selection
 const lobby = document.getElementById('lobby');
 const nationColumn = document.getElementById('nationColumn');
-const tankColumn = document.getElementById('tankColumn');
 const tankTabs = document.getElementById('tankTabs');
 const tankList = document.getElementById('tankList');
 const ammoColumn = document.getElementById('ammoColumn');
@@ -161,6 +160,7 @@ async function loadLobbyData() {
       nationColumn.appendChild(div);
     });
   } catch (err) {
+    console.error('loadLobbyData failed', err);
     showError('Failed to load lobby data');
   }
 }
@@ -410,7 +410,7 @@ function buildTerrain(name) {
       });
       break;
     }
-    default:
+    default: {
       ground = new THREE.Mesh(
         new THREE.PlaneGeometry(200, 200),
         new THREE.MeshStandardMaterial({ color: 0x228822 })
@@ -420,6 +420,8 @@ function buildTerrain(name) {
       groundBody.addShape(plane);
       groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
       world.addBody(groundBody);
+      break;
+    }
   }
   ground.rotation.x = -Math.PI / 2;
   scene.add(ground);
@@ -617,9 +619,8 @@ function onMouseMove(e) {
 /**
  * updateMovement translates key inputs into physics state. It constrains the
  * chassis to horizontal movement while allowing yaw rotation.
- * @param {number} delta - seconds since last frame.
  */
-function updateMovement(delta) {
+function updateMovement() {
   // Translate key input into continuous forces rather than direct velocity changes
   let throttle = 0;
   if (keys['w']) throttle = 1;
@@ -657,7 +658,7 @@ function animate() {
 
   // Frame timing used for physics and acceleration integration
   const delta = clock.getDelta();
-  updateMovement(delta);
+  updateMovement();
 
   // Step physics world with fixed timestep
   world.step(1 / 60, delta, 3);
