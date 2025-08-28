@@ -1,0 +1,70 @@
+<!-- tank-crud.html
+     Summary: Prototype admin page for tank CRUD operations using a dynamic
+              table and form generated entirely via JavaScript.
+     Structure: standard navbar and sidebar navigation followed by a card that
+                houses a table listing existing tanks and an empty form element.
+                The form fields and preview canvas are injected at runtime to
+                demonstrate a new approach compared to the static tanks page.
+     Usage: Visit /admin/tank-crud.html to manage tank data. Existing tanks are
+            loaded from the JSON file and displayed with small thumbnails.
+            Selecting a row loads it into the form for editing. -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Tank CRUD Prototype</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+  <nav id="navbar">
+    <span>Admin Panel</span>
+    <div class="profile-menu" id="profileMenu">
+      <img src="https://placehold.co/32" alt="profile" id="profilePic" />
+      <div class="profile-menu-content" id="profileMenuContent">
+        <a href="#">Manage Profiles</a>
+        <a href="#">Learning Zone</a>
+        <a href="#">My Details</a>
+        <a href="#">Subscription Details</a>
+        <a href="#">Manage Users</a>
+        <a href="#" id="signOutLink">Sign out</a>
+      </div>
+    </div>
+  </nav>
+
+  <div id="app">
+    <aside id="sidebar">
+      <a href="admin.html">Dashboard</a>
+      <a href="nations.html">Nations</a>
+      <a href="tanks.html">Tanks</a>
+      <a href="tank-crud.html">Tank CRUD</a>
+      <a href="ammo.html">Ammo</a>
+      <a href="terrain.html">Terrain</a>
+      <a href="users.html">Users</a>
+      <a href="settings.html">Game Settings</a>
+    </aside>
+    <main id="mainContent">
+      <section class="card">
+        <h2>Tank CRUD</h2>
+        <p class="instructions">Existing tanks load below. Click a row to edit or use the form to add new ones.</p>
+        <table id="tankTable">
+          <thead>
+            <tr>
+              <th>Thumb</th>
+              <th>Name</th>
+              <th>Nation</th>
+              <th>BR</th>
+              <th>Class</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tankTableBody"></tbody>
+        </table>
+        <form id="tankForm"></form>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="tank-crud.js"></script>
+</body>
+</html>
