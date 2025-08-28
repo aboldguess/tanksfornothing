@@ -6,7 +6,9 @@
 //          and now includes an ammo capacity slider. Range inputs auto-populate mid-scale
 //          defaults for consistent layout. Nation management uses a drop-down list for
 //          choosing flag emojis. The Game Settings page offers camera distance and height
-//          controls stored in localStorage for per-admin experimentation.
+//          controls stored in localStorage for per-admin experimentation. checkAdmin now
+//          surfaces backend connectivity issues via an on-screen banner and optional debug
+//          panel rather than redirecting immediately.
 // Uses secure httpOnly cookie set by server and provides logout and game restart endpoints.
 // Structure: auth helpers -> data loaders -> CRUD functions -> restart helpers -> UI handlers.
 // Usage: Included by all files in /admin.
@@ -831,20 +833,66 @@ function initAdmin() {
   checkAdmin();
 }
 
+// Debug helpers -----------------------------------------------------------
+// logDebug: writes messages to the console and, if present, an on-screen
+//            panel with id="debugPanel" to aid troubleshooting without
+//            developer tools.
+function logDebug(message) {
+  console.warn(message);
+  const panel = document.getElementById('debugPanel');
+  if (panel) {
+    const entry = document.createElement('div');
+    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+    panel.appendChild(entry);
+    panel.style.display = 'block';
+  }
+}
+
+// showBanner: creates or updates a fixed banner at the top of the page to
+// inform administrators of critical issues (e.g. failed auth checks).
+function showBanner(html) {
+  let banner = document.getElementById('errorBanner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'errorBanner';
+    banner.className = 'error-banner';
+    document.body.prepend(banner);
+  }
+  banner.innerHTML = html;
+  banner.style.display = 'block';
+}
+
+// reportAdminError: convenience wrapper for logging and banner display.
+function reportAdminError(msg) {
+  logDebug(msg);
+  showBanner(`${msg}. <a href="login.html">Return to login</a>`);
+}
+
 // Check on load if admin cookie is present via server endpoint
 async function checkAdmin() {
   try {
-    const res = await fetch('/admin/status', { credentials: 'include' });
-    if (res.ok) {
-      await loadData();
-      safeLoadData();
+    const statusRes = await fetch('/admin/status', { credentials: 'include' });
+    if (!statusRes.ok) {
+      reportAdminError(`/admin/status failed with HTTP ${statusRes.status}`);
       return;
     }
   } catch (err) {
-    console.warn('Admin status check failed', err);
+    reportAdminError(`/admin/status request error: ${err.message}`);
+    return;
   }
-  // Not authenticated; redirect to login page
-  window.location.href = 'login.html';
+
+  try {
+    const terrainRes = await fetch('/api/terrains', { credentials: 'include' });
+    if (!terrainRes.ok) {
+      reportAdminError(`/api/terrains failed with HTTP ${terrainRes.status}`);
+      return;
+    }
+  } catch (err) {
+    reportAdminError(`/api/terrains request error: ${err.message}`);
+    return;
+  }
+
+  safeLoadData();
 }
 
 // Ensure admin logic always runs. When this module loads after the
