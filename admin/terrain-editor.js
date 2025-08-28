@@ -351,22 +351,66 @@ function applyCameraLock() {
   if (locked) plot.addEventListener('wheel', preventPlotScroll, { passive: false });
 }
 
-// Event wiring
-renderGroundTypes();
-document.getElementById('addGroundBtn').addEventListener('click', addGroundType);
-document.getElementById('perlinBtn').addEventListener('click', generatePerlinTerrain);
-document.getElementById('showAxes').addEventListener('change', update3DPlot);
-document.getElementById('viewSelect').addEventListener('change', update3DPlot);
-document.getElementById('projectionType').addEventListener('change', update3DPlot);
-document.getElementById('lockCamera').addEventListener('change', applyCameraLock);
-document.querySelectorAll('.tool-tab').forEach(btn => {
-  btn.addEventListener('click', () => setMode(btn.dataset.mode));
-});
-['sizeX','sizeY','terrainType'].forEach(id => {
-  const el = document.getElementById(id);
-  el.addEventListener('change', initializeTerrain);
-});
-document.addEventListener('terrain-editor-opened', initializeTerrain);
+// Wire up the terrain editor UI once the DOM is ready or the editor is opened
+function setupTerrainEditor(e) {
+  // Ensure required elements exist before wiring events to avoid runtime errors
+  const groundTypesList = document.getElementById('groundTypesList');
+  if (!groundTypesList) {
+    console.warn('setupTerrainEditor: #groundTypesList not found');
+    return;
+  }
+
+  const ids = [
+    'addGroundBtn',
+    'perlinBtn',
+    'showAxes',
+    'viewSelect',
+    'projectionType',
+    'lockCamera',
+    'sizeX',
+    'sizeY',
+    'terrainType'
+  ];
+  const elements = {};
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) {
+      console.warn(`setupTerrainEditor: #${id} not found`);
+      return;
+    }
+    elements[id] = el;
+  }
+
+  const toolTabs = document.querySelectorAll('.tool-tab');
+  if (!toolTabs.length) {
+    console.warn('setupTerrainEditor: .tool-tab elements not found');
+    return;
+  }
+
+  // Only render ground types after confirming the list exists
+  renderGroundTypes();
+
+  elements.addGroundBtn.addEventListener('click', addGroundType);
+  elements.perlinBtn.addEventListener('click', generatePerlinTerrain);
+  elements.showAxes.addEventListener('change', update3DPlot);
+  elements.viewSelect.addEventListener('change', update3DPlot);
+  elements.projectionType.addEventListener('change', update3DPlot);
+  elements.lockCamera.addEventListener('change', applyCameraLock);
+  toolTabs.forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+  ['sizeX', 'sizeY', 'terrainType'].forEach(id => {
+    elements[id].addEventListener('change', initializeTerrain);
+  });
+
+  document.addEventListener('terrain-editor-opened', initializeTerrain);
+
+  if (e && e.type === 'terrain-editor-opened') {
+    initializeTerrain();
+  }
+}
+
+document.addEventListener('DOMContentLoaded', setupTerrainEditor);
+document.addEventListener('terrain-editor-opened', setupTerrainEditor);
 
 const plotDiv = document.getElementById('terrain3d');
 let mouseDown = false;
