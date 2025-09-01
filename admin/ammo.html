@@ -1,5 +1,5 @@
 <!-- ammo.html
-     Summary: Admin page for creating and editing ammunition with images.
+     Summary: Admin page for creating and editing ammunition with images and velocity.
      Structure: navbar with profile menu, sidebar navigation and ammo CRUD card
                 containing a sortable table of ammunition with thumbnails and a
                 form for adding or updating entries.
@@ -54,6 +54,7 @@
               <th data-sort="caliber">Caliber</th>
               <th data-sort="armorPen">Pen</th>
               <th data-sort="explosionRadius">Radius</th>
+              <th data-sort="speed">Speed</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -79,6 +80,10 @@
         <label>Explosion Radius (m)
           <input id="ammoRadius" type="range" min="0" max="20" step="1" oninput="document.getElementById('ammoRadiusVal').innerText=this.value">
           <span id="ammoRadiusVal"></span>
+        </label>
+        <label>Speed (m/s)
+          <input id="ammoSpeed" type="range" min="100" max="1200" step="50" oninput="document.getElementById('ammoSpeedVal').innerText=this.value">
+          <span id="ammoSpeedVal"></span>
         </label>
         <label>Explosion Penetration 0m (mm)
           <input id="ammoPen0" type="range" min="20" max="160" step="10" oninput="document.getElementById('ammoPen0Val').innerText=this.value">

@@ -7,6 +7,7 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Hold `C` for freelook, `V` to toggle first/third person
 - Mouse wheel zoom
 - Modern admin dashboard with CRUD for nations, tanks, ammo, terrain and maps plus live statistics
+- Shells drop under gravity with per-ammo velocity settings
 - Secure player accounts with signup/login and persistent tracking of games, kills and deaths
 - Adjustable third-person camera height and distance via Game Settings page
 

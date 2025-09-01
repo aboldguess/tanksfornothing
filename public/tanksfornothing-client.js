@@ -5,7 +5,8 @@
 //          (height/distance) can be adjusted via the admin settings page. Uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
-//          turret and gun lag behind to emulate realistic traverse. Remote
+//          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
+//          under gravity. Remote
 //          players are represented with simple meshes that now include a
 //          visible cannon barrel and update as network events arrive so
 //          everyone shares the same battlefield.
@@ -65,6 +66,8 @@ let socket = null;
 let ammoList = [];
 let selectedAmmo = null;
 const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
+// Gravity acceleration for local projectile simulation (m/s^2)
+const GRAVITY = -9.81;
 let playerHealth = 100;
 // Track other players in the session by their socket.id. Each entry stores the
 // root mesh plus references to the turret and gun so orientation can be synced
@@ -824,6 +827,7 @@ function animate() {
 
   // Move client-side projectile meshes based on server-provided velocities
   for (const proj of projectiles.values()) {
+    proj.vy += GRAVITY * delta;
     proj.mesh.position.x += proj.vx * delta;
     proj.mesh.position.y += proj.vy * delta;
     proj.mesh.position.z += proj.vz * delta;

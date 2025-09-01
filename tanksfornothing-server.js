@@ -6,7 +6,7 @@
 // to disk and enforces Battle Rating constraints when players join. Tank definitions
 // now also store an ammoCapacity value to limit carried rounds and the server
 // tracks turret and gun orientation so remote players render complete cannons
-// and projectiles spawn from the muzzle using that orientation.
+// and projectiles spawn from the muzzle using that orientation and arc under gravity.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
@@ -71,7 +71,7 @@ const defaultAmmo = [
     explosionRadius: 0,
     pen0: 50,
     pen100: 30,
-    speed: 200,
+    speed: 900,
     damage: 40,
     penetration: 50,
     explosion: 0
@@ -85,7 +85,7 @@ const defaultAmmo = [
     explosionRadius: 50,
     pen0: 10,
     pen100: 5,
-    speed: 150,
+    speed: 600,
     damage: 20,
     penetration: 10,
     explosion: 50
@@ -93,6 +93,8 @@ const defaultAmmo = [
 ];
 // Active projectile list; each projectile contains position, velocity and metadata
 const projectiles = new Map(); // id -> projectile state
+// Gravity acceleration applied to shells (m/s^2)
+const GRAVITY = -9.81;
 // Terrains now include metadata so map listings can show thumbnails and size
 function defaultFlags() {
   return {
@@ -543,6 +545,7 @@ function validateAmmo(a) {
   if (typeof a.explosionRadius !== 'number' || a.explosionRadius < 0) return 'invalid radius';
   if (typeof a.pen0 !== 'number' || a.pen0 < 20 || a.pen0 > 160 || a.pen0 % 10 !== 0) return 'pen0 out of range';
   if (typeof a.pen100 !== 'number' || a.pen100 < 20 || a.pen100 > 160 || a.pen100 % 10 !== 0) return 'pen100 out of range';
+  if (typeof a.speed !== 'number' || a.speed <= 0) return 'speed required';
   return {
     name: a.name.trim(),
     nation: a.nation,
@@ -553,8 +556,8 @@ function validateAmmo(a) {
     pen0: a.pen0,
     pen100: a.pen100,
     image: typeof a.image === 'string' ? a.image : '',
-    // Derived gameplay fields so firing logic has required values
-    speed: a.caliber * 10,
+    // Gameplay fields used by firing logic
+    speed: a.speed,
     damage: a.armorPen,
     penetration: a.pen0,
     explosion: a.explosionRadius
@@ -621,6 +624,7 @@ app.post('/api/ammo', requireAdmin, upload.single('image'), async (req, res) => 
     explosionRadius: Number(req.body.explosionRadius),
     pen0: Number(req.body.pen0),
     pen100: Number(req.body.pen100),
+    speed: Number(req.body.speed),
     image: imgPath
   };
   const valid = validateAmmo(body);
@@ -640,6 +644,7 @@ app.put('/api/ammo/:idx', requireAdmin, upload.single('image'), async (req, res)
     explosionRadius: Number(req.body.explosionRadius),
     pen0: Number(req.body.pen0),
     pen100: Number(req.body.pen100),
+    speed: Number(req.body.speed),
     image: imgPath
   };
   const valid = validateAmmo(body);
@@ -842,9 +847,15 @@ io.on('connection', (socket) => {
 setInterval(() => {
   const dt = 0.05; // 20 ticks per second
   for (const [id, p] of projectiles) {
+    p.vy += GRAVITY * dt;
     p.x += p.vx * dt;
     p.y += p.vy * dt;
     p.z += p.vz * dt;
+    if (p.y <= 0) {
+      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
+      projectiles.delete(id);
+      continue;
+    }
     for (const [pid, player] of players) {
       if (pid === p.shooter) continue;
       const dx = player.x - p.x;

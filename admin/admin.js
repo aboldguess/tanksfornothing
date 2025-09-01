@@ -3,7 +3,7 @@
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D
 //          preview with independently rotating chassis and turret based on rotation times,
-//          and now includes an ammo capacity slider. Range inputs auto-populate mid-scale
+//          and now includes an ammo capacity slider and projectile speed field. Range inputs auto-populate mid-scale
 //          defaults for consistent layout. Nation management uses a drop-down list for
 //          choosing flag emojis. The Game Settings page offers camera distance and height
 //          controls stored in localStorage for per-admin experimentation. checkAdmin now
@@ -553,6 +553,7 @@ function renderAmmoTable() {
       <td>${a.caliber}</td>
       <td>${a.armorPen}</td>
       <td>${a.explosionRadius}</td>
+      <td>${a.speed}</td>
       <td><button data-i="${i}" class="edit-ammo">Edit</button><button data-i="${i}" class="del-ammo">Delete</button></td>
     </tr>`
   ).join('');
@@ -568,6 +569,7 @@ function collectAmmoForm() {
   fd.append('armorPen', document.getElementById('ammoPen').value);
   fd.append('type', document.getElementById('ammoType').value);
   fd.append('explosionRadius', document.getElementById('ammoRadius').value);
+   fd.append('speed', document.getElementById('ammoSpeed').value);
   fd.append('pen0', document.getElementById('ammoPen0').value);
   fd.append('pen100', document.getElementById('ammoPen100').value);
   const file = document.getElementById('ammoImage').files[0];
@@ -597,6 +599,7 @@ function editAmmo(i) {
   document.getElementById('ammoPen').value = a.armorPen; document.getElementById('ammoPenVal').innerText = a.armorPen;
   document.getElementById('ammoType').value = a.type;
   document.getElementById('ammoRadius').value = a.explosionRadius; document.getElementById('ammoRadiusVal').innerText = a.explosionRadius;
+  document.getElementById('ammoSpeed').value = a.speed; document.getElementById('ammoSpeedVal').innerText = a.speed;
   document.getElementById('ammoPen0').value = a.pen0; document.getElementById('ammoPen0Val').innerText = a.pen0;
   document.getElementById('ammoPen100').value = a.pen100; document.getElementById('ammoPen100Val').innerText = a.pen100;
   document.getElementById('ammoImage').value = '';
@@ -616,6 +619,7 @@ function clearAmmoForm() {
   document.getElementById('ammoPen').value = 20; document.getElementById('ammoPenVal').innerText = '';
   document.getElementById('ammoType').value = 'HE';
   document.getElementById('ammoRadius').value = 0; document.getElementById('ammoRadiusVal').innerText = '';
+  document.getElementById('ammoSpeed').value = 100; document.getElementById('ammoSpeedVal').innerText = '';
   document.getElementById('ammoPen0').value = 20; document.getElementById('ammoPen0Val').innerText = '';
   document.getElementById('ammoPen100').value = 20; document.getElementById('ammoPen100Val').innerText = '';
   document.getElementById('ammoImage').value = '';
