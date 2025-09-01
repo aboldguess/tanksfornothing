@@ -5,7 +5,8 @@
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
 // to disk and enforces Battle Rating constraints when players join. Tank definitions
 // now also store an ammoCapacity value to limit carried rounds and the server
-// tracks turret and gun orientation so remote players render complete cannons.
+// tracks turret and gun orientation so remote players render complete cannons
+// and projectiles spawn from the muzzle using that orientation.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
@@ -791,27 +792,35 @@ io.on('connection', (socket) => {
       socket.emit('error', 'Invalid ammo selection');
       return;
     }
-    const angle = (shooter.rot || 0) + (shooter.turret || 0);
-    const dirX = Math.sin(angle);
-    const dirZ = Math.cos(angle);
+    // Derive projectile origin and direction from turret yaw and gun pitch so shells
+    // leave the barrel in the direction it faces.
+    const yaw = (shooter.rot || 0) + (shooter.turret || 0);
+    const pitch = shooter.gun || 0;
+    const cosPitch = Math.cos(pitch);
+    const sinYaw = Math.sin(yaw);
+    const cosYaw = Math.cos(yaw);
     shooter.lastFire = now;
     shooter.ammoRemaining -= 1;
     const id = `${now}-${Math.random().toString(16).slice(2)}`;
     const speed = ammoDef.speed ?? 200;
+    const barrelLen = shooter.barrelLength ?? 3;
+    const muzzleX =
+      shooter.x +
+      (shooter.turretYPercent / 100 - 0.5) * shooter.bodyWidth -
+      sinYaw * cosPitch * barrelLen;
+    const muzzleY = shooter.y + 1 + Math.sin(pitch) * barrelLen;
+    const muzzleZ =
+      shooter.z +
+      (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
+      cosYaw * cosPitch * barrelLen;
     const projectile = {
       id,
-      x:
-        shooter.x +
-        (shooter.turretYPercent / 100 - 0.5) * shooter.bodyWidth -
-        dirX * (shooter.barrelLength ?? 3),
-      y: shooter.y + 1,
-      z:
-        shooter.z +
-        (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
-        dirZ * (shooter.barrelLength ?? 3),
-      vx: -dirX * speed,
-      vy: 0,
-      vz: -dirZ * speed,
+      x: muzzleX,
+      y: muzzleY,
+      z: muzzleZ,
+      vx: -sinYaw * cosPitch * speed,
+      vy: Math.sin(pitch) * speed,
+      vz: -cosYaw * cosPitch * speed,
       ammo: ammoDef.name,
       shooter: socket.id,
       life: 5
