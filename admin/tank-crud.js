@@ -1,18 +1,17 @@
 // tank-crud.js
-// Summary: Standalone module powering the prototype tank CRUD page. It builds the
-//          editor form from a field configuration object, renders simple canvas
-//          thumbnails for each tank and performs fetch-based create, update and
-//          delete operations against the server's /api/tanks endpoint.
-// Structure: data caches -> DOM builders -> rendering helpers -> CRUD handlers -> init.
+// Summary: Standalone module powering the tank CRUD page. It renders a fully
+//          dynamic table displaying every tank parameter and enables inline row
+//          editing via slider-based controls.
+// Structure: data caches -> table builders -> editing helpers -> CRUD handlers -> init.
 // Usage: Loaded by tank-crud.html. Requires an admin session cookie.
 
 let tanks = [];
 let nations = [];
-let editingIndex = null; // null means creating a new tank
+let editingIndex = null; // null = creating new tank
 
-// Field configuration grouped by section to allow dynamic form generation.
-// Each field defines id, label and input attributes. Range inputs will have
-// their current value displayed beside the slider for clarity.
+// Field configuration grouped by section to allow dynamic table and form generation.
+// Each field defines id, label and input attributes. Range inputs will have their
+// current value displayed beside the slider for clarity.
 const FORM_SECTIONS = [
   {
     title: 'Basics',
@@ -72,76 +71,27 @@ const FORM_SECTIONS = [
   }
 ];
 
-// Build the form at runtime so new fields can be added easily.
-function buildForm() {
-  const form = document.getElementById('tankForm');
-  form.innerHTML = '';
-  FORM_SECTIONS.forEach(section => {
-    const fs = document.createElement('fieldset');
-    const legend = document.createElement('legend');
-    legend.textContent = section.title;
-    fs.appendChild(legend);
-    section.fields.forEach(f => {
-      const label = document.createElement('label');
-      label.textContent = f.label;
-      let input;
-      if (f.type === 'select') {
-        input = document.createElement('select');
-        const opts = typeof f.options === 'function' ? f.options() : f.options;
-        opts.forEach(opt => {
-          const o = document.createElement('option');
-          o.value = opt;
-          o.textContent = opt;
-          input.appendChild(o);
-        });
-      } else if (f.type === 'checkbox') {
-        input = document.createElement('div');
-        input.className = 'checkbox-group';
-        f.options.forEach(opt => {
-          const cbLabel = document.createElement('label');
-          const cb = document.createElement('input');
-          cb.type = 'checkbox';
-          cb.name = f.id;
-          cb.value = opt;
-          cbLabel.appendChild(cb);
-          cbLabel.appendChild(document.createTextNode(' ' + opt));
-          input.appendChild(cbLabel);
-        });
-      } else {
-        input = document.createElement('input');
-        input.type = f.type;
-        if (f.min !== undefined) input.min = f.min;
-        if (f.max !== undefined) input.max = f.max;
-        if (f.step !== undefined) input.step = f.step;
-        if (f.type === 'range') {
-          // Set default to mid-scale so the UI looks balanced on first load.
-          const mid = (Number(f.min) + Number(f.max)) / 2;
-          input.value = mid;
-          const span = document.createElement('span');
-          span.id = f.id + 'Val';
-          span.textContent = mid;
-          input.addEventListener('input', () => span.textContent = input.value);
-          label.appendChild(input);
-          label.appendChild(span);
-          fs.appendChild(label);
-          return;
-        }
-      }
-      input.id = 'tank' + f.id.charAt(0).toUpperCase() + f.id.slice(1);
-      label.appendChild(input);
-      fs.appendChild(label);
-    });
-    form.appendChild(fs);
+// Flattened list of fields for easier iteration.
+const ALL_FIELDS = FORM_SECTIONS.flatMap(sec => sec.fields);
+
+// ---------- Table Construction ----------
+
+function buildTableHeader() {
+  const thead = document.getElementById('tankTableHead');
+  thead.innerHTML = '';
+  const tr = document.createElement('tr');
+  const thumb = document.createElement('th');
+  thumb.textContent = 'Thumb';
+  tr.appendChild(thumb);
+  ALL_FIELDS.forEach(f => {
+    const th = document.createElement('th');
+    th.textContent = f.label;
+    tr.appendChild(th);
   });
-  const preview = document.createElement('canvas');
-  preview.id = 'tankPreview';
-  preview.width = 300;
-  preview.height = 150;
-  form.appendChild(preview);
-  const submit = document.createElement('button');
-  submit.type = 'submit';
-  submit.textContent = editingIndex === null ? 'Add Tank' : 'Update Tank';
-  form.appendChild(submit);
+  const actions = document.createElement('th');
+  actions.textContent = 'Actions';
+  tr.appendChild(actions);
+  thead.appendChild(tr);
 }
 
 function renderTable() {
@@ -155,11 +105,14 @@ function renderTable() {
     drawTank(canvas, t);
     thumbCell.appendChild(canvas);
     tr.appendChild(thumbCell);
-    ['name', 'nation', 'br', 'class'].forEach(k => {
+
+    ALL_FIELDS.forEach(f => {
       const td = document.createElement('td');
-      td.textContent = t[k];
+      const val = t[f.id];
+      td.textContent = Array.isArray(val) ? val.join(', ') : val;
       tr.appendChild(td);
     });
+
     const actions = document.createElement('td');
     const editBtn = document.createElement('button');
     editBtn.textContent = 'Edit';
@@ -173,6 +126,158 @@ function renderTable() {
     tbody.appendChild(tr);
   });
 }
+
+// ---------- Editing Helpers ----------
+
+function emptyTank() {
+  const t = {};
+  FORM_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => {
+      if (f.type === 'range') {
+        t[f.id] = (Number(f.min) + Number(f.max)) / 2;
+      } else if (f.type === 'select') {
+        const opts = typeof f.options === 'function' ? f.options() : f.options;
+        t[f.id] = opts[0] ?? '';
+      } else if (f.type === 'checkbox') {
+        t[f.id] = [];
+      } else {
+        t[f.id] = '';
+      }
+    });
+  });
+  return t;
+}
+
+function startEdit(i) {
+  cancelEdit();
+  editingIndex = i;
+  const tank = i === null ? emptyTank() : tanks[i];
+  const tbody = document.getElementById('tankTableBody');
+  const editorRow = document.createElement('tr');
+  editorRow.className = 'editor-row';
+  const td = document.createElement('td');
+  td.colSpan = ALL_FIELDS.length + 2; // thumb + fields + actions
+  const form = document.createElement('form');
+
+  FORM_SECTIONS.forEach(section => {
+    const fs = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = section.title;
+    fs.appendChild(legend);
+
+    section.fields.forEach(f => {
+      const label = document.createElement('label');
+      label.textContent = f.label;
+      let input;
+      if (f.type === 'select') {
+        input = document.createElement('select');
+        const opts = typeof f.options === 'function' ? f.options() : f.options;
+        opts.forEach(opt => {
+          const o = document.createElement('option');
+          o.value = opt;
+          o.textContent = opt;
+          input.appendChild(o);
+        });
+        input.value = tank[f.id];
+      } else if (f.type === 'checkbox') {
+        input = document.createElement('div');
+        f.options.forEach(opt => {
+          const cbLabel = document.createElement('label');
+          const cb = document.createElement('input');
+          cb.type = 'checkbox';
+          cb.value = opt;
+          cb.checked = tank[f.id].includes(opt);
+          cbLabel.appendChild(cb);
+          cbLabel.appendChild(document.createTextNode(' ' + opt));
+          input.appendChild(cbLabel);
+        });
+      } else {
+        input = document.createElement('input');
+        input.type = f.type;
+        if (f.min !== undefined) input.min = f.min;
+        if (f.max !== undefined) input.max = f.max;
+        if (f.step !== undefined) input.step = f.step;
+        input.value = tank[f.id];
+        if (f.type === 'range') {
+          const span = document.createElement('span');
+          span.id = f.id + 'Val';
+          span.textContent = tank[f.id];
+          input.addEventListener('input', () => span.textContent = input.value);
+          label.appendChild(input);
+          label.appendChild(span);
+          fs.appendChild(label);
+          return;
+        }
+      }
+      input.id = f.id;
+      label.appendChild(input);
+      fs.appendChild(label);
+    });
+    form.appendChild(fs);
+  });
+
+  const saveBtn = document.createElement('button');
+  saveBtn.type = 'submit';
+  saveBtn.textContent = 'Save';
+  const cancelBtn = document.createElement('button');
+  cancelBtn.type = 'button';
+  cancelBtn.textContent = 'Cancel';
+  cancelBtn.addEventListener('click', cancelEdit);
+  form.appendChild(saveBtn);
+  form.appendChild(cancelBtn);
+  form.addEventListener('submit', saveEdit);
+
+  td.appendChild(form);
+  editorRow.appendChild(td);
+
+  if (i === null) {
+    tbody.appendChild(editorRow);
+  } else {
+    const rows = tbody.querySelectorAll('tr');
+    rows[i].after(editorRow);
+  }
+}
+
+function cancelEdit() {
+  const row = document.querySelector('.editor-row');
+  if (row) row.remove();
+  editingIndex = null;
+}
+
+function gatherFormData(form) {
+  const t = {};
+  FORM_SECTIONS.forEach(sec => {
+    sec.fields.forEach(f => {
+      const el = form.querySelector('#' + f.id);
+      if (f.type === 'checkbox') {
+        t[f.id] = Array.from(el.querySelectorAll('input:checked')).map(cb => cb.value);
+      } else if (f.type === 'range') {
+        t[f.id] = parseFloat(el.value);
+      } else {
+        t[f.id] = el.value;
+      }
+    });
+  });
+  return t;
+}
+
+async function saveEdit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const data = gatherFormData(form);
+  const method = editingIndex === null ? 'POST' : 'PUT';
+  const url = editingIndex === null ? '/api/tanks' : `/api/tanks/${editingIndex}`;
+  await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(data)
+  });
+  await loadData();
+  cancelEdit();
+}
+
+// ---------- CRUD + Rendering ----------
 
 function drawTank(canvas, tank) {
   const ctx = canvas.getContext('2d');
@@ -192,63 +297,10 @@ function drawTank(canvas, tank) {
   ctx.fillRect(tx, ty, tl, tw);
 }
 
-function startEdit(i) {
-  editingIndex = i;
-  buildForm();
-  const t = tanks[i];
-  FORM_SECTIONS.forEach(sec => {
-    sec.fields.forEach(f => {
-      const el = document.getElementById('tank' + capitalize(f.id));
-      if (!el) return;
-      if (f.type === 'checkbox') {
-        el.querySelectorAll('input').forEach(cb => cb.checked = t[f.id].includes(cb.value));
-      } else {
-        el.value = t[f.id];
-        if (f.type === 'range') document.getElementById(f.id + 'Val').textContent = t[f.id];
-      }
-    });
-  });
-  drawTank(document.getElementById('tankPreview'), t);
-}
-
-function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
-
 async function deleteTank(i) {
+  cancelEdit();
   await fetch(`/api/tanks/${i}`, { method: 'DELETE', credentials: 'include' });
   await loadData();
-}
-
-function gatherFormData() {
-  const t = {};
-  FORM_SECTIONS.forEach(sec => {
-    sec.fields.forEach(f => {
-      const el = document.getElementById('tank' + capitalize(f.id));
-      if (f.type === 'checkbox') {
-        t[f.id] = Array.from(el.querySelectorAll('input:checked')).map(cb => cb.value);
-      } else if (f.type === 'range') {
-        t[f.id] = parseFloat(el.value);
-      } else {
-        t[f.id] = el.value;
-      }
-    });
-  });
-  return t;
-}
-
-async function submitForm(e) {
-  e.preventDefault();
-  const data = gatherFormData();
-  const method = editingIndex === null ? 'POST' : 'PUT';
-  const url = editingIndex === null ? '/api/tanks' : `/api/tanks/${editingIndex}`;
-  await fetch(url, {
-    method,
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  });
-  editingIndex = null;
-  await loadData();
-  buildForm();
 }
 
 async function loadData() {
@@ -258,13 +310,13 @@ async function loadData() {
   ]);
   nations = await nRes.json();
   tanks = await tRes.json();
+  buildTableHeader();
   renderTable();
 }
 
 function init() {
-  const form = document.getElementById('tankForm');
-  form.addEventListener('submit', submitForm);
-  loadData().then(buildForm);
+  document.getElementById('addTankBtn').addEventListener('click', () => startEdit(null));
+  loadData();
 }
 
 if (document.readyState === 'loading') {
@@ -272,3 +324,4 @@ if (document.readyState === 'loading') {
 } else {
   init();
 }
+

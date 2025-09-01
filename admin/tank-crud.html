@@ -1,13 +1,14 @@
 <!-- tank-crud.html
-     Summary: Prototype admin page for tank CRUD operations using a dynamic
-              table and form generated entirely via JavaScript.
+     Summary: Admin page for tank CRUD operations using a fully dynamic table
+              with inline row editing. All tank parameters are displayed as
+              columns and rows expand to show slider-based editors.
      Structure: standard navbar and sidebar navigation followed by a card that
-                houses a table listing existing tanks and an empty form element.
-                The form fields and preview canvas are injected at runtime to
-                demonstrate a new approach compared to the static tanks page.
+                contains the table and an Add Tank button. Editors are injected
+                beneath rows on demand.
      Usage: Visit /admin/tank-crud.html to manage tank data. Existing tanks are
             loaded from the JSON file and displayed with small thumbnails.
-            Selecting a row loads it into the form for editing. -->
+            Click Edit on a row to expand it for modification or Add Tank to
+            create a new entry. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -47,21 +48,12 @@
     <main id="mainContent">
       <section class="card">
         <h2>Tank CRUD</h2>
-        <p class="instructions">Existing tanks load below. Click a row to edit or use the form to add new ones.</p>
+        <p class="instructions">Existing tanks load below. Click edit to modify a tank inline or use the Add Tank button to create new entries.</p>
         <table id="tankTable">
-          <thead>
-            <tr>
-              <th>Thumb</th>
-              <th>Name</th>
-              <th>Nation</th>
-              <th>BR</th>
-              <th>Class</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
+          <thead id="tankTableHead"></thead>
           <tbody id="tankTableBody"></tbody>
         </table>
-        <form id="tankForm"></form>
+        <button id="addTankBtn" type="button">Add Tank</button>
       </section>
     </main>
   </div>
