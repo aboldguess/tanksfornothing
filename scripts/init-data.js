@@ -23,7 +23,7 @@ async function init() {
     const tanksData = {
       _comment: [
         'Summary: Persisted tank definitions for Tanks for Nothing.',
-        'Structure: JSON object with _comment array and tanks list including ammoCapacity, barrelLength, barrelDiameter, mainCannonFireRate, maxAmmoStorage, turretXPercent and turretYPercent.',
+        'Structure: JSON object with _comment array and tanks list including ammoCapacity, cannonCaliber, barrelLength, mainCannonFireRate, turretXPercent and turretYPercent.',
         'Usage: Managed automatically by server; do not edit manually.'
       ],
       tanks: []

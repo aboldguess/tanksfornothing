@@ -475,12 +475,8 @@ function validateTank(t) {
     return 'invalid ammo capacity'; // ensure finite round count
   if (typeof t.barrelLength !== 'number' || t.barrelLength < 1 || t.barrelLength > 12 || (t.barrelLength * 4) % 1 !== 0)
     return 'invalid barrel length';
-  if (typeof t.barrelDiameter !== 'number' || t.barrelDiameter < 0.05 || t.barrelDiameter > 0.3 || (t.barrelDiameter * 100) % 1 !== 0)
-    return 'invalid barrel diameter';
   if (typeof t.mainCannonFireRate !== 'number' || t.mainCannonFireRate < 1 || t.mainCannonFireRate > 60 || t.mainCannonFireRate % 1 !== 0)
     return 'invalid main cannon fire rate';
-  if (typeof t.maxAmmoStorage !== 'number' || t.maxAmmoStorage < 1 || t.maxAmmoStorage > 150 || t.maxAmmoStorage % 1 !== 0)
-    return 'invalid max ammo storage';
   if (!Number.isInteger(t.turretXPercent) || t.turretXPercent < 0 || t.turretXPercent > 100) return 'invalid turretXPercent';
   if (!Number.isInteger(t.turretYPercent) || t.turretYPercent < 0 || t.turretYPercent > 100) return 'invalid turretYPercent';
   if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
@@ -511,9 +507,7 @@ function validateTank(t) {
     ammo: t.ammo,
     ammoCapacity: t.ammoCapacity, // rounds carried
     barrelLength: t.barrelLength,
-    barrelDiameter: t.barrelDiameter,
     mainCannonFireRate: t.mainCannonFireRate,
-    maxAmmoStorage: t.maxAmmoStorage,
     crew: t.crew,
     engineHp: t.engineHp,
     maxSpeed: t.maxSpeed,
@@ -758,7 +752,7 @@ io.on('connection', (socket) => {
         health: 100,
         crew: tank.crew || 3,
         armor: tank.armor || 20,
-        ammoRemaining: tank.maxAmmoStorage ?? tank.ammoCapacity ?? 0,
+        ammoRemaining: tank.ammoCapacity ?? 0,
         lastFire: 0
       });
       // Synchronize the newcomer with any players already in the game world.

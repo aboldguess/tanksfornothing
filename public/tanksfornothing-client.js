@@ -106,8 +106,8 @@ function createRemoteTank(t) {
   const gunObj = new THREE.Object3D();
   const barrel = new THREE.Mesh(
     new THREE.CylinderGeometry(
-      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
-      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      ((t.cannonCaliber ?? defaultTank.cannonCaliber) / 1000) / 2,
+      ((t.cannonCaliber ?? defaultTank.cannonCaliber) / 1000) / 2,
       t.barrelLength ?? defaultTank.barrelLength
     ),
     new THREE.MeshStandardMaterial({ color: 0x556655 })
@@ -334,8 +334,8 @@ function generateTankThumbnail(t) {
 
   const gun = new THREE.Mesh(
     new THREE.CylinderGeometry(
-      (t.barrelDiameter || 0.1) / 2,
-      (t.barrelDiameter || 0.1) / 2,
+      ((t.cannonCaliber || defaultTank.cannonCaliber) / 1000) / 2,
+      ((t.cannonCaliber || defaultTank.cannonCaliber) / 1000) / 2,
       t.barrelLength || 1
     ),
     new THREE.MeshStandardMaterial({ color: 0x556655 })
@@ -488,10 +488,10 @@ const defaultTank = {
   turretWidth: 1.5,
   turretLength: 1.5,
   turretHeight: 0.5,
+  cannonCaliber: 75,
   barrelLength: 3,
-  barrelDiameter: 0.1,
+  ammoCapacity: 40,
   mainCannonFireRate: 6,
-  maxAmmoStorage: 40,
   turretXPercent: 50,
   turretYPercent: 50
 };
@@ -502,7 +502,7 @@ let TARGET_TURN_RATE = (2 * Math.PI) / defaultTank.bodyRotation; // desired hull
 let ROT_ACCEL = TARGET_TURN_RATE; // rad/s² to reach target rate in ~1 s
 let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
-let ammoLeft = defaultTank.maxAmmoStorage;
+let ammoLeft = defaultTank.ammoCapacity;
 let lastFireTime = 0;
 // Static friction coefficient representing tracks on typical terrain.
 const GROUND_FRICTION = 0.3;
@@ -671,8 +671,8 @@ function init() {
   gun = new THREE.Object3D();
   const barrel = new THREE.Mesh(
     new THREE.CylinderGeometry(
-      defaultTank.barrelDiameter / 2,
-      defaultTank.barrelDiameter / 2,
+      (defaultTank.cannonCaliber / 1000) / 2,
+      (defaultTank.cannonCaliber / 1000) / 2,
       defaultTank.barrelLength
     ),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
@@ -789,7 +789,7 @@ function applyTankConfig(t) {
     traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
   FIRE_DELAY = 60 / (t.mainCannonFireRate ?? defaultTank.mainCannonFireRate);
-  ammoLeft = t.maxAmmoStorage ?? defaultTank.maxAmmoStorage;
+  ammoLeft = t.ammoCapacity ?? defaultTank.ammoCapacity;
   lastFireTime = 0;
 
   // Reset orientation targets so camera and turret start aligned for new stats
@@ -825,8 +825,8 @@ function applyTankConfig(t) {
   }
   const newBarrel = new THREE.Mesh(
     new THREE.CylinderGeometry(
-      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
-      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      ((t.cannonCaliber ?? defaultTank.cannonCaliber) / 1000) / 2,
+      ((t.cannonCaliber ?? defaultTank.cannonCaliber) / 1000) / 2,
       t.barrelLength ?? defaultTank.barrelLength
     ),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
