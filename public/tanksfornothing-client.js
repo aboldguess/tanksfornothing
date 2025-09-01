@@ -611,7 +611,16 @@ function init() {
   // don't immediately start controlling the tank.
   document.body.addEventListener('click', () => {
     if (lobby.style.display === 'none' && !document.pointerLockElement) {
-      document.body.requestPointerLock();
+      // requestPointerLock returns a promise in modern browsers. If the user
+      // presses Escape before it resolves, the promise rejects with a
+      // SecurityError. Capture and log that failure so our global
+      // `unhandledrejection` handler doesn't surface it as a fatal overlay.
+      const lockAttempt = document.body.requestPointerLock();
+      if (lockAttempt && typeof lockAttempt.catch === 'function') {
+        lockAttempt.catch((err) =>
+          console.warn('Pointer lock request rejected', err)
+        );
+      }
     }
   });
 
