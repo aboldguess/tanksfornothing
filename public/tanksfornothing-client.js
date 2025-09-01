@@ -554,9 +554,11 @@ function init() {
   chassisBody.addShape(box);
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
-  chassisBody.angularDamping = 0.4;
+  // Lower angular damping so applied torque produces visible rotation.
+  chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3; // simulate ground friction/drag
-  TURN_TORQUE = chassisBody.mass * ROT_SPEED;
+  // Scale turn torque by the moment of inertia to achieve target ROT_SPEED.
+  TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -667,9 +669,10 @@ function applyTankConfig(t) {
   chassisBody.addShape(box);
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
-  chassisBody.angularDamping = 0.4;
+  // Reduced damping and inertia-aware torque keep hull rotation responsive.
+  chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3;
-  TURN_TORQUE = chassisBody.mass * ROT_SPEED;
+  TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
   currentSpeed = 0;
 }
