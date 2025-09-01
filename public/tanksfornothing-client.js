@@ -552,12 +552,14 @@ function init() {
   const box = new CANNON.Box(new CANNON.Vec3(defaultTank.bodyWidth / 2, defaultTank.bodyHeight / 2, defaultTank.bodyLength / 2));
   chassisBody = new CANNON.Body({ mass: defaultTank.mass });
   chassisBody.addShape(box);
+  // Update inertia tensor now that the shape is attached.
+  chassisBody.updateMassProperties();
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Lower angular damping so applied torque produces visible rotation.
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3; // simulate ground friction/drag
-  // Scale turn torque by the moment of inertia to achieve target ROT_SPEED.
+  // Scale turn torque by the updated moment of inertia to achieve target ROT_SPEED.
   TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
 
@@ -667,11 +669,14 @@ function applyTankConfig(t) {
   );
   chassisBody = new CANNON.Body({ mass: t.mass ?? defaultTank.mass });
   chassisBody.addShape(box);
+  // Refresh inertia tensor so steering torque matches new hull dimensions.
+  chassisBody.updateMassProperties();
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Reduced damping and inertia-aware torque keep hull rotation responsive.
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3;
+  // Recompute turn torque using the updated moment of inertia and desired rotation speed.
   TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
   currentSpeed = 0;
