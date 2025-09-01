@@ -392,14 +392,15 @@ const defaultTank = {
 // Movement coefficients derived from tank stats; mutable to apply tank-specific values
 let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
-let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
+let TARGET_TURN_RATE = (2 * Math.PI) / defaultTank.bodyRotation; // desired hull yaw speed in rad/s
+let ROT_ACCEL = TARGET_TURN_RATE; // rad/s² to reach target rate in ~1 s
 let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
 let ammoLeft = defaultTank.maxAmmoStorage;
 let lastFireTime = 0;
 // Static friction coefficient representing tracks on typical terrain.
 const GROUND_FRICTION = 0.3;
-// Torque applied for A/D rotation; computed once mass is known
+// Torque applied for A/D rotation; derived from mass, friction, and desired acceleration
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
 let MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretDecline);
@@ -582,9 +583,11 @@ function init() {
   chassisBody.addShape(box);
   // Update inertia tensor now that the shape is attached.
   chassisBody.updateMassProperties();
-  // Precompute torque required to overcome static friction when pivoting.
-  const traction = chassisBody.mass * 9.82 * GROUND_FRICTION * (defaultTank.bodyLength / 2);
-  TURN_TORQUE = traction * ROT_SPEED;
+  // Precompute torque needed to overcome friction and accelerate hull rotation.
+  const tankLength = defaultTank.bodyLength;
+  const frictionTorque = chassisBody.mass * 9.82 * GROUND_FRICTION * (tankLength / 2);
+  const desiredAngularAccel = ROT_ACCEL; // rad/s² to hit target turn rate quickly
+  TURN_TORQUE = frictionTorque + chassisBody.inertia.y * desiredAngularAccel;
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Lower angular damping so applied torque produces visible rotation.
@@ -657,7 +660,8 @@ function init() {
 function applyTankConfig(t) {
   MAX_SPEED = (t.maxSpeed ?? defaultTank.maxSpeed) / 3.6;
   MAX_REVERSE_SPEED = (t.maxReverseSpeed ?? defaultTank.maxReverseSpeed) / 3.6;
-  ROT_SPEED = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
+  TARGET_TURN_RATE = (2 * Math.PI) / (t.bodyRotation ?? defaultTank.bodyRotation);
+  ROT_ACCEL = TARGET_TURN_RATE; // adjust if slower turn ramp is desired
   TURRET_ROT_SPEED = (2 * Math.PI) / (t.turretRotation ?? defaultTank.turretRotation);
   MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(t.maxTurretIncline ?? defaultTank.maxTurretIncline);
   MAX_TURRET_DECLINE = THREE.MathUtils.degToRad(t.maxTurretDecline ?? defaultTank.maxTurretDecline);
@@ -726,10 +730,12 @@ function applyTankConfig(t) {
   );
   chassisBody = new CANNON.Body({ mass: t.mass ?? defaultTank.mass });
   chassisBody.addShape(box);
-  // Refresh inertia tensor and compute turn torque to overcome static friction.
+  // Refresh inertia tensor and compute turn torque including inertia.
   chassisBody.updateMassProperties();
-  const traction = chassisBody.mass * 9.82 * GROUND_FRICTION * ((t.bodyLength ?? defaultTank.bodyLength) / 2);
-  TURN_TORQUE = traction * ROT_SPEED;
+  const tankLength = t.bodyLength ?? defaultTank.bodyLength;
+  const frictionTorque = chassisBody.mass * 9.82 * GROUND_FRICTION * (tankLength / 2);
+  const desiredAngularAccel = ROT_ACCEL;
+  TURN_TORQUE = frictionTorque + chassisBody.inertia.y * desiredAngularAccel;
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Reduced damping keeps hull rotation responsive.
