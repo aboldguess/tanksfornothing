@@ -1,13 +1,18 @@
 // tank-crud.js
 // Summary: Standalone module powering the tank CRUD page. It renders a fully
-//          dynamic table displaying every tank parameter and enables inline row
-//          editing via slider-based controls.
-// Structure: data caches -> table builders -> editing helpers -> CRUD handlers -> init.
+//          dynamic table displaying every tank parameter, adds column sorting
+//          and quick filtering and enables inline row editing via slider-based
+//          controls.
+// Structure: data caches -> table builders/sort+filter -> editing helpers -> CRUD handlers -> init.
 // Usage: Loaded by tank-crud.html. Requires an admin session cookie.
 
 let tanks = [];
 let nations = [];
 let editingIndex = null; // null = creating new tank
+let sortField = null; // current column id for sorting
+let sortAsc = true; // true = ascending, false = descending
+let filterText = ''; // free-text filter applied to all fields
+let filterNation = ''; // nation name to filter by
 
 // Field configuration grouped by section to allow dynamic table and form generation.
 // Each field defines id, label and input attributes. Range inputs will have their
@@ -84,6 +89,17 @@ function buildTableHeader() {
   ALL_FIELDS.forEach(f => {
     const th = document.createElement('th');
     th.textContent = f.label;
+    if (sortField === f.id) th.textContent += sortAsc ? ' \u25B2' : ' \u25BC';
+    th.dataset.field = f.id;
+    th.addEventListener('click', () => {
+      if (sortField === f.id) {
+        sortAsc = !sortAsc;
+      } else {
+        sortField = f.id;
+        sortAsc = true;
+      }
+      renderTable();
+    });
     tr.appendChild(th);
   });
   const actions = document.createElement('th');
@@ -93,9 +109,32 @@ function buildTableHeader() {
 }
 
 function renderTable() {
+  buildTableHeader();
   const tbody = document.getElementById('tankTableBody');
   tbody.innerHTML = '';
-  tanks.forEach((t, i) => {
+  let rows = [...tanks];
+  if (filterText) {
+    const q = filterText.toLowerCase();
+    rows = rows.filter(t =>
+      Object.values(t).some(v => {
+        const val = Array.isArray(v) ? v.join(' ') : String(v);
+        return val.toLowerCase().includes(q);
+      })
+    );
+  }
+  if (filterNation) rows = rows.filter(t => t.nation === filterNation);
+  if (sortField) {
+    rows.sort((a, b) => {
+      const av = a[sortField];
+      const bv = b[sortField];
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return (av - bv) * (sortAsc ? 1 : -1);
+      }
+      return String(av).localeCompare(String(bv)) * (sortAsc ? 1 : -1);
+    });
+  }
+  rows.forEach(t => {
+    const i = tanks.indexOf(t);
     const tr = document.createElement('tr');
     const thumbCell = document.createElement('td');
     const canvas = document.createElement('canvas');
@@ -103,14 +142,12 @@ function renderTable() {
     drawTank(canvas, t);
     thumbCell.appendChild(canvas);
     tr.appendChild(thumbCell);
-
     ALL_FIELDS.forEach(f => {
       const td = document.createElement('td');
       const val = t[f.id];
       td.textContent = Array.isArray(val) ? val.join(', ') : val;
       tr.appendChild(td);
     });
-
     const actions = document.createElement('td');
     const editBtn = document.createElement('button');
     editBtn.textContent = 'Edit';
@@ -308,12 +345,27 @@ async function loadData() {
   ]);
   nations = await nRes.json();
   tanks = await tRes.json();
-  buildTableHeader();
+  const nf = document.getElementById('nationFilter');
+  nf.innerHTML = '<option value="">All Nations</option>';
+  nations.forEach(n => {
+    const o = document.createElement('option');
+    o.value = n.name;
+    o.textContent = n.name;
+    nf.appendChild(o);
+  });
   renderTable();
 }
 
 function init() {
   document.getElementById('addTankBtn').addEventListener('click', () => startEdit(null));
+  document.getElementById('filterInput').addEventListener('input', e => {
+    filterText = e.target.value;
+    renderTable();
+  });
+  document.getElementById('nationFilter').addEventListener('change', e => {
+    filterNation = e.target.value;
+    renderTable();
+  });
   loadData();
 }
 

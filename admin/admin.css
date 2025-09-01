@@ -222,19 +222,31 @@ body.login-page {
 }
 
 /* Tank CRUD layout ------------------------------------------------------ */
-#tanksTable {
+#tankTable {
   width: 100%;
   border-collapse: collapse;
   margin-bottom: 15px;
 }
-#tanksTable th,
-#tanksTable td {
+#tankTable th,
+#tankTable td {
   border: 1px solid #2b361e;
   padding: 4px;
   text-align: left;
 }
-#tanksTable th {
+#tankTable th {
   cursor: pointer; /* allow sorting */
+}
+
+/* Filter + search controls above tables */
+.table-controls {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 10px;
+}
+.table-controls input,
+.table-controls select {
+  flex: 1;
+  padding: 4px;
 }
 
 /* Small top-down preview canvas for tanks */

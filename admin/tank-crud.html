@@ -1,14 +1,16 @@
 <!-- tank-crud.html
      Summary: Admin page for tank CRUD operations using a fully dynamic table
-              with inline row editing. All tank parameters are displayed as
-              columns and rows expand to show slider-based editors.
+              with inline row editing, sortable columns and quick filter
+              controls. All tank parameters are displayed as columns and rows
+              expand to show slider-based editors.
      Structure: standard navbar and sidebar navigation followed by a card that
-                contains the table and an Add Tank button. Editors are injected
-                beneath rows on demand.
+                contains search/filter controls, the table and an Add Tank
+                button. Editors are injected beneath rows on demand.
      Usage: Visit /admin/tank-crud.html to manage tank data. Existing tanks are
             loaded from the JSON file and displayed with small thumbnails.
-            Click Edit on a row to expand it for modification or Add Tank to
-            create a new entry. -->
+            Use the filter boxes to narrow results, click column headers to
+            sort, and click Edit on a row to expand it for modification or Add
+            Tank to create a new entry. -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,7 +50,13 @@
     <main id="mainContent">
       <section class="card">
         <h2>Tank CRUD</h2>
-        <p class="instructions">Existing tanks load below. Click edit to modify a tank inline or use the Add Tank button to create new entries.</p>
+        <p class="instructions">Existing tanks load below. Use the filters to narrow results and click any column header to sort. Click edit to modify a tank inline or use the Add Tank button to create new entries.</p>
+        <div class="table-controls">
+          <input id="filterInput" type="text" placeholder="Filter tanks..." aria-label="Filter tanks">
+          <select id="nationFilter" aria-label="Filter by nation">
+            <option value="">All Nations</option>
+          </select>
+        </div>
         <table id="tankTable">
           <thead id="tankTableHead"></thead>
           <tbody id="tankTableBody"></tbody>
