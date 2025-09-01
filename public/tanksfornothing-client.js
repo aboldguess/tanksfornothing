@@ -6,8 +6,9 @@
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
 //          turret and gun lag behind to emulate realistic traverse. Remote
-//          players are represented with simple meshes that update as network
-//          events arrive so everyone shares the same battlefield.
+//          players are represented with simple meshes that now include a
+//          visible cannon barrel and update as network events arrive so
+//          everyone shares the same battlefield.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -66,8 +67,9 @@ let selectedAmmo = null;
 const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
 let playerHealth = 100;
 // Track other players in the session by their socket.id. Each entry stores the
-// root mesh and its turret so we can adjust orientation on updates.
-const otherPlayers = new Map(); // id -> { mesh, turret }
+// root mesh plus references to the turret and gun so orientation can be synced
+// on network updates.
+const otherPlayers = new Map(); // id -> { mesh, turret, gun }
 
 // Build a simplified tank mesh for remote players using dimensions from the
 // server. These meshes are purely visual and have no physics bodies.
@@ -91,8 +93,20 @@ function createRemoteTank(t) {
   turt.position.y =
     (t.bodyHeight ?? defaultTank.bodyHeight) / 2 +
     (t.turretHeight ?? defaultTank.turretHeight) / 2;
+
+  // Remote gun barrel for visual parity with the local player tank.
+  const gunObj = new THREE.Object3D();
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.1, 0.1, 3),
+    new THREE.MeshStandardMaterial({ color: 0x556655 })
+  );
+  barrel.rotation.x = -Math.PI / 2;
+  barrel.position.z = -1.5;
+  gunObj.add(barrel);
+  turt.add(gunObj);
+
   body.add(turt);
-  return { mesh: body, turret: turt };
+  return { mesh: body, turret: turt, gun: gunObj };
 }
 
 if (window.io) {
@@ -143,6 +157,7 @@ if (window.io) {
     remote.mesh.position.set(state.x, state.y, state.z);
     remote.mesh.rotation.y = state.rot;
     remote.turret.rotation.y = state.turret;
+    if (remote.gun) remote.gun.rotation.x = state.gun ?? 0;
   });
   socket.on('player-left', (id) => {
     const remote = otherPlayers.get(id);
@@ -397,7 +412,7 @@ const logMovement = (...args) => { if (DEBUG_MOVEMENT) console.debug('[movement]
 // Timing and networking helpers
 const clock = new THREE.Clock(); // tracks frame timing for physics updates
 let lastNetwork = 0;
-let lastState = { x: 0, y: 0, z: 0, rot: 0, turret: 0 };
+let lastState = { x: 0, y: 0, z: 0, rot: 0, turret: 0, gun: 0 };
 
 // Always initialize scene so the client can operate even without networking.
 init();
@@ -789,14 +804,16 @@ function animate() {
         y: chassisBody.position.y,
         z: chassisBody.position.z,
         rot: tank.rotation.y,
-        turret: turret.rotation.y
+        turret: turret.rotation.y,
+        gun: gun.rotation.x
       };
       const diff =
         Math.abs(state.x - lastState.x) +
         Math.abs(state.y - lastState.y) +
         Math.abs(state.z - lastState.z) +
         Math.abs(state.rot - lastState.rot) +
-        Math.abs(state.turret - lastState.turret);
+        Math.abs(state.turret - lastState.turret) +
+        Math.abs(state.gun - lastState.gun);
       if (diff > 0.01) {
         socket.emit('update', state);
         lastState = state;

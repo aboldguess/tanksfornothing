@@ -4,7 +4,8 @@
 // updates, handles image uploads for ammo types, stores flag emojis for nations,
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
 // to disk and enforces Battle Rating constraints when players join. Tank definitions
-// now also store an ammoCapacity value to limit carried rounds.
+// now also store an ammoCapacity value to limit carried rounds and the server
+// tracks turret and gun orientation so remote players render complete cannons.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
@@ -731,6 +732,7 @@ io.on('connection', (socket) => {
         z: 0,
         rot: 0,
         turret: 0,
+        gun: 0,
         health: 100,
         crew: tank.crew || 3,
         armor: tank.armor || 20
