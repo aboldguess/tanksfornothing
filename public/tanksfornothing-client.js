@@ -5,7 +5,9 @@
 //          (height/distance) can be adjusted via the admin settings page. Uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
-//          turret and gun lag behind to emulate realistic traverse.
+//          turret and gun lag behind to emulate realistic traverse. Remote
+//          players are represented with simple meshes that update as network
+//          events arrive so everyone shares the same battlefield.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -63,6 +65,35 @@ let ammoList = [];
 let selectedAmmo = null;
 const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
 let playerHealth = 100;
+// Track other players in the session by their socket.id. Each entry stores the
+// root mesh and its turret so we can adjust orientation on updates.
+const otherPlayers = new Map(); // id -> { mesh, turret }
+
+// Build a simplified tank mesh for remote players using dimensions from the
+// server. These meshes are purely visual and have no physics bodies.
+function createRemoteTank(t) {
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      t.bodyWidth ?? defaultTank.bodyWidth,
+      t.bodyHeight ?? defaultTank.bodyHeight,
+      t.bodyLength ?? defaultTank.bodyLength
+    ),
+    new THREE.MeshStandardMaterial({ color: 0x335533 })
+  );
+  const turt = new THREE.Mesh(
+    new THREE.BoxGeometry(
+      t.turretWidth ?? defaultTank.turretWidth,
+      t.turretHeight ?? defaultTank.turretHeight,
+      t.turretLength ?? defaultTank.turretLength
+    ),
+    new THREE.MeshStandardMaterial({ color: 0x556655 })
+  );
+  turt.position.y =
+    (t.bodyHeight ?? defaultTank.bodyHeight) / 2 +
+    (t.turretHeight ?? defaultTank.turretHeight) / 2;
+  body.add(turt);
+  return { mesh: body, turret: turt };
+}
 
 if (window.io) {
   socket = window.io();
@@ -97,6 +128,33 @@ if (window.io) {
   socket.on('tank-damaged', ({ id, health }) => {
     if (id === socket.id) playerHealth = health;
   });
+  // --- Multiplayer player management ---
+  socket.on('player-joined', ({ id, tank: t }) => {
+    if (!scene || id === socket.id || otherPlayers.has(id)) return;
+    const remote = createRemoteTank(t);
+    remote.mesh.position.set(t.x || 0, t.y || 0, t.z || 0);
+    scene.add(remote.mesh);
+    otherPlayers.set(id, remote);
+    console.log('Player joined', id);
+  });
+  socket.on('player-update', ({ id, state }) => {
+    const remote = otherPlayers.get(id);
+    if (!remote) return;
+    remote.mesh.position.set(state.x, state.y, state.z);
+    remote.mesh.rotation.y = state.rot;
+    remote.turret.rotation.y = state.turret;
+  });
+  socket.on('player-left', (id) => {
+    const remote = otherPlayers.get(id);
+    if (!remote) return;
+    scene.remove(remote.mesh);
+    remote.mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+    otherPlayers.delete(id);
+    console.log('Player left', id);
+  });
   socket.on('restart', () => {
     // Reset graphics and physics state
     tank.position.set(0, 0, 0);
@@ -115,6 +173,15 @@ if (window.io) {
     }
     currentSpeed = 0;
     playerHealth = 100;
+    // Clear out any remote players so the scene resets cleanly.
+    for (const { mesh } of otherPlayers.values()) {
+      scene.remove(mesh);
+      mesh.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+    }
+    otherPlayers.clear();
   });
 } else {
   showError('Socket.IO failed to load. Running offline.');

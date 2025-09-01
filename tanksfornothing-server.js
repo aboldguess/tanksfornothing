@@ -735,6 +735,14 @@ io.on('connection', (socket) => {
         crew: tank.crew || 3,
         armor: tank.armor || 20
       });
+      // Synchronize the newcomer with any players already in the game world.
+      // Send existing player info before broadcasting the new arrival so the
+      // client can immediately render all tanks.
+      for (const [id, p] of players) {
+        if (id === socket.id) continue;
+        socket.emit('player-joined', { id, tank: p, username: p.username });
+        socket.emit('player-update', { id, state: p });
+      }
       userRecord.stats.games += 1;
       saveUsers();
       io.emit('player-joined', { id: socket.id, tank, username });
