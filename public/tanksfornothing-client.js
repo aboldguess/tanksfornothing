@@ -129,7 +129,10 @@ if (window.io) {
   socket.on('terrain', (name) => buildTerrain(name));
   socket.on('projectile-fired', (p) => {
     if (!scene) return;
-    const geom = new THREE.SphereGeometry(0.1, 8, 8);
+    // Debug: log projectile spawn details so firing issues are easier to trace.
+    console.debug('Projectile spawned', p);
+    // Previous shells were too small to see; increase radius for visibility.
+    const geom = new THREE.SphereGeometry(0.3, 12, 12);
     const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
     const mesh = new THREE.Mesh(geom, mat);
     mesh.position.set(p.x, p.y, p.z);
