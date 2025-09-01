@@ -397,6 +397,8 @@ let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret rad
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
 let ammoLeft = defaultTank.maxAmmoStorage;
 let lastFireTime = 0;
+// Static friction coefficient representing tracks on typical terrain.
+const GROUND_FRICTION = 0.3;
 // Torque applied for A/D rotation; computed once mass is known
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
@@ -580,13 +582,14 @@ function init() {
   chassisBody.addShape(box);
   // Update inertia tensor now that the shape is attached.
   chassisBody.updateMassProperties();
+  // Precompute torque required to overcome static friction when pivoting.
+  const traction = chassisBody.mass * 9.82 * GROUND_FRICTION * (defaultTank.bodyLength / 2);
+  TURN_TORQUE = traction * ROT_SPEED;
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Lower angular damping so applied torque produces visible rotation.
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3; // simulate ground friction/drag
-  // Scale turn torque by the updated moment of inertia to achieve target ROT_SPEED.
-  TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -723,15 +726,15 @@ function applyTankConfig(t) {
   );
   chassisBody = new CANNON.Body({ mass: t.mass ?? defaultTank.mass });
   chassisBody.addShape(box);
-  // Refresh inertia tensor so steering torque matches new hull dimensions.
+  // Refresh inertia tensor and compute turn torque to overcome static friction.
   chassisBody.updateMassProperties();
+  const traction = chassisBody.mass * 9.82 * GROUND_FRICTION * ((t.bodyLength ?? defaultTank.bodyLength) / 2);
+  TURN_TORQUE = traction * ROT_SPEED;
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
-  // Reduced damping and inertia-aware torque keep hull rotation responsive.
+  // Reduced damping keeps hull rotation responsive.
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = 0.3;
-  // Recompute turn torque using the updated moment of inertia and desired rotation speed.
-  TURN_TORQUE = chassisBody.inertia.y * ROT_SPEED;
   world.addBody(chassisBody);
   currentSpeed = 0;
 }
@@ -780,17 +783,13 @@ function updateMovement() {
     }
   }
 
-  // Apply torque for rotation around the Y axis
+  // Apply direct torque for rotation around the Y axis
   let turn = 0;
   if (keys['a']) turn = 1;
   else if (keys['d']) turn = -1;
   if (turn !== 0) {
-    // cannon-es does not expose an applyLocalTorque helper. Convert the
-    // desired yaw torque from local to world space and accumulate it on the
-    // body's torque vector to induce rotation.
-    const yawTorque = new CANNON.Vec3(0, turn * TURN_TORQUE, 0);
-    chassisBody.vectorToWorldFrame(yawTorque, yawTorque);
-    chassisBody.torque.vadd(yawTorque, chassisBody.torque);
+    chassisBody.wakeUp(); // ensure sleeping bodies respond immediately
+    chassisBody.torque.y += turn * TURN_TORQUE;
   }
 
   // Simple hand brake: increase damping while space is held
