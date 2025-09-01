@@ -292,20 +292,35 @@ function renderTanks() {
   renderTankList(filtered.filter(t => t.class === selectedClass));
 }
 
-// Render clickable tank thumbnails for the active class
+// Render clickable tank cards with thumbnail and brief stats for the active class
 function renderTankList(list) {
   tankList.innerHTML = '';
   list.forEach(t => {
+    // Card wrapper allows us to show text alongside the image
+    const card = document.createElement('div');
+    card.className = 'tank-card';
+
+    // Thumbnail with lazy loading for performance; placeholder when none provided
     const img = document.createElement('img');
     img.src = t.thumbnail || 'https://placehold.co/80x60?text=Tank';
     img.alt = t.name;
-    img.title = `${t.name} (BR ${t.br})`;
-    img.addEventListener('click', () => {
+    img.loading = 'lazy';
+
+    // Caption summarising key tank info so users can make an informed choice
+    const caption = document.createElement('div');
+    caption.className = 'tank-caption';
+    caption.textContent = `${t.name} (BR ${t.br})`;
+
+    card.appendChild(img);
+    card.appendChild(caption);
+
+    card.addEventListener('click', () => {
       selectedTank = t;
       renderAmmo();
-      highlightSelection(tankList, img);
+      highlightSelection(tankList, card);
     });
-    tankList.appendChild(img);
+
+    tankList.appendChild(card);
   });
 }
 
