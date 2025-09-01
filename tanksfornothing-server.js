@@ -826,6 +826,8 @@ io.on('connection', (socket) => {
     };
     projectiles.set(id, projectile);
     io.emit('projectile-fired', projectile);
+    // Debug: log projectile to server console to trace firing events.
+    console.debug('Projectile fired', projectile);
   });
 
   socket.on('disconnect', () => {
