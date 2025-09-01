@@ -702,8 +702,10 @@ function init() {
   // Update inertia tensor now that the shape is attached.
   chassisBody.updateMassProperties();
   // Precompute torque needed to overcome friction and accelerate hull rotation.
-  const tankLength = defaultTank.bodyLength;
-  const frictionTorque = chassisBody.mass * 9.82 * GROUND_FRICTION * (tankLength / 2);
+  // Use track spacing (tank width) as the lever arm for differential steering.
+  const trackWidth = defaultTank.bodyWidth;
+  const frictionTorque =
+    chassisBody.mass * 9.82 * GROUND_FRICTION * (trackWidth / 2);
   const desiredAngularAccel = ROT_ACCEL; // rad/s² to hit target turn rate quickly
   TURN_TORQUE = frictionTorque + chassisBody.inertia.y * desiredAngularAccel;
   chassisBody.position.set(0, defaultTank.bodyHeight / 2, 0);
@@ -867,8 +869,10 @@ function applyTankConfig(t) {
   chassisBody.addShape(box);
   // Refresh inertia tensor and compute turn torque including inertia.
   chassisBody.updateMassProperties();
-  const tankLength = t.bodyLength ?? defaultTank.bodyLength;
-  const frictionTorque = chassisBody.mass * 9.82 * GROUND_FRICTION * (tankLength / 2);
+  // Use track spacing (tank width) to estimate ground resistance moment.
+  const trackWidth = t.bodyWidth ?? defaultTank.bodyWidth;
+  const frictionTorque =
+    chassisBody.mass * 9.82 * GROUND_FRICTION * (trackWidth / 2);
   const desiredAngularAccel = ROT_ACCEL;
   TURN_TORQUE = frictionTorque + chassisBody.inertia.y * desiredAngularAccel;
   chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
