@@ -282,6 +282,10 @@ function collectTankForm() {
     cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
     ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
     ammoCapacity: parseInt(document.getElementById('tankAmmoCapacity').value, 10),
+    maxAmmoStorage: parseInt(document.getElementById('tankMaxAmmoStorage').value, 10),
+    barrelLength: parseFloat(document.getElementById('tankBarrelLength').value),
+    barrelDiameter: parseFloat(document.getElementById('tankBarrelDiameter').value),
+    mainCannonFireRate: parseInt(document.getElementById('tankFireRate').value, 10),
     crew: parseInt(document.getElementById('tankCrew').value, 10),
     engineHp: parseInt(document.getElementById('tankHP').value, 10),
     maxSpeed: parseInt(document.getElementById('tankMaxSpeed').value, 10),
@@ -300,7 +304,9 @@ function collectTankForm() {
     bodyHeight: parseFloat(document.getElementById('tankBodyHeight').value),
     turretWidth: parseFloat(document.getElementById('tankTurretWidth').value),
     turretLength: parseFloat(document.getElementById('tankTurretLength').value),
-    turretHeight: parseFloat(document.getElementById('tankTurretHeight').value)
+    turretHeight: parseFloat(document.getElementById('tankTurretHeight').value),
+    turretXPercent: parseInt(document.getElementById('tankTurretXPercent').value, 10),
+    turretYPercent: parseInt(document.getElementById('tankTurretYPercent').value, 10)
   };
 }
 
@@ -372,8 +378,10 @@ function drawTankThumb(canvas, t) {
   ctx.fillRect(bodyX, bodyY, bodyW, bodyH);
   const turretW = (t.turretLength || 1) * scale;
   const turretH = (t.turretWidth || 1) * scale;
-  const turretX = canvas.width / 2 - turretW / 2;
-  const turretY = canvas.height / 2 - turretH / 2;
+  const turretX =
+    bodyX + ((t.turretXPercent ?? 50) / 100) * bodyW - turretW / 2;
+  const turretY =
+    bodyY + ((t.turretYPercent ?? 50) / 100) * bodyH - turretH / 2;
   ctx.fillStyle = '#6b8e23';
   ctx.fillRect(turretX, turretY, turretW, turretH);
 }
@@ -389,6 +397,10 @@ function editTank(i) {
   document.getElementById('tankCaliber').value = t.cannonCaliber; document.getElementById('caliberVal').innerText = t.cannonCaliber;
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
   document.getElementById('tankAmmoCapacity').value = t.ammoCapacity ?? 40; document.getElementById('ammoCapVal').innerText = t.ammoCapacity ?? 40;
+  document.getElementById('tankMaxAmmoStorage').value = t.maxAmmoStorage ?? t.ammoCapacity ?? 40; document.getElementById('maxAmmoStorageVal').innerText = t.maxAmmoStorage ?? t.ammoCapacity ?? 40;
+  document.getElementById('tankBarrelLength').value = t.barrelLength ?? 3; document.getElementById('barrelLengthVal').innerText = t.barrelLength ?? 3;
+  document.getElementById('tankBarrelDiameter').value = t.barrelDiameter ?? 0.1; document.getElementById('barrelDiameterVal').innerText = t.barrelDiameter ?? 0.1;
+  document.getElementById('tankFireRate').value = t.mainCannonFireRate ?? 6; document.getElementById('fireRateVal').innerText = t.mainCannonFireRate ?? 6;
   document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
   document.getElementById('tankHP').value = t.engineHp; document.getElementById('hpVal').innerText = t.engineHp;
   document.getElementById('tankMaxSpeed').value = t.maxSpeed ?? 10; document.getElementById('maxSpeedVal').innerText = t.maxSpeed ?? 10;
@@ -405,6 +417,8 @@ function editTank(i) {
   document.getElementById('tankTurretWidth').value = t.turretWidth ?? 1; document.getElementById('turretWidthVal').innerText = t.turretWidth ?? 1;
   document.getElementById('tankTurretLength').value = t.turretLength ?? 1; document.getElementById('turretLengthVal').innerText = t.turretLength ?? 1;
   document.getElementById('tankTurretHeight').value = t.turretHeight ?? 0.25; document.getElementById('turretHeightVal').innerText = t.turretHeight ?? 0.25;
+  document.getElementById('tankTurretXPercent').value = t.turretXPercent ?? 50; document.getElementById('turretXPosVal').innerText = t.turretXPercent ?? 50;
+  document.getElementById('tankTurretYPercent').value = t.turretYPercent ?? 50; document.getElementById('turretYPosVal').innerText = t.turretYPercent ?? 50;
   editingTankIndex = i;
   document.getElementById('addTankBtn').innerText = 'Update Tank';
   updatePreview();
@@ -478,6 +492,10 @@ async function updatePreview() {
   const turretW = parseFloat(document.getElementById('tankTurretWidth').value) || 1;
   const turretL = parseFloat(document.getElementById('tankTurretLength').value) || 1;
   const turretH = parseFloat(document.getElementById('tankTurretHeight').value) || 0.25;
+  const barrelLen = parseFloat(document.getElementById('tankBarrelLength').value) || 3;
+  const barrelDia = parseFloat(document.getElementById('tankBarrelDiameter').value) || 0.1;
+  const turretX = parseFloat(document.getElementById('tankTurretXPercent').value) || 50;
+  const turretY = parseFloat(document.getElementById('tankTurretYPercent').value) || 50;
 
   if (previewTankGroup) previewScene.remove(previewTankGroup);
   previewTankGroup = new THREE.Group();
@@ -490,11 +508,24 @@ async function updatePreview() {
     new THREE.BoxGeometry(turretW, turretH, turretL),
     new THREE.MeshStandardMaterial({ color: 0x6b8e23 })
   );
-  previewTurret.position.y = bodyH / 2 + turretH / 2;
+  previewTurret.position.set(
+    (turretY / 100 - 0.5) * bodyW,
+    bodyH / 2 + turretH / 2,
+    (0.5 - turretX / 100) * bodyL
+  );
+  const gun = new THREE.Object3D();
+  const barrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(barrelDia / 2, barrelDia / 2, barrelLen),
+    new THREE.MeshStandardMaterial({ color: 0x6b8e23 })
+  );
+  barrel.rotation.x = -Math.PI / 2;
+  barrel.position.z = -barrelLen / 2;
+  gun.add(barrel);
+  previewTurret.add(gun);
   previewTankGroup.add(previewTurret);
   previewScene.add(previewTankGroup);
 
-  const maxDim = Math.max(bodyW, bodyL, bodyH) || 1;
+  const maxDim = Math.max(bodyW, bodyL + barrelLen, bodyH) || 1;
   previewCamera.position.set(maxDim * 2, maxDim * 2, maxDim * 2);
   previewCamera.lookAt(0, bodyH / 2, 0);
 }

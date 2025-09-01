@@ -1,7 +1,7 @@
 {
   "_comment": [
     "Summary: Persisted tank definitions for Tanks for Nothing.",
-    "Structure: JSON object with _comment array and tanks list including ammoCapacity (rounds).",
+    "Structure: JSON object with _comment array and tanks list including ammoCapacity (rounds), barrelLength (m), barrelDiameter (m), mainCannonFireRate (rpm), maxAmmoStorage (rounds), turretXPercent (% of length) and turretYPercent (% of width).",
     "Usage: Managed automatically by server; do not edit manually."
   ],
   "tanks": [
@@ -35,7 +35,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M3 Stuart",
@@ -67,7 +73,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M4A1 Sherman",
@@ -99,7 +111,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M4A3E2 Jumbo",
@@ -131,7 +149,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M10 Wolverine",
@@ -163,7 +187,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M18 Hellcat",
@@ -195,7 +225,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M26 Pershing",
@@ -227,7 +263,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M46 Patton",
@@ -259,7 +301,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M48 Patton",
@@ -291,7 +339,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "M60",
@@ -323,7 +377,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Panzer II",
@@ -355,7 +415,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Panzer III",
@@ -387,7 +453,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Panzer IV",
@@ -419,7 +491,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Panther A",
@@ -451,7 +529,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Tiger I",
@@ -483,7 +567,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Tiger II",
@@ -515,7 +605,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Jagdpanzer IV",
@@ -547,7 +643,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Jagdtiger",
@@ -579,7 +681,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Leopard 1",
@@ -611,7 +719,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Leopard 2A4",
@@ -643,7 +757,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "T-26",
@@ -675,7 +795,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "BT-7",
@@ -707,7 +833,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "T-34",
@@ -739,7 +871,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "KV-1",
@@ -771,7 +909,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "IS-1",
@@ -803,7 +947,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "IS-2",
@@ -835,7 +985,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "SU-85",
@@ -867,7 +1023,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "SU-152",
@@ -899,7 +1061,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "T-54",
@@ -931,7 +1099,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "T-62",
@@ -963,7 +1137,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "A13 Cruiser",
@@ -995,7 +1175,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Matilda II",
@@ -1027,7 +1213,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Churchill III",
@@ -1059,7 +1251,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Cromwell",
@@ -1091,7 +1289,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Comet",
@@ -1123,7 +1327,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Centurion Mk 3",
@@ -1155,7 +1365,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "FV4202",
@@ -1187,7 +1403,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Chieftain Mk 3",
@@ -1219,7 +1441,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Challenger 1",
@@ -1251,7 +1479,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Challenger 2",
@@ -1283,7 +1517,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Ha-Go",
@@ -1315,7 +1555,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Chi-Ha",
@@ -1347,7 +1593,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Chi-Nu",
@@ -1379,7 +1631,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Chi-To",
@@ -1411,7 +1669,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Chi-Ri",
@@ -1443,7 +1707,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Ho-Ni III",
@@ -1475,7 +1745,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Type 61",
@@ -1507,7 +1783,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Type 74",
@@ -1539,7 +1821,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Type 90",
@@ -1571,7 +1859,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     },
     {
       "name": "Type 10",
@@ -1603,7 +1897,13 @@
       "bodyHeight": 2.5,
       "turretWidth": 2.5,
       "turretLength": 3,
-      "turretHeight": 1.5
+      "turretHeight": 1.5,
+      "barrelLength": 3,
+      "barrelDiameter": 0.1,
+      "mainCannonFireRate": 6,
+      "maxAmmoStorage": 40,
+      "turretXPercent": 50,
+      "turretYPercent": 50
     }
   ]
 }
