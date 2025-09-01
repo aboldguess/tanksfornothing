@@ -1,6 +1,7 @@
 /* styles.css
-   Summary: Basic styling for Tanks for Nothing client and admin pages with a tank-inspired palette.
-   Structure: Layout, navbar, lobby overlay and instructions.
+   Summary: Basic styling for Tanks for Nothing client and admin pages with a tank-inspired palette,
+            now including an ammo HUD display.
+   Structure: Layout, navbar, lobby overlay, instructions and HUD elements.
    Usage: Included automatically by HTML pages. */
 /* Global body and navbar styling with a dark, tank-inspired palette */
 body {
@@ -175,6 +176,25 @@ body {
   border-radius: 4px;
   font-size: 14px;
   border: 1px solid #2b2b2b;
+}
+
+#ammoHud {
+  position: fixed;
+  bottom: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(34, 34, 34, 0.8);
+  color: #fff;
+  padding: 5px 10px;
+  border-radius: 4px;
+  font-size: 14px;
+  border: 1px solid #2b2b2b;
+  display: flex;
+  gap: 10px;
+}
+
+#ammoHud .selected {
+  text-decoration: underline;
 }
 
 canvas { display: block; }

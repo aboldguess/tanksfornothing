@@ -6,10 +6,10 @@
 //          simple collision physics, force-based tank movement and synchronizes state
 //          with a server via Socket.IO. Camera immediately reflects mouse movement while
 //          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
-//          under gravity. Remote
-//          players are represented with simple meshes that now include a
-//          visible cannon barrel and update as network events arrive so
-//          everyone shares the same battlefield.
+//          under gravity. Remote players are represented with simple meshes that now
+//          include a visible cannon barrel and update as network events arrive so
+//          everyone shares the same battlefield. HUD displays current ammo selections
+//          and remaining rounds.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
@@ -19,7 +19,7 @@ import * as THREE from './libs/three.module.js';
 // cannon-es provides lightweight rigid body physics with vehicle helpers.
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
-import { initHUD, updateHUD, showCrosshair } from './hud.js';
+import { initHUD, updateHUD, updateAmmoHUD, showCrosshair } from './hud.js';
 
 // Utility: render fatal errors directly on screen for easier debugging.
 function showError(message) {
@@ -63,7 +63,7 @@ function renderExplosion(position) {
 // socket when available and surface connection issues to the player.
 let socket = null;
 // Client-side ammo handling
-let ammoList = [];
+let playerAmmo = [];
 let selectedAmmo = null;
 const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
 // Gravity acceleration for local projectile simulation (m/s^2)
@@ -127,11 +127,6 @@ if (window.io) {
   socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
   socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
   socket.on('terrain', (name) => buildTerrain(name));
-  socket.on('ammo', (list) => {
-    ammoList = Array.isArray(list) ? list : [];
-    selectedAmmo = ammoList[0] || null;
-    console.log('Ammo received', ammoList);
-  });
   socket.on('projectile-fired', (p) => {
     if (!scene) return;
     const geom = new THREE.SphereGeometry(0.1, 8, 8);
@@ -209,6 +204,13 @@ if (window.io) {
       });
     }
     otherPlayers.clear();
+
+    // Restore ammunition to the original loadout on restart
+    playerAmmo.forEach(a => {
+      a.count = loadout[a.name] || 0;
+    });
+    ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
+    updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
   });
 } else {
   showError('Socket.IO failed to load. Running offline.');
@@ -452,6 +454,15 @@ joinBtn.addEventListener('click', () => {
   instructions.style.display = 'block';
   showCrosshair(true);
   applyTankConfig(selectedTank);
+
+  // Build player-specific ammo list from lobby selections
+  playerAmmo = Object.entries(loadout)
+    .filter(([, count]) => count > 0)
+    .map(([name, count]) => ({ name, count }));
+  selectedAmmo = playerAmmo[0] || null;
+  ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
+  updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+
   if (socket) socket.emit('join', { tank: selectedTank, loadout });
 });
 
@@ -460,6 +471,7 @@ if (socket) {
     lobbyError.textContent = msg;
     lobby.style.display = 'block';
     instructions.style.display = 'none';
+    updateAmmoHUD([]);
   });
 }
 
@@ -708,6 +720,7 @@ function init() {
 
   // Build HUD overlay to display runtime metrics and hide crosshair until gameplay
   initHUD();
+  updateAmmoHUD([]);
   showCrosshair(false);
 
   // Only engage pointer lock once the lobby is hidden so menu interactions
@@ -740,8 +753,9 @@ function init() {
     if (e.key === 'v') cameraMode = cameraMode === 'third' ? 'first' : 'third';
     if (e.key >= '1' && e.key <= '9') {
       const idx = parseInt(e.key, 10) - 1;
-      if (ammoList[idx]) {
-        selectedAmmo = ammoList[idx];
+      if (playerAmmo[idx]) {
+        selectedAmmo = playerAmmo[idx];
+        updateAmmoHUD(playerAmmo, selectedAmmo.name);
         console.log('Selected ammo', selectedAmmo.name);
       }
     }
@@ -759,11 +773,17 @@ function init() {
   window.addEventListener('mousedown', () => {
     if (document.pointerLockElement && socket && selectedAmmo) {
       const now = Date.now();
-      if (now - lastFireTime >= FIRE_DELAY * 1000 && ammoLeft > 0) {
+      if (
+        now - lastFireTime >= FIRE_DELAY * 1000 &&
+        ammoLeft > 0 &&
+        selectedAmmo.count > 0
+      ) {
         console.debug('Firing', selectedAmmo.name);
         socket.emit('fire', selectedAmmo.name);
         lastFireTime = now;
+        selectedAmmo.count -= 1;
         ammoLeft -= 1;
+        updateAmmoHUD(playerAmmo, selectedAmmo.name);
         console.debug('Ammo remaining', ammoLeft);
       }
     }
