@@ -119,6 +119,8 @@ body {
 
 #tankList .tank-card img {
   width: 80px;
+  height: 60px;
+  object-fit: contain; /* maintain aspect ratio within fixed thumbnail size */
 }
 
 #tankList .tank-card.selected {

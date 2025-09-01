@@ -229,6 +229,8 @@ let selectedNation = null;
 let selectedTank = null;
 let selectedClass = null; // current tank class tab
 const loadout = {};
+// Largest dimension across all tanks; used to render consistent-scale thumbnails
+let maxTankDimension = 0;
 
 // Populate lobby columns from server data
 async function loadLobbyData() {
@@ -239,6 +241,13 @@ async function loadLobbyData() {
       fetch('/api/ammo').then(r => r.json())
     ]);
     availableTanks = Array.isArray(tanks) ? tanks : [];
+    // Determine maximum dimension among all tanks so thumbnails share a scale
+    maxTankDimension = availableTanks.reduce((m, t) => {
+      const width = t.bodyWidth || 0;
+      const height = (t.bodyHeight || 0) + (t.turretHeight || 0);
+      const length = (t.bodyLength || 0) + (t.barrelLength || 0);
+      return Math.max(m, width, height, length);
+    }, 0);
     ammoDefs = Array.isArray(ammo) ? ammo : [];
     nationColumn.innerHTML = '';
     nations.forEach(n => {
@@ -292,6 +301,78 @@ function renderTanks() {
   renderTankList(filtered.filter(t => t.class === selectedClass));
 }
 
+// generateTankThumbnail builds a miniature Three.js scene to render a tank
+// from an isometric viewpoint. An orthographic camera sized using
+// `maxTankDimension` guarantees that every generated image uses the same scale,
+// allowing players to compare tank sizes visually.
+function generateTankThumbnail(t) {
+  const width = 80;
+  const height = 60;
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(width, height);
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  scene.add(new THREE.AmbientLight(0xffffff, 0.8));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.5);
+  dir.position.set(5, 10, 7);
+  scene.add(dir);
+
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(t.bodyWidth || 1, t.bodyHeight || 1, t.bodyLength || 1),
+    new THREE.MeshStandardMaterial({ color: 0x335533 })
+  );
+  const turret = new THREE.Mesh(
+    new THREE.BoxGeometry(t.turretWidth || 1, t.turretHeight || 1, t.turretLength || 1),
+    new THREE.MeshStandardMaterial({ color: 0x556655 })
+  );
+  turret.position.set(
+    (t.turretYPercent || 50) / 100 * (t.bodyWidth || 1) - (t.bodyWidth || 1) / 2,
+    (t.bodyHeight || 1) / 2 + (t.turretHeight || 1) / 2,
+    (0.5 - (t.turretXPercent || 50) / 100) * (t.bodyLength || 1)
+  );
+
+  const gun = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      (t.barrelDiameter || 0.1) / 2,
+      (t.barrelDiameter || 0.1) / 2,
+      t.barrelLength || 1
+    ),
+    new THREE.MeshStandardMaterial({ color: 0x556655 })
+  );
+  gun.rotation.x = -Math.PI / 2;
+  gun.position.z = -(t.barrelLength || 1) / 2;
+  turret.add(gun);
+  body.add(turret);
+  scene.add(body);
+
+  const size = maxTankDimension || 5;
+  const aspect = width / height;
+  const camera = new THREE.OrthographicCamera(
+    -size,
+    size,
+    size / aspect,
+    -size / aspect,
+    0.1,
+    100
+  );
+  camera.position.set(size, size, size);
+  camera.lookAt(0, (t.bodyHeight || 1) / 2, 0);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+
+  // Dispose resources to avoid leaking WebGL contexts on repeated renders
+  renderer.dispose();
+  body.geometry.dispose();
+  body.material.dispose();
+  turret.geometry.dispose();
+  turret.material.dispose();
+  gun.geometry.dispose();
+  gun.material.dispose();
+
+  return url;
+}
+
 // Render clickable tank cards with thumbnail and brief stats for the active class
 function renderTankList(list) {
   tankList.innerHTML = '';
@@ -300,8 +381,15 @@ function renderTankList(list) {
     const card = document.createElement('div');
     card.className = 'tank-card';
 
-    // Thumbnail with lazy loading for performance; placeholder when none provided
+    // Thumbnail rendered from tank geometry at a consistent isometric scale
     const img = document.createElement('img');
+    if (!t.thumbnail) {
+      try {
+        t.thumbnail = generateTankThumbnail(t);
+      } catch (err) {
+        console.error('thumbnail generation failed', err);
+      }
+    }
     img.src = t.thumbnail || 'https://placehold.co/80x60?text=Tank';
     img.alt = t.name;
     img.loading = 'lazy';
