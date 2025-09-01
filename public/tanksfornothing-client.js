@@ -862,9 +862,9 @@ function applyTankConfig(t) {
 
 function onMouseMove(e) {
   const sensitivity = 0.002; // radians per pixel of mouse movement
-  // Update the free camera orientation. Horizontal wraps at 2π to avoid number growth.
+  // Update the free camera orientation. Yaw no longer wraps at ±π so the turret
+  // can rotate continuously without snapping when crossing the rear arc of the tank.
   cameraYaw -= e.movementX * sensitivity;
-  cameraYaw = THREE.MathUtils.euclideanModulo(cameraYaw + Math.PI, Math.PI * 2) - Math.PI;
   // Vertical movement is inverted so dragging up looks up. Clamp to avoid flipping.
   cameraPitch = THREE.MathUtils.clamp(
     cameraPitch + e.movementY * sensitivity,
