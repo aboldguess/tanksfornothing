@@ -282,9 +282,7 @@ function collectTankForm() {
     cannonCaliber: parseInt(document.getElementById('tankCaliber').value, 10),
     ammo: Array.from(document.querySelectorAll('input[name="tankAmmo"]:checked')).map(cb => cb.value),
     ammoCapacity: parseInt(document.getElementById('tankAmmoCapacity').value, 10),
-    maxAmmoStorage: parseInt(document.getElementById('tankMaxAmmoStorage').value, 10),
     barrelLength: parseFloat(document.getElementById('tankBarrelLength').value),
-    barrelDiameter: parseFloat(document.getElementById('tankBarrelDiameter').value),
     mainCannonFireRate: parseInt(document.getElementById('tankFireRate').value, 10),
     crew: parseInt(document.getElementById('tankCrew').value, 10),
     engineHp: parseInt(document.getElementById('tankHP').value, 10),
@@ -397,9 +395,7 @@ function editTank(i) {
   document.getElementById('tankCaliber').value = t.cannonCaliber; document.getElementById('caliberVal').innerText = t.cannonCaliber;
   document.querySelectorAll('input[name="tankAmmo"]').forEach(cb => { cb.checked = t.ammo.includes(cb.value); });
   document.getElementById('tankAmmoCapacity').value = t.ammoCapacity ?? 40; document.getElementById('ammoCapVal').innerText = t.ammoCapacity ?? 40;
-  document.getElementById('tankMaxAmmoStorage').value = t.maxAmmoStorage ?? t.ammoCapacity ?? 40; document.getElementById('maxAmmoStorageVal').innerText = t.maxAmmoStorage ?? t.ammoCapacity ?? 40;
   document.getElementById('tankBarrelLength').value = t.barrelLength ?? 3; document.getElementById('barrelLengthVal').innerText = t.barrelLength ?? 3;
-  document.getElementById('tankBarrelDiameter').value = t.barrelDiameter ?? 0.1; document.getElementById('barrelDiameterVal').innerText = t.barrelDiameter ?? 0.1;
   document.getElementById('tankFireRate').value = t.mainCannonFireRate ?? 6; document.getElementById('fireRateVal').innerText = t.mainCannonFireRate ?? 6;
   document.getElementById('tankCrew').value = t.crew; document.getElementById('crewVal').innerText = t.crew;
   document.getElementById('tankHP').value = t.engineHp; document.getElementById('hpVal').innerText = t.engineHp;
