@@ -90,18 +90,27 @@ function createRemoteTank(t) {
     ),
     new THREE.MeshStandardMaterial({ color: 0x556655 })
   );
-  turt.position.y =
+  turt.position.set(
+    (t.turretYPercent ?? defaultTank.turretYPercent) / 100 * (t.bodyWidth ?? defaultTank.bodyWidth) -
+      (t.bodyWidth ?? defaultTank.bodyWidth) / 2,
     (t.bodyHeight ?? defaultTank.bodyHeight) / 2 +
-    (t.turretHeight ?? defaultTank.turretHeight) / 2;
+      (t.turretHeight ?? defaultTank.turretHeight) / 2,
+    (0.5 - (t.turretXPercent ?? defaultTank.turretXPercent) / 100) *
+      (t.bodyLength ?? defaultTank.bodyLength)
+  );
 
   // Remote gun barrel for visual parity with the local player tank.
   const gunObj = new THREE.Object3D();
   const barrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.1, 0.1, 3),
+    new THREE.CylinderGeometry(
+      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      t.barrelLength ?? defaultTank.barrelLength
+    ),
     new THREE.MeshStandardMaterial({ color: 0x556655 })
   );
   barrel.rotation.x = -Math.PI / 2;
-  barrel.position.z = -1.5;
+  barrel.position.z = -(t.barrelLength ?? defaultTank.barrelLength) / 2;
   gunObj.add(barrel);
   turt.add(gunObj);
 
@@ -372,13 +381,22 @@ const defaultTank = {
   bodyHeight: 1,
   turretWidth: 1.5,
   turretLength: 1.5,
-  turretHeight: 0.5
+  turretHeight: 0.5,
+  barrelLength: 3,
+  barrelDiameter: 0.1,
+  mainCannonFireRate: 6,
+  maxAmmoStorage: 40,
+  turretXPercent: 50,
+  turretYPercent: 50
 };
 // Movement coefficients derived from tank stats; mutable to apply tank-specific values
 let MAX_SPEED = defaultTank.maxSpeed / 3.6; // convert km/h to m/s
 let MAX_REVERSE_SPEED = defaultTank.maxReverseSpeed / 3.6; // convert km/h to m/s
 let ROT_SPEED = (2 * Math.PI) / defaultTank.bodyRotation; // radians per second
 let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
+let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
+let ammoLeft = defaultTank.maxAmmoStorage;
+let lastFireTime = 0;
 // Torque applied for A/D rotation; computed once mass is known
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
@@ -534,16 +552,24 @@ function init() {
     new THREE.BoxGeometry(defaultTank.turretWidth, defaultTank.turretHeight, defaultTank.turretLength),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
-  turret.position.y = defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2;
+  turret.position.set(
+    (defaultTank.turretYPercent / 100 - 0.5) * defaultTank.bodyWidth,
+    defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2,
+    (0.5 - defaultTank.turretXPercent / 100) * defaultTank.bodyLength
+  );
 
   // Gun pivot exposes rotation.x for pitch; barrel mesh aims down the -Z axis.
   gun = new THREE.Object3D();
   const barrel = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.1, 0.1, 3),
+    new THREE.CylinderGeometry(
+      defaultTank.barrelDiameter / 2,
+      defaultTank.barrelDiameter / 2,
+      defaultTank.barrelLength
+    ),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
   barrel.rotation.x = -Math.PI / 2; // orient along -Z
-  barrel.position.z = -1.5; // move so base sits at turret center
+  barrel.position.z = -defaultTank.barrelLength / 2; // move so base sits at turret center
   gun.add(barrel);
   turret.add(gun);
   tank.add(turret);
@@ -611,8 +637,14 @@ function init() {
   // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
     if (document.pointerLockElement && socket && selectedAmmo) {
-      console.debug('Firing', selectedAmmo.name);
-      socket.emit('fire', selectedAmmo.name);
+      const now = Date.now();
+      if (now - lastFireTime >= FIRE_DELAY * 1000 && ammoLeft > 0) {
+        console.debug('Firing', selectedAmmo.name);
+        socket.emit('fire', selectedAmmo.name);
+        lastFireTime = now;
+        ammoLeft -= 1;
+        console.debug('Ammo remaining', ammoLeft);
+      }
     }
   });
 
@@ -634,6 +666,9 @@ function applyTankConfig(t) {
   MAX_TURRET_TRAVERSE =
     traverseDeg === 0 ? Infinity : THREE.MathUtils.degToRad(traverseDeg);
   ACCELERATION = MAX_SPEED / 3;
+  FIRE_DELAY = 60 / (t.mainCannonFireRate ?? defaultTank.mainCannonFireRate);
+  ammoLeft = t.maxAmmoStorage ?? defaultTank.maxAmmoStorage;
+  lastFireTime = 0;
 
   // Reset orientation targets so camera and turret start aligned for new stats
   cameraYaw = 0;
@@ -655,9 +690,28 @@ function applyTankConfig(t) {
     t.turretHeight ?? defaultTank.turretHeight,
     t.turretLength ?? defaultTank.turretLength
   );
-  turret.position.y =
+  turret.position.set(
+    ((t.turretYPercent ?? defaultTank.turretYPercent) / 100 - 0.5) *
+      (t.bodyWidth ?? defaultTank.bodyWidth),
     (t.bodyHeight ?? defaultTank.bodyHeight) / 2 +
-    (t.turretHeight ?? defaultTank.turretHeight) / 2;
+      (t.turretHeight ?? defaultTank.turretHeight) / 2,
+    (0.5 - (t.turretXPercent ?? defaultTank.turretXPercent) / 100) *
+      (t.bodyLength ?? defaultTank.bodyLength)
+  );
+  if (gun && gun.children[0]) {
+    gun.remove(gun.children[0]);
+  }
+  const newBarrel = new THREE.Mesh(
+    new THREE.CylinderGeometry(
+      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      (t.barrelDiameter ?? defaultTank.barrelDiameter) / 2,
+      t.barrelLength ?? defaultTank.barrelLength
+    ),
+    new THREE.MeshStandardMaterial({ color: 0x777777 })
+  );
+  newBarrel.rotation.x = -Math.PI / 2;
+  newBarrel.position.z = -(t.barrelLength ?? defaultTank.barrelLength) / 2;
+  gun.add(newBarrel);
 
   world.removeBody(chassisBody);
   const box = new CANNON.Box(

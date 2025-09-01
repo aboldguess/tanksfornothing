@@ -106,6 +106,22 @@
                 <input id="tankAmmoCapacity" type="range" min="1" max="120" step="1" oninput="document.getElementById('ammoCapVal').innerText=this.value">
                 <span id="ammoCapVal"></span>
               </label>
+              <label>Max Ammo Storage (rounds)
+                <input id="tankMaxAmmoStorage" type="range" min="1" max="150" step="1" oninput="document.getElementById('maxAmmoStorageVal').innerText=this.value">
+                <span id="maxAmmoStorageVal"></span>
+              </label>
+              <label>Barrel Length (m)
+                <input id="tankBarrelLength" type="range" min="1" max="12" step="0.25" oninput="updatePreview();document.getElementById('barrelLengthVal').innerText=this.value">
+                <span id="barrelLengthVal"></span>
+              </label>
+              <label>Barrel Diameter (m)
+                <input id="tankBarrelDiameter" type="range" min="0.05" max="0.3" step="0.01" oninput="updatePreview();document.getElementById('barrelDiameterVal').innerText=this.value">
+                <span id="barrelDiameterVal"></span>
+              </label>
+              <label>Main Gun Fire Rate (rpm)
+                <input id="tankFireRate" type="range" min="1" max="60" step="1" oninput="document.getElementById('fireRateVal').innerText=this.value">
+                <span id="fireRateVal"></span>
+              </label>
               <label>Turret Rotation Time (s/360°)
                 <input id="tankTurretRot" type="range" min="1" max="60" step="1" oninput="document.getElementById('turretRotVal').innerText=this.value">
                 <span id="turretRotVal"></span>
@@ -186,6 +202,14 @@
               <label>Turret Height (m)
                 <input id="tankTurretHeight" type="range" min="0.25" max="2" step="0.25" oninput="updatePreview();document.getElementById('turretHeightVal').innerText=this.value">
                 <span id="turretHeightVal"></span>
+              </label>
+              <label>Turret X Position (%)
+                <input id="tankTurretXPercent" type="range" min="0" max="100" step="1" oninput="updatePreview();document.getElementById('turretXPosVal').innerText=this.value">
+                <span id="turretXPosVal"></span>
+              </label>
+              <label>Turret Y Position (%)
+                <input id="tankTurretYPercent" type="range" min="0" max="100" step="1" oninput="updatePreview();document.getElementById('turretYPosVal').innerText=this.value">
+                <span id="turretYPosVal"></span>
               </label>
               <canvas id="tankPreview" width="300" height="150" aria-label="Tank preview"></canvas>
             </fieldset>

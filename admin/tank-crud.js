@@ -29,6 +29,10 @@ const FORM_SECTIONS = [
       { id: 'cannonCaliber', label: 'Cannon Caliber (mm)', type: 'range', min: 20, max: 150, step: 10 },
       { id: 'ammo', label: 'Ammo Types', type: 'checkbox', options: ['AP', 'HE', 'HEAT', 'Smoke'] },
       { id: 'ammoCapacity', label: 'Ammo Capacity', type: 'range', min: 1, max: 120, step: 1 },
+      { id: 'maxAmmoStorage', label: 'Max Ammo Storage', type: 'range', min: 1, max: 150, step: 1 },
+      { id: 'barrelLength', label: 'Barrel Length (m)', type: 'range', min: 1, max: 12, step: 0.25 },
+      { id: 'barrelDiameter', label: 'Barrel Diameter (m)', type: 'range', min: 0.05, max: 0.3, step: 0.01 },
+      { id: 'mainCannonFireRate', label: 'Main Gun Fire Rate (rpm)', type: 'range', min: 1, max: 60, step: 1 },
       { id: 'turretRotation', label: 'Turret Rotation (s/360°)', type: 'range', min: 1, max: 60, step: 1 },
       { id: 'horizontalTraverse', label: 'Horizontal Traverse (deg)', type: 'range', min: 0, max: 20, step: 1 },
       { id: 'maxTurretIncline', label: 'Max Turret Incline (deg)', type: 'range', min: 0, max: 50, step: 1 },
@@ -61,7 +65,9 @@ const FORM_SECTIONS = [
       { id: 'bodyHeight', label: 'Body Height (m)', type: 'range', min: 1, max: 3, step: 0.25 },
       { id: 'turretWidth', label: 'Turret Width (m)', type: 'range', min: 1, max: 3, step: 0.25 },
       { id: 'turretLength', label: 'Turret Length (m)', type: 'range', min: 1, max: 5, step: 0.25 },
-      { id: 'turretHeight', label: 'Turret Height (m)', type: 'range', min: 0.25, max: 2, step: 0.25 }
+      { id: 'turretHeight', label: 'Turret Height (m)', type: 'range', min: 0.25, max: 2, step: 0.25 },
+      { id: 'turretXPercent', label: 'Turret X Position (%)', type: 'range', min: 0, max: 100, step: 1 },
+      { id: 'turretYPercent', label: 'Turret Y Position (%)', type: 'range', min: 0, max: 100, step: 1 }
     ]
   }
 ];
@@ -180,8 +186,8 @@ function drawTank(canvas, tank) {
   ctx.fillRect(bx, by, bl, bw);
   const tw = tank.turretWidth * scale;
   const tl = tank.turretLength * scale;
-  const tx = (canvas.width - tl) / 2;
-  const ty = (canvas.height - tw) / 2;
+  const tx = bx + (tank.turretXPercent ?? 50) / 100 * bl - tl / 2;
+  const ty = by + (tank.turretYPercent ?? 50) / 100 * bw - tw / 2;
   ctx.fillStyle = '#999';
   ctx.fillRect(tx, ty, tl, tw);
 }

@@ -470,6 +470,16 @@ function validateTank(t) {
   if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
   if (typeof t.ammoCapacity !== 'number' || t.ammoCapacity < 1 || t.ammoCapacity > 120 || t.ammoCapacity % 1 !== 0)
     return 'invalid ammo capacity'; // ensure finite round count
+  if (typeof t.barrelLength !== 'number' || t.barrelLength < 1 || t.barrelLength > 12 || (t.barrelLength * 4) % 1 !== 0)
+    return 'invalid barrel length';
+  if (typeof t.barrelDiameter !== 'number' || t.barrelDiameter < 0.05 || t.barrelDiameter > 0.3 || (t.barrelDiameter * 100) % 1 !== 0)
+    return 'invalid barrel diameter';
+  if (typeof t.mainCannonFireRate !== 'number' || t.mainCannonFireRate < 1 || t.mainCannonFireRate > 60 || t.mainCannonFireRate % 1 !== 0)
+    return 'invalid main cannon fire rate';
+  if (typeof t.maxAmmoStorage !== 'number' || t.maxAmmoStorage < 1 || t.maxAmmoStorage > 150 || t.maxAmmoStorage % 1 !== 0)
+    return 'invalid max ammo storage';
+  if (!Number.isInteger(t.turretXPercent) || t.turretXPercent < 0 || t.turretXPercent > 100) return 'invalid turretXPercent';
+  if (!Number.isInteger(t.turretYPercent) || t.turretYPercent < 0 || t.turretYPercent > 100) return 'invalid turretYPercent';
   if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
   if (typeof t.engineHp !== 'number' || t.engineHp < 100 || t.engineHp > 1000) return 'invalid engine hp';
   if (typeof t.maxSpeed !== 'number' || t.maxSpeed < 10 || t.maxSpeed > 100 || t.maxSpeed % 1 !== 0) return 'invalid max speed';
@@ -497,6 +507,10 @@ function validateTank(t) {
     cannonCaliber: t.cannonCaliber,
     ammo: t.ammo,
     ammoCapacity: t.ammoCapacity, // rounds carried
+    barrelLength: t.barrelLength,
+    barrelDiameter: t.barrelDiameter,
+    mainCannonFireRate: t.mainCannonFireRate,
+    maxAmmoStorage: t.maxAmmoStorage,
     crew: t.crew,
     engineHp: t.engineHp,
     maxSpeed: t.maxSpeed,
@@ -513,7 +527,9 @@ function validateTank(t) {
     bodyHeight: t.bodyHeight,
     turretWidth: t.turretWidth,
     turretLength: t.turretLength,
-    turretHeight: t.turretHeight
+    turretHeight: t.turretHeight,
+    turretXPercent: t.turretXPercent,
+    turretYPercent: t.turretYPercent
   };
 }
 
@@ -735,7 +751,9 @@ io.on('connection', (socket) => {
         gun: 0,
         health: 100,
         crew: tank.crew || 3,
-        armor: tank.armor || 20
+        armor: tank.armor || 20,
+        ammoRemaining: tank.maxAmmoStorage ?? tank.ammoCapacity ?? 0,
+        lastFire: 0
       });
       // Synchronize the newcomer with any players already in the game world.
       // Send existing player info before broadcasting the new arrival so the
@@ -765,6 +783,9 @@ io.on('connection', (socket) => {
   socket.on('fire', (ammoName) => {
     const shooter = players.get(socket.id);
     if (!shooter) return;
+    const now = Date.now();
+    const delay = 60000 / (shooter.mainCannonFireRate || 10);
+    if (now - shooter.lastFire < delay || shooter.ammoRemaining <= 0) return;
     const ammoDef = ammo.find((a) => a.name === ammoName);
     if (!ammoDef) {
       socket.emit('error', 'Invalid ammo selection');
@@ -773,13 +794,21 @@ io.on('connection', (socket) => {
     const angle = (shooter.rot || 0) + (shooter.turret || 0);
     const dirX = Math.sin(angle);
     const dirZ = Math.cos(angle);
-    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    shooter.lastFire = now;
+    shooter.ammoRemaining -= 1;
+    const id = `${now}-${Math.random().toString(16).slice(2)}`;
     const speed = ammoDef.speed ?? 200;
     const projectile = {
       id,
-      x: shooter.x,
+      x:
+        shooter.x +
+        (shooter.turretYPercent / 100 - 0.5) * shooter.bodyWidth -
+        dirX * (shooter.barrelLength ?? 3),
       y: shooter.y + 1,
-      z: shooter.z,
+      z:
+        shooter.z +
+        (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
+        dirZ * (shooter.barrelLength ?? 3),
       vx: -dirX * speed,
       vy: 0,
       vz: -dirZ * speed,
