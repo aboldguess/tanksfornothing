@@ -106,14 +106,29 @@ body {
   flex: 1;
 }
 
-#tankList img {
-  width: 80px;
+/* Tank selection cards with thumbnail and caption */
+#tankList .tank-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   cursor: pointer;
   border: 2px solid transparent;
+  padding: 4px;
+  width: 100px;
 }
 
-#tankList img.selected {
+#tankList .tank-card img {
+  width: 80px;
+}
+
+#tankList .tank-card.selected {
   border-color: #fff;
+}
+
+#tankList .tank-caption {
+  margin-top: 2px;
+  font-size: 0.8em;
+  text-align: center;
 }
 
 #ammoColumn {
