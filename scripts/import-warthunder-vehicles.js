@@ -13,9 +13,13 @@ import { validateTank } from '../tanksfornothing-server.js';
 const API_URL = 'https://wt.warthunder.com/encyclopedia/api/vehicles/';
 
 // Optional proxy support for corporate/firewalled environments. Set
-// HTTPS_PROXY or HTTP_PROXY to a URL like `http://host:port` and the
-// request will be tunneled through it.
-const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+// HTTPS_PROXY/HTTP_PROXY (or lowercase variants) to a URL like
+// `http://host:port` and the request will be tunneled through it.
+const proxyUrl =
+  process.env.HTTPS_PROXY ||
+  process.env.https_proxy ||
+  process.env.HTTP_PROXY ||
+  process.env.http_proxy;
 const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
 // Resolve path to data/tanks.json relative to this script.
@@ -74,21 +78,49 @@ function mapVehicleToTank(v) {
   };
 }
 
-/** Main importer routine. */
-async function importVehicles() {
-  console.log(`Fetching vehicles from ${API_URL}`);
-  let res;
+/**
+ * Fetch helper that retries once without the proxy on failure and provides
+ * detailed error diagnostics to aid debugging.
+ */
+async function fetchVehicles() {
   try {
-    res = await fetch(API_URL, { dispatcher });
+    return await fetch(API_URL, {
+      dispatcher,
+      headers: { 'User-Agent': 'tanksfornothing-import/1.0' }
+    });
   } catch (err) {
     console.error('Network request failed:', err.message);
+    if (err.cause) console.error('Underlying error:', err.cause);
+    if (dispatcher) {
+      console.warn('Retrying without proxy...');
+      try {
+        return await fetch(API_URL, {
+          headers: { 'User-Agent': 'tanksfornothing-import/1.0' }
+        });
+      } catch (err2) {
+        console.error('Retry without proxy failed:', err2.message);
+        if (err2.cause) console.error('Underlying error:', err2.cause);
+        if (proxyUrl) {
+          console.error('Proxy configured:', proxyUrl);
+        } else {
+          console.error('Set HTTPS_PROXY or HTTP_PROXY if your network requires a proxy.');
+        }
+        throw err2;
+      }
+    }
     if (proxyUrl) {
-      console.error('Proxy in use:', proxyUrl);
+      console.error('Proxy configured:', proxyUrl);
     } else {
       console.error('Set HTTPS_PROXY or HTTP_PROXY if your network requires a proxy.');
     }
     throw err;
   }
+}
+
+/** Main importer routine. */
+async function importVehicles() {
+  console.log(`Fetching vehicles from ${API_URL}`);
+  const res = await fetchVehicles();
   if (!res.ok) throw new Error(`API request failed with status ${res.status}`);
 
   const raw = await res.json();
