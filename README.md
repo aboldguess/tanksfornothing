@@ -42,6 +42,24 @@ Set `NODE_ENV=production` when deploying to enable secure cookies.
 Set `ADMIN_PASSWORD` to change the admin login password (default `adminpass`).
 Set `JWT_SECRET` to a long random string to sign authentication tokens.
 
+### Updating tank data from War Thunder
+
+Run `npm run import-wt` to pull ground vehicle definitions from the public War
+Thunder encyclopedia API and write them to `data/tanks.json`. If your network
+requires a proxy, export `HTTPS_PROXY` (or `HTTP_PROXY`) before running the
+import:
+
+```bash
+# Linux / macOS / Raspberry Pi
+HTTPS_PROXY=http://proxy.example.com:3128 npm run import-wt
+
+# Windows PowerShell
+$env:HTTPS_PROXY='http://proxy.example.com:3128'
+npm run import-wt
+```
+
+The script reports connection issues and proxy usage to aid debugging.
+
 ## Usage
  - Create an account at `http://localhost:3000/signup.html` then log in via `http://localhost:3000/login.html`.
  - Open `http://localhost:3000` in a modern browser after logging in to join the battle.
