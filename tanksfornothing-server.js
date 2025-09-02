@@ -888,6 +888,8 @@ setInterval(() => {
   }
 }, 50).unref();
 
-server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
+if (process.argv[1] === __filename) {
+  server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
+}
 
-export { app, server };
+export { app, server, validateTank };
