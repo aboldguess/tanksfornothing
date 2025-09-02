@@ -13,7 +13,8 @@
     "start": "node tanksfornothing-server.js",
     "dev": "node --watch tanksfornothing-server.js",
     "setup": "node scripts/init-data.js",
-    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint ."
+    "lint": "cross-env ESLINT_USE_FLAT_CONFIG=false eslint .",
+    "import-wt": "node scripts/import-warthunder-vehicles.js"
   },
   "keywords": [],
   "author": "",
