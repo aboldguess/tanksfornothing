@@ -1043,6 +1043,8 @@ function updateCamera() {
   // Camera orientation is driven directly by mouse input (cameraYaw/cameraPitch).
   // The turret will ease toward targetYaw/targetPitch separately.
   const yaw = tank.rotation.y + cameraYaw; // world yaw the camera should face
+  // cameraPitch convention: positive values mean the player is aiming downward.
+  // updateCamera translates that into the correct orientation for each mode.
   const pitch = cameraPitch; // world pitch the camera should face
 
   if (cameraMode === 'third') {
@@ -1067,8 +1069,11 @@ function updateCamera() {
       .applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
     camera.position.copy(tank.position).add(baseOffset);
 
+    // In first-person mode cameraPitch stores positive values when aiming downward.
+    // three.js' Euler expects positive pitch to look upward, so invert the value here
+    // to keep mouse movement consistent between camera modes.
     const orientation = new THREE.Quaternion().setFromEuler(
-      new THREE.Euler(pitch, yaw, 0, 'YXZ')
+      new THREE.Euler(-pitch, yaw, 0, 'YXZ')
     );
     const look = new THREE.Vector3(0, 0, -1).applyQuaternion(orientation);
     camera.lookAt(camera.position.clone().add(look));
