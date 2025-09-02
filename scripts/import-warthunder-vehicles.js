@@ -6,10 +6,17 @@
 
 import { promises as fs } from 'fs';
 import { fileURLToPath } from 'url';
+import { fetch, ProxyAgent } from 'undici';
 import { validateTank } from '../tanksfornothing-server.js';
 
 // War Thunder Vehicles API endpoint. Adjust if the upstream service changes.
 const API_URL = 'https://wt.warthunder.com/encyclopedia/api/vehicles/';
+
+// Optional proxy support for corporate/firewalled environments. Set
+// HTTPS_PROXY or HTTP_PROXY to a URL like `http://host:port` and the
+// request will be tunneled through it.
+const proxyUrl = process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
 // Resolve path to data/tanks.json relative to this script.
 const dataDir = new URL('../data/', import.meta.url);
@@ -72,9 +79,14 @@ async function importVehicles() {
   console.log(`Fetching vehicles from ${API_URL}`);
   let res;
   try {
-    res = await fetch(API_URL);
+    res = await fetch(API_URL, { dispatcher });
   } catch (err) {
     console.error('Network request failed:', err.message);
+    if (proxyUrl) {
+      console.error('Proxy in use:', proxyUrl);
+    } else {
+      console.error('Set HTTPS_PROXY or HTTP_PROXY if your network requires a proxy.');
+    }
     throw err;
   }
   if (!res.ok) throw new Error(`API request failed with status ${res.status}`);
