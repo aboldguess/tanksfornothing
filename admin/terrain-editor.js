@@ -30,6 +30,8 @@ const cellMeters = 50; // each grid cell equals 50 metres on the terrain
 const maxHeight = 100; // max elevation value used for shading
 
 let currentMode = 'ground'; // currently active editing tool
+let terrainEditorMissingListWarned = false; // prevent repeated console noise when markup changes
+let terrainEditorInitialized = false; // ensure DOM wiring happens only once
 
 // Capture-the-flag positions for red and blue teams (a-d each)
 function defaultFlags() {
@@ -266,6 +268,16 @@ function update3DPlot() {
     groundTypes.length === 1 ? 0 : i / (groundTypes.length - 1),
     g.color
   ]);
+  let highestElevation = 0;
+  for (const row of elevationGrid) {
+    for (const value of row) {
+      if (Number.isFinite(value) && value > highestElevation) highestElevation = value;
+    }
+  }
+  const safeMax = Math.max(1, highestElevation);
+  const axisMax = Math.min(maxHeight, Math.ceil(safeMax / 5) * 5);
+  const zTick = Math.max(1, Math.round(axisMax / 5));
+  console.debug('Plot axis scaling', { highestElevation, axisMax, zTick });
   const xCoords = Array.from({ length: gridWidth }, (_, i) => i * cellMeters);
   const yCoords = Array.from({ length: gridHeight }, (_, i) => i * cellMeters);
   const showAxes = document.getElementById('showAxes').checked; // user toggle for axis visibility
@@ -290,7 +302,7 @@ function update3DPlot() {
     scene: {
       xaxis: { title: 'X (m)', range: [0, mapWidthMeters], dtick: cellMeters, visible: showAxes },
       yaxis: { title: 'Y (m)', range: [0, mapHeightMeters], dtick: cellMeters, visible: showAxes },
-      zaxis: { title: 'Elevation (m)', range: [0, maxHeight], dtick: cellMeters, visible: showAxes },
+      zaxis: { title: 'Elevation (m)', range: [0, axisMax], dtick: zTick, visible: showAxes },
       aspectmode: 'data',
       dragmode: 'turntable',
       camera: { eye, projection: { type: projection } }
@@ -357,53 +369,58 @@ function setupTerrainEditor(e) {
   // Ensure required elements exist before wiring events to avoid runtime errors
   const groundTypesList = document.getElementById('groundTypesList');
   if (!groundTypesList) {
-    console.warn('setupTerrainEditor: #groundTypesList not found');
+    if (!terrainEditorMissingListWarned) {
+      console.warn('setupTerrainEditor: #groundTypesList not found');
+      terrainEditorMissingListWarned = true;
+    }
     return;
   }
 
-  const ids = [
-    'addGroundBtn',
-    'perlinBtn',
-    'showAxes',
-    'viewSelect',
-    'projectionType',
-    'lockCamera',
-    'sizeX',
-    'sizeY',
-    'terrainType'
-  ];
-  const elements = {};
-  for (const id of ids) {
-    const el = document.getElementById(id);
-    if (!el) {
-      console.warn(`setupTerrainEditor: #${id} not found`);
+  if (!terrainEditorInitialized) {
+    const ids = [
+      'addGroundBtn',
+      'perlinBtn',
+      'showAxes',
+      'viewSelect',
+      'projectionType',
+      'lockCamera',
+      'sizeX',
+      'sizeY',
+      'terrainType'
+    ];
+    const elements = {};
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) {
+        console.warn(`setupTerrainEditor: #${id} not found`);
+        return;
+      }
+      elements[id] = el;
+    }
+
+    const toolTabs = document.querySelectorAll('.tool-tab');
+    if (!toolTabs.length) {
+      console.warn('setupTerrainEditor: .tool-tab elements not found');
       return;
     }
-    elements[id] = el;
+
+    // Only render ground types after confirming the list exists
+    renderGroundTypes();
+
+    elements.addGroundBtn.addEventListener('click', addGroundType);
+    elements.perlinBtn.addEventListener('click', generatePerlinTerrain);
+    elements.showAxes.addEventListener('change', update3DPlot);
+    elements.viewSelect.addEventListener('change', update3DPlot);
+    elements.projectionType.addEventListener('change', update3DPlot);
+    elements.lockCamera.addEventListener('change', applyCameraLock);
+    toolTabs.forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
+
+    ['sizeX', 'sizeY', 'terrainType'].forEach(id => {
+      elements[id].addEventListener('change', initializeTerrain);
+    });
+
+    terrainEditorInitialized = true;
   }
-
-  const toolTabs = document.querySelectorAll('.tool-tab');
-  if (!toolTabs.length) {
-    console.warn('setupTerrainEditor: .tool-tab elements not found');
-    return;
-  }
-
-  // Only render ground types after confirming the list exists
-  renderGroundTypes();
-
-  elements.addGroundBtn.addEventListener('click', addGroundType);
-  elements.perlinBtn.addEventListener('click', generatePerlinTerrain);
-  elements.showAxes.addEventListener('change', update3DPlot);
-  elements.viewSelect.addEventListener('change', update3DPlot);
-  elements.projectionType.addEventListener('change', update3DPlot);
-  elements.lockCamera.addEventListener('change', applyCameraLock);
-  toolTabs.forEach(btn => btn.addEventListener('click', () => setMode(btn.dataset.mode)));
-
-  ['sizeX', 'sizeY', 'terrainType'].forEach(id => {
-    elements[id].addEventListener('change', initializeTerrain);
-  });
-
-  document.addEventListener('terrain-editor-opened', initializeTerrain);
 
   if (e && e.type === 'terrain-editor-opened') {
     initializeTerrain();
