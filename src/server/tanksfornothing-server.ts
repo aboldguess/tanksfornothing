@@ -1,5 +1,5 @@
-// tanksfornothing-server.js
-// Summary: Entry point server for Tanks for Nothing, a minimal blocky multiplayer tank game.
+// tanksfornothing-server.ts
+// Summary: TypeScript entry point server for Tanks for Nothing, the blocky multiplayer tank game.
 // This script sets up an Express web server with Socket.IO for real-time tank and projectile
 // updates, handles image uploads for ammo types, stores flag emojis for nations,
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
@@ -9,21 +9,139 @@
 // and projectiles spawn from the muzzle using that orientation and arc under gravity.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
-// Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
+// Usage: Run with `npm start` (which builds then executes dist/server/tanksfornothing-server.js).
 // ---------------------------------------------------------------------------
 
-import express from 'express';
-import http from 'http';
+import express, { type NextFunction, type Request, type Response } from 'express';
+import http from 'node:http';
 import { Server as SocketIOServer } from 'socket.io';
 import cookieParser from 'cookie-parser';
-import { promises as fs } from 'fs';
+import { promises as fs } from 'node:fs';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 import cookie from 'cookie';
 import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { generateGentleHills } from './utils/terrain-noise.js';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { generateGentleHills } from '../utils/terrain-noise.js';
+
+interface NationRecord {
+  name: string;
+  flag: string;
+}
+
+interface TankDefinition {
+  name: string;
+  nation: string;
+  br: number;
+  class: string;
+  armor: number;
+  turretArmor: number;
+  cannonCaliber: number;
+  ammo: string[];
+  ammoCapacity: number;
+  barrelLength: number;
+  mainCannonFireRate: number;
+  crew: number;
+  engineHp: number;
+  maxSpeed: number;
+  maxReverseSpeed: number;
+  incline: number;
+  bodyRotation: number;
+  turretRotation: number;
+  maxTurretIncline: number;
+  maxTurretDecline: number;
+  horizontalTraverse: number;
+  bodyWidth: number;
+  bodyLength: number;
+  bodyHeight: number;
+  turretWidth: number;
+  turretLength: number;
+  turretHeight: number;
+  turretXPercent: number;
+  turretYPercent: number;
+  [extra: string]: unknown;
+}
+
+interface AmmoDefinition {
+  name: string;
+  nation: string;
+  caliber: number;
+  armorPen: number;
+  type: string;
+  explosionRadius: number;
+  pen0: number;
+  pen100: number;
+  image: string;
+  speed: number;
+  damage: number;
+  penetration: number;
+  explosion: number;
+}
+
+type FlagPoint = { x: number; y: number } | null;
+
+interface TeamFlags {
+  a: FlagPoint;
+  b: FlagPoint;
+  c: FlagPoint;
+  d: FlagPoint;
+}
+
+interface TerrainDefinition {
+  name: string;
+  type: string;
+  size: { x: number; y: number };
+  flags: { red: TeamFlags; blue: TeamFlags };
+  ground: number[][];
+  elevation: number[][];
+}
+
+interface UserStats {
+  games: number;
+  kills: number;
+  deaths: number;
+}
+
+interface UserRecord {
+  passwordHash: string;
+  stats: UserStats;
+}
+
+interface PlayerState extends TankDefinition {
+  username: string;
+  ammoLoadout: Record<string, number>;
+  x: number;
+  y: number;
+  z: number;
+  rot: number;
+  turret: number;
+  gun: number;
+  health: number;
+  ammoRemaining: number;
+  lastFire: number;
+}
+
+interface ProjectileState {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  ammo: string;
+  shooter: string;
+  life: number;
+}
+
+interface AuthenticatedRequest extends Request {
+  username?: string;
+}
+
+interface AuthJwtPayload extends JwtPayload {
+  username: string;
+}
 
 const app = express();
 const server = http.createServer(app);
@@ -36,12 +154,17 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const uploadBase = path.join(__dirname, 'public', 'uploads');
+const projectRootUrl = new URL('../../', import.meta.url);
+const publicDir = fileURLToPath(new URL('./public', projectRootUrl));
+const adminDir = fileURLToPath(new URL('./admin', projectRootUrl));
+const uploadBase = path.join(publicDir, 'uploads');
 const ammoDir = path.join(uploadBase, 'ammo');
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    fs.mkdir(ammoDir, { recursive: true }).then(() => cb(null, ammoDir)).catch(cb);
+    fs.mkdir(ammoDir, { recursive: true })
+      .then(() => cb(null, ammoDir))
+      .catch((error) => cb(error as Error, ammoDir));
   },
   filename: (req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -58,10 +181,10 @@ const upload = multer({
 });
 
 // In-memory stores (tanks/ammo/terrains persisted to disk)
-const players = new Map(); // socket.id -> player state
-let tanks = []; // CRUD via admin, loaded from JSON file
-let ammo = []; // CRUD via admin, loaded from JSON file
-const defaultAmmo = [
+const players = new Map<string, PlayerState>(); // socket.id -> player state
+let tanks: TankDefinition[] = []; // CRUD via admin, loaded from JSON file
+let ammo: AmmoDefinition[] = []; // CRUD via admin, loaded from JSON file
+const defaultAmmo: AmmoDefinition[] = [
   {
     name: 'AP',
     nation: 'Neutral',
@@ -74,7 +197,8 @@ const defaultAmmo = [
     speed: 900,
     damage: 40,
     penetration: 50,
-    explosion: 0
+    explosion: 0,
+    image: ''
   },
   {
     name: 'HE',
@@ -88,41 +212,42 @@ const defaultAmmo = [
     speed: 600,
     damage: 20,
     penetration: 10,
-    explosion: 50
+    explosion: 50,
+    image: ''
   }
 ];
 // Active projectile list; each projectile contains position, velocity and metadata
-const projectiles = new Map(); // id -> projectile state
+const projectiles = new Map<string, ProjectileState>(); // id -> projectile state
 // Gravity acceleration applied to shells (m/s^2)
 const GRAVITY = -9.81;
 // Terrains now include metadata so map listings can show thumbnails and size
-function defaultFlags() {
+function defaultFlags(): { red: TeamFlags; blue: TeamFlags } {
   return {
     red: { a: null, b: null, c: null, d: null },
     blue: { a: null, b: null, c: null, d: null }
   };
 }
-function sanitizeFlags(f) {
+function sanitizeFlags(f: unknown): { red: TeamFlags; blue: TeamFlags } {
   const res = defaultFlags();
-  if (!f) return res;
-  ['red', 'blue'].forEach(team => {
-    ['a', 'b', 'c', 'd'].forEach(letter => {
-      const pos = f?.[team]?.[letter];
-      if (pos && typeof pos.x === 'number' && typeof pos.y === 'number') {
-        res[team][letter] = { x: pos.x, y: pos.y };
+  if (!f || typeof f !== 'object') return res;
+  ['red', 'blue'].forEach((team) => {
+    ['a', 'b', 'c', 'd'].forEach((letter) => {
+      const pos = (f as Record<string, Record<string, FlagPoint> | undefined>)?.[team]?.[letter];
+      if (pos && typeof pos === 'object' && typeof pos.x === 'number' && typeof pos.y === 'number') {
+        res[team as 'red' | 'blue'][letter as keyof TeamFlags] = { x: pos.x, y: pos.y };
       }
     });
   });
   return res;
 }
 
-function sanitizeGrid(g) {
+function sanitizeGrid(g: unknown): number[][] {
   if (!Array.isArray(g)) return [];
-  return g.map(row =>
-    Array.isArray(row) ? row.map(v => (typeof v === 'number' ? v : 0)) : []
+  return g.map((row) =>
+    Array.isArray(row) ? row.map((v) => (typeof v === 'number' ? v : 0)) : []
   );
 }
-let terrains = [{
+let terrains: TerrainDefinition[] = [{
   name: 'Gentle Hills',
   type: 'fields',
   size: { x: 1, y: 1 },
@@ -132,27 +257,28 @@ let terrains = [{
 }];
 let currentTerrain = 0; // index into terrains
 let terrain = 'Gentle Hills'; // currently active terrain name
-let baseBR = null; // Battle Rating of first player
+let baseBR: number | null = null; // Battle Rating of first player
 // Nations persisted separately; maintain array and Set for validation
-let nations = []; // CRUD via admin, loaded from JSON file
-let nationsSet = new Set();
+let nations: NationRecord[] = []; // CRUD via admin, loaded from JSON file
+let nationsSet = new Set<string>();
 
 // Users persisted to disk for authentication and stat tracking
-let users = new Map(); // username -> { passwordHash, stats }
+let users = new Map<string, UserRecord>(); // username -> { passwordHash, stats }
 
-const TANKS_FILE = new URL('./data/tanks.json', import.meta.url);
-const NATIONS_FILE = new URL('./data/nations.json', import.meta.url);
-const TERRAIN_FILE = new URL('./data/terrains.json', import.meta.url);
-const AMMO_FILE = new URL('./data/ammo.json', import.meta.url);
-const USERS_FILE = new URL('./data/users.json', import.meta.url);
+const TANKS_FILE = new URL('./data/tanks.json', projectRootUrl);
+const NATIONS_FILE = new URL('./data/nations.json', projectRootUrl);
+const TERRAIN_FILE = new URL('./data/terrains.json', projectRootUrl);
+const AMMO_FILE = new URL('./data/ammo.json', projectRootUrl);
+const USERS_FILE = new URL('./data/users.json', projectRootUrl);
 
 // Generic JSON helpers with backup handling to guard against corruption
-async function safeReadJson(file, defaults) {
+async function safeReadJson<T>(file: URL, defaults: T): Promise<T> {
   try {
     const text = await fs.readFile(file, 'utf8');
-    return JSON.parse(text);
+    return JSON.parse(text) as T;
   } catch (err) {
-    console.error(`Failed to read ${file.pathname}:`, err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to read ${file.pathname}:`, message);
     const bak = new URL(file.href + '.bak');
     try {
       const backup = await fs.readFile(bak, 'utf8');
@@ -160,9 +286,10 @@ async function safeReadJson(file, defaults) {
       try {
         await fs.copyFile(bak, file);
       } catch (copyErr) {
-        console.warn(`Failed to restore ${file.pathname} from backup:`, copyErr.message);
+        const copyMsg = copyErr instanceof Error ? copyErr.message : String(copyErr);
+        console.warn(`Failed to restore ${file.pathname} from backup:`, copyMsg);
       }
-      return JSON.parse(backup);
+      return JSON.parse(backup) as T;
     } catch {
       console.warn(`No usable data for ${file.pathname}, using defaults`);
       return defaults;
@@ -170,7 +297,7 @@ async function safeReadJson(file, defaults) {
   }
 }
 
-async function safeWriteJson(file, data) {
+async function safeWriteJson(file: URL, data: unknown): Promise<void> {
   const dir = new URL('.', file);
   const tmp = new URL(file.href + '.tmp');
   const bak = new URL(file.href + '.bak');
@@ -181,27 +308,30 @@ async function safeWriteJson(file, data) {
     await fs.rename(file, bak);
   } catch (renameErr) {
     // It's acceptable if the original file does not exist yet.
-    console.warn(`No original file to backup for ${file.pathname}:`, renameErr.message);
+    const renameMsg = renameErr instanceof Error ? renameErr.message : String(renameErr);
+    console.warn(`No original file to backup for ${file.pathname}:`, renameMsg);
   }
   try {
     await fs.rename(tmp, file);
   } catch (err) {
-    console.error(`Failed to write ${file.pathname}:`, err.message);
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`Failed to write ${file.pathname}:`, message);
     try {
       await fs.rename(bak, file);
     } catch (restoreErr) {
-      console.error(`Failed to restore backup for ${file.pathname}:`, restoreErr.message);
+      const restoreMsg = restoreErr instanceof Error ? restoreErr.message : String(restoreErr);
+      console.error(`Failed to restore backup for ${file.pathname}:`, restoreMsg);
     }
     throw err;
   }
 }
 
 async function loadTanks() {
-  const data = await safeReadJson(TANKS_FILE, { tanks: [] });
+  const data = await safeReadJson<{ tanks: TankDefinition[] }>(TANKS_FILE, { tanks: [] });
   if (Array.isArray(data.tanks)) {
     // Only tank destroyers should retain a horizontal traverse limit; all other
     // classes rotate freely so we normalize their value to 0 (meaning unlimited).
-    tanks = data.tanks.map(t => ({
+    tanks = data.tanks.map((t) => ({
       ...t,
       horizontalTraverse: t.class === 'Tank Destroyer' ? t.horizontalTraverse : 0
     }));
@@ -221,7 +351,7 @@ async function saveTanks() {
 }
 
 async function loadNations() {
-  const data = await safeReadJson(NATIONS_FILE, { nations: [] });
+  const data = await safeReadJson<{ nations: NationRecord[] | string[] }>(NATIONS_FILE, { nations: [] });
   if (Array.isArray(data.nations)) {
     nations = data.nations.map((n) => ({ name: n.name || n, flag: n.flag || '' }));
     nationsSet = new Set(nations.map((n) => n.name));
@@ -253,9 +383,12 @@ async function loadTerrains() {
       elevation: generateGentleHills(20, 20)
     }]
   };
-  const data = await safeReadJson(TERRAIN_FILE, defaults);
+  const data = await safeReadJson<{ current: number; terrains: TerrainDefinition[] }>(
+    TERRAIN_FILE,
+    defaults
+  );
   if (Array.isArray(data.terrains)) {
-    terrains = data.terrains.map(t => ({
+    terrains = data.terrains.map((t) => ({
       name: t.name || 'Unnamed',
       type: t.type || 'fields',
       size: t.size || { x: 1, y: 1 },
@@ -282,7 +415,7 @@ async function saveTerrains() {
 }
 
 async function loadAmmo() {
-  const data = await safeReadJson(AMMO_FILE, { ammo: defaultAmmo });
+  const data = await safeReadJson<{ ammo: AmmoDefinition[] }>(AMMO_FILE, { ammo: defaultAmmo });
   if (Array.isArray(data.ammo)) ammo = data.ammo;
 }
 
@@ -299,10 +432,20 @@ async function saveAmmo() {
 }
 
 async function loadUsers() {
-  const data = await safeReadJson(USERS_FILE, { users: [] });
+  const data = await safeReadJson<{ users: Array<{ username: string; passwordHash: string; stats?: UserStats }> }>(
+    USERS_FILE,
+    { users: [] }
+  );
   if (Array.isArray(data.users)) {
     users = new Map(
-      data.users.map(u => [u.username, { passwordHash: u.passwordHash, stats: u.stats || { games: 0, kills: 0, deaths: 0 } }])
+      data.users.map((u) => {
+        const stats: UserStats = {
+          games: u.stats?.games ?? 0,
+          kills: u.stats?.kills ?? 0,
+          deaths: u.stats?.deaths ?? 0
+        };
+        return [u.username, { passwordHash: u.passwordHash, stats } satisfies UserRecord];
+      })
     );
   }
 }
@@ -329,30 +472,33 @@ await loadUsers();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // support classic form posts
 app.use(cookieParser()); // ensure req.cookies is populated for auth checks
-app.use(express.static('public'));
+app.use(express.static(publicDir));
 
 // Admin HTML pages require authentication; login assets remain public
-app.get('/admin', (req, res) => {
+app.get('/admin', (req: Request, res: Response) => {
   if (req.cookies && req.cookies.admin === 'true') {
     return res.redirect('/admin/admin.html');
   }
   res.redirect('/admin/login.html');
 });
-app.get('/admin/:page.html', (req, res, next) => {
+app.get('/admin/:page.html', (req: Request, res: Response, next: NextFunction) => {
   if (req.params.page === 'login') return next();
   if (req.cookies && req.cookies.admin === 'true') return next();
   return res.redirect('/admin/login.html');
 });
-app.use('/admin', express.static('admin'));
+app.use('/admin', express.static(adminDir));
 
 // Admin authentication middleware
-function requireAdmin(req, res, next) {
-  if (req.cookies && req.cookies.admin === 'true') return next();
-  return res.status(401).json({ error: 'unauthorized' });
+function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  if (req.cookies && req.cookies.admin === 'true') {
+    next();
+    return;
+  }
+  res.status(401).json({ error: 'unauthorized' });
 }
 
 // Admin login endpoint
-app.post('/admin/login', (req, res) => {
+app.post('/admin/login', (req: Request, res: Response) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
     console.log('Admin login successful');
@@ -369,7 +515,7 @@ app.post('/admin/login', (req, res) => {
 });
 
 // Admin logout endpoint to clear auth cookie with matching attributes
-app.post('/admin/logout', (req, res) => {
+app.post('/admin/logout', (req: Request, res: Response) => {
   res.clearCookie('admin', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -379,19 +525,19 @@ app.post('/admin/logout', (req, res) => {
 });
 
 // Quick check endpoint for client to verify admin status
-app.get('/admin/status', (req, res) => {
+app.get('/admin/status', (req: Request, res: Response) => {
   if (req.cookies && req.cookies.admin === 'true') return res.json({ admin: true });
   res.status(401).json({ admin: false });
 });
 
 // Return all user statistics for admin dashboard
-app.get('/api/users', requireAdmin, (req, res) => {
+app.get('/api/users', requireAdmin, (req: Request, res: Response) => {
   const list = Array.from(users, ([username, u]) => ({ username, stats: u.stats }));
   res.json(list);
 });
 
 // User signup endpoint with bcrypt password hashing
-app.post('/api/signup', async (req, res) => {
+app.post('/api/signup', async (req: Request, res: Response) => {
   const { username, password } = req.body || {};
   if (typeof username !== 'string' || typeof password !== 'string' || !username.trim() || password.length < 6) {
     return res.status(400).json({ error: 'invalid credentials' });
@@ -405,7 +551,7 @@ app.post('/api/signup', async (req, res) => {
 });
 
 // User login endpoint issues httpOnly JWT cookie
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', async (req: Request, res: Response) => {
   const { username, password } = req.body || {};
   const record = users.get(username);
   if (!record || !(await bcrypt.compare(password || '', record.passwordHash))) {
@@ -422,7 +568,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Clear JWT cookie to sign out
-app.post('/api/logout', (req, res) => {
+app.post('/api/logout', (req: Request, res: Response) => {
   res.clearCookie('token', {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -432,12 +578,19 @@ app.post('/api/logout', (req, res) => {
 });
 
 // Authentication middleware using JWT cookie
-function requireAuth(req, res, next) {
+function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies && req.cookies.token;
   if (!token) return res.status(401).json({ error: 'auth required' });
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    req.username = payload.username;
+    if (!payload || typeof payload === 'string') {
+      return res.status(401).json({ error: 'auth failed' });
+    }
+    const jwtPayload = payload as AuthJwtPayload;
+    if (typeof jwtPayload.username !== 'string') {
+      return res.status(401).json({ error: 'auth failed' });
+    }
+    (req as AuthenticatedRequest).username = jwtPayload.username;
     return next();
   } catch {
     return res.status(401).json({ error: 'auth failed' });
@@ -445,10 +598,11 @@ function requireAuth(req, res, next) {
 }
 
 // Fetch current user stats
-app.get('/api/stats', requireAuth, (req, res) => {
-  const u = users.get(req.username);
-  if (!u) return res.status(404).json({ error: 'user not found' });
-  res.json({ username: req.username, stats: u.stats });
+app.get('/api/stats', requireAuth, (req: Request, res: Response) => {
+  const authedReq = req as AuthenticatedRequest;
+  const u = authedReq.username ? users.get(authedReq.username) : undefined;
+  if (!u || !authedReq.username) return res.status(404).json({ error: 'user not found' });
+  res.json({ username: authedReq.username, stats: u.stats });
 });
 
 // Admin CRUD endpoints with validation helpers
@@ -456,117 +610,165 @@ const classes = new Set(['Light/Scout', 'Medium/MBT', 'Heavy', 'Tank Destroyer']
 const ammoChoices = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 const ammoTypes = new Set(['HE', 'HEAT', 'AP', 'Smoke']);
 
-function validateNation(n) {
-  if (!n || typeof n.name !== 'string' || !n.name.trim()) return 'name required';
-  // Flag is stored as an emoji string; fallback to empty if invalid
-  return { name: n.name.trim(), flag: typeof n.flag === 'string' ? n.flag : '' };
+function validateNation(n: unknown): NationRecord | string {
+  if (typeof n === 'string') {
+    const trimmed = n.trim();
+    if (!trimmed) return 'name required';
+    return { name: trimmed, flag: '' };
+  }
+  if (!n || typeof n !== 'object') return 'name required';
+  const record = n as Record<string, unknown>;
+  const name = typeof record.name === 'string' ? record.name.trim() : '';
+  if (!name) return 'name required';
+  const flag = typeof record.flag === 'string' ? record.flag : '';
+  return { name, flag };
 }
 
-function validateTank(t) {
-  if (typeof t.name !== 'string' || !t.name.trim()) return 'name required';
-  if (typeof t.nation !== 'string' || !nationsSet.has(t.nation)) return 'invalid nation';
-  if (typeof t.br !== 'number' || t.br < 1 || t.br > 10) return 'br out of range';
-  if (typeof t.class !== 'string' || !classes.has(t.class)) return 'invalid class';
-  if (typeof t.armor !== 'number' || t.armor < 10 || t.armor > 150) return 'armor out of range';
-  if (typeof t.turretArmor !== 'number' || t.turretArmor < 10 || t.turretArmor > 150) return 'turretArmor out of range'; // turret protection
-  if (typeof t.cannonCaliber !== 'number' || t.cannonCaliber < 20 || t.cannonCaliber > 150) return 'caliber out of range';
-  if (!Array.isArray(t.ammo) || !t.ammo.every(a => ammoChoices.has(a))) return 'invalid ammo list';
-  if (typeof t.ammoCapacity !== 'number' || t.ammoCapacity < 1 || t.ammoCapacity > 120 || t.ammoCapacity % 1 !== 0)
-    return 'invalid ammo capacity'; // ensure finite round count
-  if (typeof t.barrelLength !== 'number' || t.barrelLength < 1 || t.barrelLength > 12 || (t.barrelLength * 4) % 1 !== 0)
+function validateTank(t: unknown): TankDefinition | string {
+  if (!t || typeof t !== 'object') return 'invalid payload';
+  const tank = t as Record<string, unknown>;
+  if (typeof tank.name !== 'string' || !tank.name.trim()) return 'name required';
+  if (typeof tank.nation !== 'string' || !nationsSet.has(tank.nation)) return 'invalid nation';
+  if (typeof tank.br !== 'number' || tank.br < 1 || tank.br > 10) return 'br out of range';
+  if (typeof tank.class !== 'string' || !classes.has(tank.class)) return 'invalid class';
+  if (typeof tank.armor !== 'number' || tank.armor < 10 || tank.armor > 150) return 'armor out of range';
+  if (typeof tank.turretArmor !== 'number' || tank.turretArmor < 10 || tank.turretArmor > 150) return 'turretArmor out of range';
+  if (typeof tank.cannonCaliber !== 'number' || tank.cannonCaliber < 20 || tank.cannonCaliber > 150) return 'caliber out of range';
+  if (!Array.isArray(tank.ammo) || !tank.ammo.every((a) => typeof a === 'string' && ammoChoices.has(a))) return 'invalid ammo list';
+  if (typeof tank.ammoCapacity !== 'number' || tank.ammoCapacity < 1 || tank.ammoCapacity > 120 || tank.ammoCapacity % 1 !== 0)
+    return 'invalid ammo capacity';
+  if (typeof tank.barrelLength !== 'number' || tank.barrelLength < 1 || tank.barrelLength > 12 || (tank.barrelLength * 4) % 1 !== 0)
     return 'invalid barrel length';
-  if (typeof t.mainCannonFireRate !== 'number' || t.mainCannonFireRate < 1 || t.mainCannonFireRate > 60 || t.mainCannonFireRate % 1 !== 0)
+  if (
+    typeof tank.mainCannonFireRate !== 'number' ||
+    tank.mainCannonFireRate < 1 ||
+    tank.mainCannonFireRate > 60 ||
+    tank.mainCannonFireRate % 1 !== 0
+  )
     return 'invalid main cannon fire rate';
-  if (!Number.isInteger(t.turretXPercent) || t.turretXPercent < 0 || t.turretXPercent > 100) return 'invalid turretXPercent';
-  if (!Number.isInteger(t.turretYPercent) || t.turretYPercent < 0 || t.turretYPercent > 100) return 'invalid turretYPercent';
-  if (!Number.isInteger(t.crew) || t.crew <= 0) return 'invalid crew count';
-  if (typeof t.engineHp !== 'number' || t.engineHp < 100 || t.engineHp > 1000) return 'invalid engine hp';
-  if (typeof t.maxSpeed !== 'number' || t.maxSpeed < 10 || t.maxSpeed > 100 || t.maxSpeed % 1 !== 0) return 'invalid max speed';
-  if (typeof t.maxReverseSpeed !== 'number' || t.maxReverseSpeed < 0 || t.maxReverseSpeed > 50 || (t.maxReverseSpeed * 2) % 1 !== 0) return 'invalid max reverse speed';
-  if (typeof t.incline !== 'number' || t.incline < 2 || t.incline > 12) return 'incline out of range';
-  if (typeof t.bodyRotation !== 'number' || t.bodyRotation < 1 || t.bodyRotation > 60) return 'invalid body rotation';
-  if (typeof t.turretRotation !== 'number' || t.turretRotation < 1 || t.turretRotation > 60) return 'invalid turret rotation';
-  if (typeof t.maxTurretIncline !== 'number' || t.maxTurretIncline < 0 || t.maxTurretIncline > 50 || t.maxTurretIncline % 1 !== 0) return 'invalid turret incline';
-  if (typeof t.maxTurretDecline !== 'number' || t.maxTurretDecline < 0 || t.maxTurretDecline > 25 || t.maxTurretDecline % 1 !== 0) return 'invalid turret decline';
-  if (!Number.isInteger(t.horizontalTraverse) || t.horizontalTraverse < 0 || t.horizontalTraverse > 20)
+  if (!Number.isInteger(tank.turretXPercent) || Number(tank.turretXPercent) < 0 || Number(tank.turretXPercent) > 100)
+    return 'invalid turretXPercent';
+  if (!Number.isInteger(tank.turretYPercent) || Number(tank.turretYPercent) < 0 || Number(tank.turretYPercent) > 100)
+    return 'invalid turretYPercent';
+  if (!Number.isInteger(tank.crew) || Number(tank.crew) <= 0) return 'invalid crew count';
+  if (typeof tank.engineHp !== 'number' || tank.engineHp < 100 || tank.engineHp > 1000) return 'invalid engine hp';
+  if (typeof tank.maxSpeed !== 'number' || tank.maxSpeed < 10 || tank.maxSpeed > 100 || tank.maxSpeed % 1 !== 0)
+    return 'invalid max speed';
+  if (
+    typeof tank.maxReverseSpeed !== 'number' ||
+    tank.maxReverseSpeed < 0 ||
+    tank.maxReverseSpeed > 50 ||
+    (tank.maxReverseSpeed * 2) % 1 !== 0
+  )
+    return 'invalid max reverse speed';
+  if (typeof tank.incline !== 'number' || tank.incline < 2 || tank.incline > 12) return 'incline out of range';
+  if (typeof tank.bodyRotation !== 'number' || tank.bodyRotation < 1 || tank.bodyRotation > 60) return 'invalid body rotation';
+  if (typeof tank.turretRotation !== 'number' || tank.turretRotation < 1 || tank.turretRotation > 60) return 'invalid turret rotation';
+  if (
+    typeof tank.maxTurretIncline !== 'number' ||
+    tank.maxTurretIncline < 0 ||
+    tank.maxTurretIncline > 50 ||
+    tank.maxTurretIncline % 1 !== 0
+  )
+    return 'invalid turret incline';
+  if (
+    typeof tank.maxTurretDecline !== 'number' ||
+    tank.maxTurretDecline < 0 ||
+    tank.maxTurretDecline > 25 ||
+    tank.maxTurretDecline % 1 !== 0
+  )
+    return 'invalid turret decline';
+  if (!Number.isInteger(tank.horizontalTraverse) || Number(tank.horizontalTraverse) < 0 || Number(tank.horizontalTraverse) > 20)
     return 'invalid horizontal traverse';
-  if (typeof t.bodyWidth !== 'number' || t.bodyWidth < 1 || t.bodyWidth > 5 || (t.bodyWidth * 4) % 1 !== 0) return 'invalid body width';
-  if (typeof t.bodyLength !== 'number' || t.bodyLength < 1 || t.bodyLength > 10 || (t.bodyLength * 4) % 1 !== 0) return 'invalid body length';
-  if (typeof t.bodyHeight !== 'number' || t.bodyHeight < 1 || t.bodyHeight > 3 || (t.bodyHeight * 4) % 1 !== 0) return 'invalid body height';
-  if (typeof t.turretWidth !== 'number' || t.turretWidth < 1 || t.turretWidth > 3 || (t.turretWidth * 4) % 1 !== 0) return 'invalid turret width';
-  if (typeof t.turretLength !== 'number' || t.turretLength < 1 || t.turretLength > 5 || (t.turretLength * 4) % 1 !== 0) return 'invalid turret length';
-  if (typeof t.turretHeight !== 'number' || t.turretHeight < 0.25 || t.turretHeight > 2 || (t.turretHeight * 4) % 1 !== 0) return 'invalid turret height';
+  if (typeof tank.bodyWidth !== 'number' || tank.bodyWidth < 1 || tank.bodyWidth > 5 || (tank.bodyWidth * 4) % 1 !== 0)
+    return 'invalid body width';
+  if (typeof tank.bodyLength !== 'number' || tank.bodyLength < 1 || tank.bodyLength > 10 || (tank.bodyLength * 4) % 1 !== 0)
+    return 'invalid body length';
+  if (typeof tank.bodyHeight !== 'number' || tank.bodyHeight < 1 || tank.bodyHeight > 3 || (tank.bodyHeight * 4) % 1 !== 0)
+    return 'invalid body height';
+  if (typeof tank.turretWidth !== 'number' || tank.turretWidth < 1 || tank.turretWidth > 3 || (tank.turretWidth * 4) % 1 !== 0)
+    return 'invalid turret width';
+  if (typeof tank.turretLength !== 'number' || tank.turretLength < 1 || tank.turretLength > 5 || (tank.turretLength * 4) % 1 !== 0)
+    return 'invalid turret length';
+  if (typeof tank.turretHeight !== 'number' || tank.turretHeight < 0.25 || tank.turretHeight > 2 || (tank.turretHeight * 4) % 1 !== 0)
+    return 'invalid turret height';
   return {
-    name: t.name.trim(),
-    nation: t.nation,
-    br: t.br,
-    class: t.class,
-    armor: t.armor,
-    turretArmor: t.turretArmor,
-    cannonCaliber: t.cannonCaliber,
-    ammo: t.ammo,
-    ammoCapacity: t.ammoCapacity, // rounds carried
-    barrelLength: t.barrelLength,
-    mainCannonFireRate: t.mainCannonFireRate,
-    crew: t.crew,
-    engineHp: t.engineHp,
-    maxSpeed: t.maxSpeed,
-    maxReverseSpeed: t.maxReverseSpeed,
-    incline: t.incline,
-    bodyRotation: t.bodyRotation,
-    turretRotation: t.turretRotation,
-    maxTurretIncline: t.maxTurretIncline,
-    maxTurretDecline: t.maxTurretDecline,
+    name: tank.name.trim(),
+    nation: tank.nation,
+    br: tank.br,
+    class: tank.class,
+    armor: tank.armor,
+    turretArmor: tank.turretArmor,
+    cannonCaliber: tank.cannonCaliber,
+    ammo: (tank.ammo as string[]).map((a) => String(a)),
+    ammoCapacity: Number(tank.ammoCapacity),
+    barrelLength: Number(tank.barrelLength),
+    mainCannonFireRate: Number(tank.mainCannonFireRate),
+    crew: Number(tank.crew),
+    engineHp: Number(tank.engineHp),
+    maxSpeed: Number(tank.maxSpeed),
+    maxReverseSpeed: Number(tank.maxReverseSpeed),
+    incline: Number(tank.incline),
+    bodyRotation: Number(tank.bodyRotation),
+    turretRotation: Number(tank.turretRotation),
+    maxTurretIncline: Number(tank.maxTurretIncline),
+    maxTurretDecline: Number(tank.maxTurretDecline),
     // Preserve traverse limits only for tank destroyers; others rotate freely.
-    horizontalTraverse: t.class === 'Tank Destroyer' ? t.horizontalTraverse : 0,
-    bodyWidth: t.bodyWidth,
-    bodyLength: t.bodyLength,
-    bodyHeight: t.bodyHeight,
-    turretWidth: t.turretWidth,
-    turretLength: t.turretLength,
-    turretHeight: t.turretHeight,
-    turretXPercent: t.turretXPercent,
-    turretYPercent: t.turretYPercent
-  };
+    horizontalTraverse: tank.class === 'Tank Destroyer' ? Number(tank.horizontalTraverse) : 0,
+    bodyWidth: Number(tank.bodyWidth),
+    bodyLength: Number(tank.bodyLength),
+    bodyHeight: Number(tank.bodyHeight),
+    turretWidth: Number(tank.turretWidth),
+    turretLength: Number(tank.turretLength),
+    turretHeight: Number(tank.turretHeight),
+    turretXPercent: Number(tank.turretXPercent),
+    turretYPercent: Number(tank.turretYPercent)
+  } satisfies TankDefinition;
 }
 
-function validateAmmo(a) {
-  if (typeof a.name !== 'string' || !a.name.trim()) return 'name required';
-  if (typeof a.nation !== 'string' || !nationsSet.has(a.nation)) return 'invalid nation';
-  if (typeof a.caliber !== 'number' || a.caliber < 20 || a.caliber > 150 || a.caliber % 10 !== 0) return 'caliber out of range';
-  if (typeof a.armorPen !== 'number' || a.armorPen < 20 || a.armorPen > 160 || a.armorPen % 10 !== 0) return 'armorPen out of range';
-  if (typeof a.type !== 'string' || !ammoTypes.has(a.type)) return 'invalid type';
-  if (typeof a.explosionRadius !== 'number' || a.explosionRadius < 0) return 'invalid radius';
-  if (typeof a.pen0 !== 'number' || a.pen0 < 20 || a.pen0 > 160 || a.pen0 % 10 !== 0) return 'pen0 out of range';
-  if (typeof a.pen100 !== 'number' || a.pen100 < 20 || a.pen100 > 160 || a.pen100 % 10 !== 0) return 'pen100 out of range';
-  if (typeof a.speed !== 'number' || a.speed <= 0) return 'speed required';
+function validateAmmo(a: unknown): AmmoDefinition | string {
+  if (!a || typeof a !== 'object') return 'invalid payload';
+  const ammoCandidate = a as Record<string, unknown>;
+  if (typeof ammoCandidate.name !== 'string' || !ammoCandidate.name.trim()) return 'name required';
+  if (typeof ammoCandidate.nation !== 'string' || !nationsSet.has(ammoCandidate.nation)) return 'invalid nation';
+  if (typeof ammoCandidate.caliber !== 'number' || ammoCandidate.caliber < 20 || ammoCandidate.caliber > 150 || ammoCandidate.caliber % 10 !== 0)
+    return 'caliber out of range';
+  if (typeof ammoCandidate.armorPen !== 'number' || ammoCandidate.armorPen < 20 || ammoCandidate.armorPen > 160 || ammoCandidate.armorPen % 10 !== 0)
+    return 'armorPen out of range';
+  if (typeof ammoCandidate.type !== 'string' || !ammoTypes.has(ammoCandidate.type)) return 'invalid type';
+  if (typeof ammoCandidate.explosionRadius !== 'number' || ammoCandidate.explosionRadius < 0) return 'invalid radius';
+  if (typeof ammoCandidate.pen0 !== 'number' || ammoCandidate.pen0 < 20 || ammoCandidate.pen0 > 160 || ammoCandidate.pen0 % 10 !== 0)
+    return 'pen0 out of range';
+  if (typeof ammoCandidate.pen100 !== 'number' || ammoCandidate.pen100 < 20 || ammoCandidate.pen100 > 160 || ammoCandidate.pen100 % 10 !== 0)
+    return 'pen100 out of range';
+  if (typeof ammoCandidate.speed !== 'number' || ammoCandidate.speed <= 0) return 'speed required';
   return {
-    name: a.name.trim(),
-    nation: a.nation,
-    caliber: a.caliber,
-    armorPen: a.armorPen,
-    type: a.type,
-    explosionRadius: a.explosionRadius,
-    pen0: a.pen0,
-    pen100: a.pen100,
-    image: typeof a.image === 'string' ? a.image : '',
+    name: ammoCandidate.name.trim(),
+    nation: ammoCandidate.nation,
+    caliber: ammoCandidate.caliber,
+    armorPen: ammoCandidate.armorPen,
+    type: ammoCandidate.type,
+    explosionRadius: ammoCandidate.explosionRadius,
+    pen0: ammoCandidate.pen0,
+    pen100: ammoCandidate.pen100,
+    image: typeof ammoCandidate.image === 'string' ? ammoCandidate.image : '',
     // Gameplay fields used by firing logic
-    speed: a.speed,
-    damage: a.armorPen,
-    penetration: a.pen0,
-    explosion: a.explosionRadius
-  };
+    speed: ammoCandidate.speed,
+    damage: ammoCandidate.armorPen,
+    penetration: ammoCandidate.pen0,
+    explosion: ammoCandidate.explosionRadius
+  } satisfies AmmoDefinition;
 }
 
-app.get('/api/nations', (req, res) => res.json(nations));
-app.post('/api/nations', requireAdmin, async (req, res) => {
+app.get('/api/nations', (_req: Request, res: Response) => res.json(nations));
+app.post('/api/nations', requireAdmin, async (req: Request, res: Response) => {
   const valid = validateNation(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   nations.push(valid);
   await saveNations();
   res.json({ success: true });
 });
-app.put('/api/nations/:idx', requireAdmin, async (req, res) => {
+app.put('/api/nations/:idx', requireAdmin, async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (!nations[idx]) return res.status(404).json({ error: 'not found' });
   const valid = validateNation(req.body);
@@ -575,7 +777,7 @@ app.put('/api/nations/:idx', requireAdmin, async (req, res) => {
   await saveNations();
   res.json({ success: true });
 });
-app.delete('/api/nations/:idx', requireAdmin, async (req, res) => {
+app.delete('/api/nations/:idx', requireAdmin, async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (idx < 0 || idx >= nations.length) return res.status(404).json({ error: 'not found' });
   nations.splice(idx, 1);
@@ -583,15 +785,15 @@ app.delete('/api/nations/:idx', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/tanks', (req, res) => res.json(tanks));
-app.post('/api/tanks', requireAdmin, async (req, res) => {
+app.get('/api/tanks', (_req: Request, res: Response) => res.json(tanks));
+app.post('/api/tanks', requireAdmin, async (req: Request, res: Response) => {
   const valid = validateTank(req.body);
   if (typeof valid === 'string') return res.status(400).json({ error: valid });
   tanks.push(valid);
   await saveTanks();
   res.json({ success: true });
 });
-app.put('/api/tanks/:idx', requireAdmin, async (req, res) => {
+app.put('/api/tanks/:idx', requireAdmin, async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (!tanks[idx]) return res.status(404).json({ error: 'not found' });
   const valid = validateTank(req.body);
@@ -600,7 +802,7 @@ app.put('/api/tanks/:idx', requireAdmin, async (req, res) => {
   await saveTanks();
   res.json({ success: true });
 });
-app.delete('/api/tanks/:idx', requireAdmin, async (req, res) => {
+app.delete('/api/tanks/:idx', requireAdmin, async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (idx < 0 || idx >= tanks.length) return res.status(404).json({ error: 'not found' });
   tanks.splice(idx, 1);
@@ -608,8 +810,8 @@ app.delete('/api/tanks/:idx', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 
-app.get('/api/ammo', (req, res) => res.json(ammo));
-app.post('/api/ammo', requireAdmin, upload.single('image'), async (req, res) => {
+app.get('/api/ammo', (_req: Request, res: Response) => res.json(ammo));
+app.post('/api/ammo', requireAdmin, upload.single('image'), async (req: Request, res: Response) => {
   const imgPath = req.file ? `/uploads/ammo/${req.file.filename}` : '';
   const body = {
     ...req.body,
@@ -627,7 +829,7 @@ app.post('/api/ammo', requireAdmin, upload.single('image'), async (req, res) => 
   await saveAmmo();
   res.json({ success: true });
 });
-app.put('/api/ammo/:idx', requireAdmin, upload.single('image'), async (req, res) => {
+app.put('/api/ammo/:idx', requireAdmin, upload.single('image'), async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (!ammo[idx]) return res.status(404).json({ error: 'not found' });
   const imgPath = req.file ? `/uploads/ammo/${req.file.filename}` : ammo[idx].image;
@@ -647,7 +849,7 @@ app.put('/api/ammo/:idx', requireAdmin, upload.single('image'), async (req, res)
   await saveAmmo();
   res.json({ success: true });
 });
-app.delete('/api/ammo/:idx', requireAdmin, async (req, res) => {
+app.delete('/api/ammo/:idx', requireAdmin, async (req: Request, res: Response) => {
   const idx = Number(req.params.idx);
   if (idx < 0 || idx >= ammo.length) return res.status(404).json({ error: 'not found' });
   ammo.splice(idx, 1);
@@ -723,7 +925,9 @@ io.on('connection', (socket) => {
     const loadout = payload?.loadout || {};
     const cookies = cookie.parse(socket.handshake.headers.cookie || '');
     try {
-      const jwtPayload = jwt.verify(cookies.token || '', JWT_SECRET);
+      const payload = jwt.verify(cookies.token || '', JWT_SECRET);
+      if (!payload || typeof payload === 'string') throw new Error('invalid token');
+      const jwtPayload = payload as AuthJwtPayload;
       const username = jwtPayload.username;
       const userRecord = users.get(username);
       if (!userRecord) throw new Error('no user');
@@ -786,7 +990,7 @@ io.on('connection', (socket) => {
     const now = Date.now();
     const delay = 60000 / (shooter.mainCannonFireRate || 10);
     if (now - shooter.lastFire < delay || shooter.ammoRemaining <= 0) return;
-    const ammoDef = ammo.find((a) => a.name === ammoName);
+    const ammoDef = ammo.find((a) => a.name === ammoName) as AmmoDefinition | undefined;
     if (!ammoDef) {
       socket.emit('error', 'Invalid ammo selection');
       return;
@@ -801,7 +1005,8 @@ io.on('connection', (socket) => {
     shooter.lastFire = now;
     shooter.ammoRemaining -= 1;
     const id = `${now}-${Math.random().toString(16).slice(2)}`;
-    const speed = ammoDef.speed ?? 200;
+    const ammoData = ammoDef as AmmoDefinition;
+    const speed = ammoData.speed ?? 200;
     const barrelLen = shooter.barrelLength ?? 3;
     const muzzleX =
       shooter.x +
@@ -812,7 +1017,7 @@ io.on('connection', (socket) => {
       shooter.z +
       (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
       cosYaw * cosPitch * barrelLen;
-    const projectile = {
+    const projectile: ProjectileState = {
       id,
       x: muzzleX,
       y: muzzleY,
@@ -820,7 +1025,7 @@ io.on('connection', (socket) => {
       vx: -sinYaw * cosPitch * speed,
       vy: Math.sin(pitch) * speed,
       vz: -cosYaw * cosPitch * speed,
-      ammo: ammoDef.name,
+      ammo: ammoData.name,
       shooter: socket.id,
       life: 5
     };
@@ -858,11 +1063,11 @@ setInterval(() => {
       const dy = player.y - p.y;
       const dz = player.z - p.z;
       if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
-        const ammoDef = ammo.find((a) => a.name === p.ammo) || {};
+        const ammoDef = ammo.find((a) => a.name === p.ammo);
         const armor = player.armor || 0;
-        const dmg = ammoDef.damage ?? ammoDef.armorPen ?? 10;
-        const pen = ammoDef.penetration ?? ammoDef.pen0 ?? 0;
-        const explosion = ammoDef.explosion ?? ammoDef.explosionRadius ?? 0;
+        const dmg = ammoDef?.damage ?? ammoDef?.armorPen ?? 10;
+        const pen = ammoDef?.penetration ?? ammoDef?.pen0 ?? 0;
+        const explosion = ammoDef?.explosion ?? ammoDef?.explosionRadius ?? 0;
         let total = pen > armor ? dmg : dmg / 2;
         total += explosion;
         player.health = Math.max(0, (player.health ?? 100) - total);
@@ -893,3 +1098,4 @@ if (process.argv[1] === __filename) {
 }
 
 export { app, server, validateTank };
+export type { TankDefinition, AmmoDefinition };

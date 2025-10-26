@@ -1,4 +1,5 @@
-// admin.js
+// admin.ts
+// @ts-nocheck
 // Summary: Handles CRUD actions for nations, tanks, ammo and terrain across
 //          separate admin pages linked by a sidebar. Terrain management now uses a table with
 //          3D thumbnails and an in-page editor. The tank form renders a Three.js-powered 3D

@@ -1,4 +1,5 @@
-// tanksfornothing-client.js
+// tanksfornothing-client.ts
+// @ts-nocheck
 // Summary: Browser client for Tanks for Nothing. Provides lobby flag, tabbed tank-class
 //          and ammo selection, renders a dimensioned 3D tank based on server-supplied parameters,
 //          handles user input, camera control and firing mechanics. Camera defaults
@@ -20,6 +21,12 @@ import * as THREE from './libs/three.module.js';
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair } from './hud.js';
+
+declare global {
+  interface Window {
+    io?: (...args: unknown[]) => any;
+  }
+}
 
 // Utility: render fatal errors directly on screen for easier debugging.
 function showError(message) {

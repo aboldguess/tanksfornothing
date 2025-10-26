@@ -20,6 +20,9 @@ node_modules/
 # Build artifacts
 dist/
 build/
+public/js/
+admin/js/
+*.tsbuildinfo
 
 # Logs and runtime data
 logs/

@@ -1,14 +1,17 @@
-// login.js
+// login.ts
+// @ts-nocheck
 // Summary: Handles admin authentication from the standalone login page.
 // Structure: submit handler -> fetch request -> redirect on success.
 // Usage: Included by login.html.
 
-async function handleLogin(e) {
+async function handleLogin(e: Event): Promise<void> {
   e.preventDefault();
   const msg = document.getElementById('loginError');
   if (msg) msg.textContent = '';
   try {
-    const password = document.getElementById('password').value;
+    const passwordField = document.getElementById('password') as HTMLInputElement | null;
+    if (!passwordField) throw new Error('Password field missing');
+    const password = passwordField.value;
     const res = await fetch('/admin/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -24,8 +27,10 @@ async function handleLogin(e) {
     }
   } catch (err) {
     console.error('Login request failed', err);
-    if (msg) msg.textContent = err.message || 'Login failed';
+    const message = err instanceof Error ? err.message : 'Login failed';
+    if (msg) msg.textContent = message;
   }
 }
 
-document.getElementById('loginForm').addEventListener('submit', handleLogin);
+const form = document.getElementById('loginForm');
+if (form) form.addEventListener('submit', handleLogin);

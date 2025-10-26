@@ -1,4 +1,5 @@
-// tank-crud.js
+// tank-crud.ts
+// @ts-nocheck
 // Summary: Standalone module powering the tank CRUD page. It renders a fully
 //          dynamic table displaying every tank parameter, adds column sorting
 //          and quick filtering and enables inline row editing via slider-based

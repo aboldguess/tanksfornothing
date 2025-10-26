@@ -1,0 +1,13 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "./src/client",
+    "outDir": "./public/js",
+    "target": "ES2020",
+    "module": "ES2020",
+    "lib": ["DOM", "DOM.Iterable", "ES2020"],
+    "tsBuildInfoFile": "./public/js/.tsbuildinfo",
+    "moduleResolution": "Bundler"
+  },
+  "include": ["src/client/**/*.ts"]
+}

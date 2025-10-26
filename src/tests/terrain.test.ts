@@ -1,16 +1,18 @@
-// terrain.test.js
+// terrain.test.ts
 // Summary: Integration tests for default terrain setup and editing through the REST API.
 // Structure: spawn server on random port -> verify default terrain exists -> update terrain and confirm change.
-// Usage: run with `npm test` which executes `node --test`.
+// Usage: run with `npm test` which executes `node --test` against the compiled dist/tests output.
 // ---------------------------------------------------------------------------
 
 import test from 'node:test';
 import assert from 'node:assert';
 import { promises as fs } from 'node:fs';
+import type { AddressInfo } from 'node:net';
 import { generateGentleHills } from '../utils/terrain-noise.js';
 
-process.env.PORT = 0; // allow system to choose an open port
-const terrainFile = new URL('../data/terrains.json', import.meta.url);
+process.env.PORT = '0'; // allow system to choose an open port
+const projectRoot = new URL('../../', import.meta.url);
+const terrainFile = new URL('./data/terrains.json', projectRoot);
 const elevation = generateGentleHills(20, 20);
 const ground = Array.from({ length: 20 }, () => Array(20).fill(0));
 const seed = {
@@ -31,23 +33,42 @@ const seed = {
 };
 await fs.writeFile(terrainFile, JSON.stringify(seed, null, 2));
 
-const { server } = await import('../tanksfornothing-server.js');
-await new Promise(resolve => server.on('listening', resolve));
-const base = `http://localhost:${server.address().port}`;
+const { server } = await import('../server/tanksfornothing-server.js');
+await new Promise<void>((resolve, reject) => {
+  const onError = (error: Error) => {
+    server.off('error', onError);
+    reject(error);
+  };
+  server.once('error', onError);
+  server.listen(0, () => {
+    server.off('error', onError);
+    resolve();
+  });
+});
+const address = server.address();
+const port = typeof address === 'object' && address !== null ? (address as AddressInfo).port : 0;
+const base = `http://localhost:${port}`;
 
 // Ensure server closed after tests complete
-test.after(() => server.close());
+test.after(async () => {
+  await new Promise<void>((resolve, reject) => {
+    server.close((err) => {
+      if (err) reject(err);
+      else resolve();
+    });
+  });
+});
 
 test('default terrain exists', async () => {
   const res = await fetch(`${base}/api/terrains`);
-  const data = await res.json();
+  const data: any = await res.json();
   assert.ok(Array.isArray(data.terrains) && data.terrains.length > 0);
   assert.equal(data.terrains[0].name, 'Gentle Hills');
 });
 
 test('terrain can be edited', async () => {
   const res = await fetch(`${base}/api/terrains`);
-  const data = await res.json();
+  const data: any = await res.json();
   const first = data.terrains[0];
   const updated = { ...first, name: 'Edited Hills' };
   const putRes = await fetch(`${base}/api/terrains/0`, {
@@ -57,6 +78,6 @@ test('terrain can be edited', async () => {
   });
   assert.equal(putRes.status, 200);
   const verify = await fetch(`${base}/api/terrains`);
-  const after = await verify.json();
+  const after: any = await verify.json();
   assert.equal(after.terrains[0].name, 'Edited Hills');
 });

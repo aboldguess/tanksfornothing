@@ -1,4 +1,4 @@
-// hud.js
+// hud.ts
 // Summary: Provides an on-screen heads-up display showing current speed, inclination,
 //          health and currently selected ammunition with remaining rounds, alongside a
 //          center-screen crosshair for aiming.
@@ -9,12 +9,16 @@
 //        during startup. Call updateHUD(speed, incline, health) each frame, updateAmmoHUD()
 //        whenever ammo counts change and showCrosshair(true) when gameplay starts.
 // ---------------------------------------------------------------------------
-let speedEl, inclineEl, healthEl, ammoHudEl, crosshairEl;
+let speedEl: HTMLDivElement | null;
+let inclineEl: HTMLDivElement | null;
+let healthEl: HTMLDivElement | null;
+let ammoHudEl: HTMLDivElement | null;
+let crosshairEl: HTMLDivElement | null;
 
 /**
  * Initialize HUD elements and add them to the document body.
  */
-export function initHUD() {
+export function initHUD(): void {
   const hud = document.createElement('div');
   hud.id = 'hud';
   speedEl = document.createElement('div');
@@ -47,7 +51,7 @@ export function initHUD() {
  * @param {number} speedKmh - Current tank speed in km/h.
  * @param {number} inclinationDeg - Tank pitch relative to the ground.
  */
-export function updateHUD(speedKmh, inclinationDeg, health = 100) {
+export function updateHUD(speedKmh: number, inclinationDeg: number, health = 100): void {
   if (!speedEl || !inclineEl || !healthEl) return;
   speedEl.textContent = `Speed: ${speedKmh.toFixed(1)} km/h`;
   inclineEl.textContent = `Inclination: ${inclinationDeg.toFixed(1)}°`;
@@ -59,7 +63,10 @@ export function updateHUD(speedKmh, inclinationDeg, health = 100) {
  * @param {Array<{name:string,count:number}>} ammoList - Available ammo and remaining rounds.
  * @param {string} selected - Name of the currently selected ammo type.
  */
-export function updateAmmoHUD(ammoList, selected = '') {
+export function updateAmmoHUD(
+  ammoList: Array<{ name: string; count: number }>,
+  selected = ''
+): void {
   if (!ammoHudEl) return;
   ammoHudEl.innerHTML = '';
   ammoList.forEach(({ name, count }) => {
@@ -75,6 +82,6 @@ export function updateAmmoHUD(ammoList, selected = '') {
  * Toggle crosshair visibility. Hidden by default so lobby screens stay clean.
  * @param {boolean} show - true to display the crosshair, false to hide.
  */
-export function showCrosshair(show) {
+export function showCrosshair(show: boolean): void {
   if (crosshairEl) crosshairEl.style.display = show ? 'block' : 'none';
 }
