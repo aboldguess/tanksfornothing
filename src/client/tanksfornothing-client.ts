@@ -16,7 +16,13 @@
 // Usage: Included by index.html; requires Socket.IO for multiplayer networking and
 //         loads Cannon.js from CDN for physics.
 // ---------------------------------------------------------------------------
-import * as THREE from './libs/three.module.js';
+// Three.js is served from /public/libs rather than nested within /public/js, so we
+// import it via a parent-relative path. The previous './libs/three.module.js'
+// resolved to /js/libs/three.module.js once compiled, which does not exist and
+// caused the "Failed to load game client" error after login because the module
+// failed to download. Using '../libs/three.module.js' matches the actual static
+// asset layout and restores the client bundle.
+import * as THREE from '../libs/three.module.js';
 // cannon-es provides lightweight rigid body physics with vehicle helpers.
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
