@@ -632,7 +632,10 @@ function collectTerrainForm() {
     },
     flags: window.getTerrainFlags ? window.getTerrainFlags() : null,
     ground: window.getTerrainGround ? window.getTerrainGround() : null,
-    elevation: window.getTerrainElevation ? window.getTerrainElevation() : null
+    elevation: window.getTerrainElevation ? window.getTerrainElevation() : null,
+    palette: window.getTerrainPalette ? window.getTerrainPalette() : null,
+    noise: window.getTerrainNoise ? window.getTerrainNoise() : null,
+    lighting: window.getTerrainLighting ? window.getTerrainLighting() : null
   };
 }
 
@@ -662,6 +665,9 @@ function openTerrainEditor(i) {
     window.existingFlags = null;
     window.existingGround = null;
     window.existingElevation = null;
+    window.existingPalette = null;
+    window.existingNoise = null;
+    window.existingLighting = null;
     document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
   } else {
     editingTerrainIndex = Number(i);
@@ -674,6 +680,9 @@ function openTerrainEditor(i) {
       window.existingFlags = null;
       window.existingGround = null;
       window.existingElevation = null;
+      window.existingPalette = null;
+      window.existingNoise = null;
+      window.existingLighting = null;
       document.getElementById('saveTerrainBtn').innerText = 'Add Terrain';
     } else {
       document.getElementById('terrainName').value = t.name;
@@ -683,6 +692,9 @@ function openTerrainEditor(i) {
       window.existingFlags = t.flags || null;
       window.existingGround = t.ground || null;
       window.existingElevation = t.elevation || null;
+      window.existingPalette = t.palette || null;
+      window.existingNoise = t.noise || null;
+      window.existingLighting = t.lighting || null;
       document.getElementById('saveTerrainBtn').innerText = 'Update Terrain';
     }
   }
@@ -702,6 +714,9 @@ function clearTerrainForm() {
   window.existingFlags = null;
   window.existingGround = null;
   window.existingElevation = null;
+  window.existingPalette = null;
+  window.existingNoise = null;
+  window.existingLighting = null;
 }
 
 // Expose for external scripts like map-crud.js
@@ -766,27 +781,85 @@ function renderTerrainTable() {
   tbody.querySelectorAll('.edit-terrain').forEach(btn => btn.addEventListener('click', () => safeOpenTerrainEditor(btn.dataset.i)));
   tbody.querySelectorAll('.del-terrain').forEach(btn => btn.addEventListener('click', () => deleteTerrain(btn.dataset.i)));
   tbody.querySelectorAll('.use-terrain').forEach(btn => btn.addEventListener('click', () => setCurrentTerrain(btn.dataset.i)));
-  terrainsCache.forEach((_, i) => renderThumbnail(`thumb-${i}`));
+  terrainsCache.forEach((t, i) => renderThumbnail(`thumb-${i}`, t));
 }
 
-function renderThumbnail(id) {
+function renderThumbnail(id, terrain) {
   const el = document.getElementById(id);
   if (!el) return;
-  // Plotly is loaded via CDN on terrain.html. If the network fails or the
-  // library is missing, skip rendering to avoid a fatal ReferenceError that
-  // would hide the entire terrain table.
-  if (typeof Plotly === 'undefined') {
+  el.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.width = 96;
+  canvas.height = 96;
+  canvas.setAttribute('aria-hidden', 'true');
+  canvas.title = 'Terrain palette preview';
+  canvas.className = 'terrain-thumb-canvas';
+  el.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !terrain) {
     el.textContent = 'preview unavailable';
     return;
   }
-  const z = [
-    [0, 0],
-    [0, 0]
-  ];
-  Plotly.newPlot(el, [{ z, type: 'surface', showscale: false }], {
-    margin: { l: 0, r: 0, t: 0, b: 0 },
-    scene: { xaxis: { visible: false }, yaxis: { visible: false }, zaxis: { visible: false } }
-  }, { displayModeBar: false });
+  const palette = Array.isArray(terrain.palette) ? terrain.palette : [];
+  const ground = Array.isArray(terrain.ground) ? terrain.ground : [];
+  const elevation = Array.isArray(terrain.elevation) ? terrain.elevation : [];
+  const rows = ground.length;
+  const cols = rows ? ground[0].length : 0;
+  if (!rows || !cols) {
+    ctx.fillStyle = '#444';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#fff';
+    ctx.font = '10px sans-serif';
+    ctx.fillText('no data', 18, canvas.height / 2);
+    return;
+  }
+  let minElev = Infinity;
+  let maxElev = -Infinity;
+  elevation.forEach((row) => row?.forEach?.((v) => {
+    if (Number.isFinite(v)) {
+      minElev = Math.min(minElev, v);
+      maxElev = Math.max(maxElev, v);
+    }
+  }));
+  if (!Number.isFinite(minElev) || !Number.isFinite(maxElev)) {
+    minElev = 0;
+    maxElev = 0;
+  }
+  const elevRange = Math.max(1, maxElev - minElev);
+  const cellW = canvas.width / cols;
+  const cellH = canvas.height / rows;
+  for (let y = 0; y < rows; y++) {
+    const row = ground[y];
+    for (let x = 0; x < cols; x++) {
+      const paletteIndex = row?.[x] ?? 0;
+      const entry = palette[Number.isFinite(paletteIndex) ? paletteIndex : 0] || {};
+      const baseColor = typeof entry.color === 'string' ? entry.color : '#777777';
+      const height = elevation[y]?.[x];
+      const shade = Number.isFinite(height)
+        ? (height - minElev) / elevRange
+        : 0.5;
+      ctx.fillStyle = shadeHex(baseColor, shade);
+      const px = Math.round(x * cellW);
+      const py = Math.round(y * cellH);
+      ctx.fillRect(px, py, Math.ceil(cellW) + 1, Math.ceil(cellH) + 1);
+    }
+  }
+}
+
+// Convert a hex colour into a shaded variant where shade 0 is darker and 1 is brighter.
+function shadeHex(hex, shade) {
+  const match = /^#?([a-f\d]{6})$/i.exec(hex || '');
+  if (!match) return '#555555';
+  const value = match[1];
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  const factor = 0.4 + shade * 0.6;
+  const toHex = (component) => {
+    const clamped = Math.max(0, Math.min(255, Math.round(component * factor)));
+    return clamped.toString(16).padStart(2, '0');
+  };
+  return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
 
 function updateStats() {

@@ -88,6 +88,25 @@ interface TeamFlags {
   d: FlagPoint;
 }
 
+interface TerrainGroundPaletteEntry {
+  name: string;
+  color: string;
+  traction: number;
+  viscosity: number;
+  texture: string;
+}
+
+interface TerrainNoiseSettings {
+  scale: number;
+  amplitude: number;
+}
+
+interface TerrainLightingSettings {
+  sunPosition: { x: number; y: number; z: number };
+  sunColor: string;
+  ambientColor: string;
+}
+
 interface TerrainDefinition {
   name: string;
   type: string;
@@ -95,6 +114,9 @@ interface TerrainDefinition {
   flags: { red: TeamFlags; blue: TeamFlags };
   ground: number[][];
   elevation: number[][];
+  palette: TerrainGroundPaletteEntry[];
+  noise: TerrainNoiseSettings;
+  lighting: TerrainLightingSettings;
 }
 
 interface UserStats {
@@ -247,16 +269,113 @@ function sanitizeGrid(g: unknown): number[][] {
     Array.isArray(row) ? row.map((v) => (typeof v === 'number' ? v : 0)) : []
   );
 }
+
+function clampGroundToPalette(grid: number[][], palette: TerrainGroundPaletteEntry[]): number[][] {
+  if (!Array.isArray(grid) || grid.length === 0) return [];
+  const maxIndex = Math.max(0, palette.length - 1);
+  return grid.map((row) =>
+    row.map((cell) => (Number.isFinite(cell) ? Math.min(Math.max(0, Math.round(cell)), maxIndex) : 0))
+  );
+}
+
+const defaultGroundPalette: TerrainGroundPaletteEntry[] = [
+  { name: 'grass', color: '#3cb043', traction: 0.9, viscosity: 0.1, texture: 'grass' },
+  { name: 'mud', color: '#6b4423', traction: 0.5, viscosity: 0.5, texture: 'mud' },
+  { name: 'snow', color: '#ffffff', traction: 0.4, viscosity: 0.2, texture: 'snow' },
+  { name: 'sand', color: '#c2b280', traction: 0.6, viscosity: 0.3, texture: 'sand' },
+  { name: 'rock', color: '#80868b', traction: 0.8, viscosity: 0.2, texture: 'rock' }
+];
+
+function sanitizePalette(p: unknown): TerrainGroundPaletteEntry[] {
+  if (!Array.isArray(p) || p.length === 0) return defaultGroundPalette.map((g) => ({ ...g }));
+  const cleaned: TerrainGroundPaletteEntry[] = [];
+  for (const entry of p) {
+    if (!entry || typeof entry !== 'object') continue;
+    const name = typeof (entry as { name?: unknown }).name === 'string' && (entry as { name?: string }).name
+      ? (entry as { name: string }).name
+      : `ground-${cleaned.length + 1}`;
+    const color = typeof (entry as { color?: unknown }).color === 'string'
+      ? (entry as { color: string }).color
+      : '#888888';
+    const traction = Number.isFinite((entry as { traction?: unknown }).traction)
+      ? Number((entry as { traction: number }).traction)
+      : 0.5;
+    const viscosity = Number.isFinite((entry as { viscosity?: unknown }).viscosity)
+      ? Number((entry as { viscosity: number }).viscosity)
+      : 0.5;
+    const texture = typeof (entry as { texture?: unknown }).texture === 'string'
+      ? (entry as { texture: string }).texture
+      : 'grass';
+    cleaned.push({ name, color, traction, viscosity, texture });
+  }
+  return cleaned.length ? cleaned : defaultGroundPalette.map((g) => ({ ...g }));
+}
+
+function sanitizeNoise(n: unknown): TerrainNoiseSettings {
+  const defaults: TerrainNoiseSettings = { scale: 12, amplitude: 24 };
+  if (!n || typeof n !== 'object') return defaults;
+  const scale = Number((n as { scale?: unknown }).scale);
+  const amplitude = Number((n as { amplitude?: unknown }).amplitude);
+  return {
+    scale: Number.isFinite(scale) && scale > 0 ? scale : defaults.scale,
+    amplitude: Number.isFinite(amplitude) && amplitude > 0 ? amplitude : defaults.amplitude
+  };
+}
+
+function sanitizeLighting(l: unknown): TerrainLightingSettings {
+  const defaults: TerrainLightingSettings = {
+    sunPosition: { x: 200, y: 400, z: 200 },
+    sunColor: '#ffe8a3',
+    ambientColor: '#1f2a3c'
+  };
+  if (!l || typeof l !== 'object') return defaults;
+  const sun = (l as { sunPosition?: { x?: unknown; y?: unknown; z?: unknown } }).sunPosition || {};
+  const x = Number((sun as { x?: unknown }).x);
+  const y = Number((sun as { y?: unknown }).y);
+  const z = Number((sun as { z?: unknown }).z);
+  const sunColor = typeof (l as { sunColor?: unknown }).sunColor === 'string'
+    ? (l as { sunColor: string }).sunColor
+    : defaults.sunColor;
+  const ambientColor = typeof (l as { ambientColor?: unknown }).ambientColor === 'string'
+    ? (l as { ambientColor: string }).ambientColor
+    : defaults.ambientColor;
+  return {
+    sunPosition: {
+      x: Number.isFinite(x) ? x : defaults.sunPosition.x,
+      y: Number.isFinite(y) ? y : defaults.sunPosition.y,
+      z: Number.isFinite(z) ? z : defaults.sunPosition.z
+    },
+    sunColor,
+    ambientColor
+  };
+}
+const DEFAULT_GRID_WIDTH = 40;
+const DEFAULT_GRID_HEIGHT = 40;
+const CELL_METERS = 50;
+const DEFAULT_NOISE = sanitizeNoise({ scale: 12, amplitude: 24 });
+const DEFAULT_LIGHTING = sanitizeLighting(undefined);
+
 let terrains: TerrainDefinition[] = [{
-  name: 'Gentle Hills',
+  name: 'Perlin Foothills',
   type: 'fields',
-  size: { x: 1, y: 1 },
+  size: {
+    x: Number((DEFAULT_GRID_WIDTH * CELL_METERS / 1000).toFixed(2)),
+    y: Number((DEFAULT_GRID_HEIGHT * CELL_METERS / 1000).toFixed(2))
+  },
   flags: defaultFlags(),
-  ground: Array.from({ length: 20 }, () => Array(20).fill(0)),
-  elevation: generateGentleHills(20, 20)
+  ground: Array.from({ length: DEFAULT_GRID_HEIGHT }, () => Array(DEFAULT_GRID_WIDTH).fill(0)),
+  elevation: generateGentleHills(
+    DEFAULT_GRID_WIDTH,
+    DEFAULT_GRID_HEIGHT,
+    1 / DEFAULT_NOISE.scale,
+    DEFAULT_NOISE.amplitude
+  ),
+  palette: defaultGroundPalette.map((g) => ({ ...g })),
+  noise: DEFAULT_NOISE,
+  lighting: DEFAULT_LIGHTING
 }];
 let currentTerrain = 0; // index into terrains
-let terrain = 'Gentle Hills'; // currently active terrain name
+let terrain = 'Perlin Foothills'; // currently active terrain name
 let baseBR: number | null = null; // Battle Rating of first player
 // Nations persisted separately; maintain array and Set for validation
 let nations: NationRecord[] = []; // CRUD via admin, loaded from JSON file
@@ -270,6 +389,13 @@ const NATIONS_FILE = new URL('./data/nations.json', projectRootUrl);
 const TERRAIN_FILE = new URL('./data/terrains.json', projectRootUrl);
 const AMMO_FILE = new URL('./data/ammo.json', projectRootUrl);
 const USERS_FILE = new URL('./data/users.json', projectRootUrl);
+
+function buildTerrainPayload() {
+  return {
+    name: terrain,
+    definition: terrains[currentTerrain] ?? null
+  };
+}
 
 // Generic JSON helpers with backup handling to guard against corruption
 async function safeReadJson<T>(file: URL, defaults: T): Promise<T> {
@@ -375,12 +501,23 @@ async function loadTerrains() {
   const defaults = {
     current: 0,
     terrains: [{
-      name: 'Gentle Hills',
+      name: 'Perlin Foothills',
       type: 'fields',
-      size: { x: 1, y: 1 },
+      size: {
+        x: Number((DEFAULT_GRID_WIDTH * CELL_METERS / 1000).toFixed(2)),
+        y: Number((DEFAULT_GRID_HEIGHT * CELL_METERS / 1000).toFixed(2))
+      },
       flags: defaultFlags(),
-      ground: Array.from({ length: 20 }, () => Array(20).fill(0)),
-      elevation: generateGentleHills(20, 20)
+      ground: Array.from({ length: DEFAULT_GRID_HEIGHT }, () => Array(DEFAULT_GRID_WIDTH).fill(0)),
+      elevation: generateGentleHills(
+        DEFAULT_GRID_WIDTH,
+        DEFAULT_GRID_HEIGHT,
+        1 / DEFAULT_NOISE.scale,
+        DEFAULT_NOISE.amplitude
+      ),
+      palette: defaultGroundPalette.map((g) => ({ ...g })),
+      noise: DEFAULT_NOISE,
+      lighting: DEFAULT_LIGHTING
     }]
   };
   const data = await safeReadJson<{ current: number; terrains: TerrainDefinition[] }>(
@@ -388,28 +525,47 @@ async function loadTerrains() {
     defaults
   );
   if (Array.isArray(data.terrains)) {
-    terrains = data.terrains.map((t) => ({
-      name: t.name || 'Unnamed',
-      type: t.type || 'fields',
-      size: t.size || { x: 1, y: 1 },
-      flags: sanitizeFlags(t.flags),
-      ground: sanitizeGrid(t.ground),
-      elevation: sanitizeGrid(t.elevation)
-    }));
+    terrains = data.terrains.map((t) => {
+      const palette = sanitizePalette((t as { palette?: unknown }).palette);
+      const noise = sanitizeNoise((t as { noise?: unknown }).noise);
+      const lighting = sanitizeLighting((t as { lighting?: unknown }).lighting);
+      const rawGround = sanitizeGrid((t as { ground?: unknown }).ground);
+      return {
+        name: (t as { name?: string }).name || 'Unnamed',
+        type: (t as { type?: string }).type || 'fields',
+        size: (t as { size?: { x: number; y: number } }).size || { x: 1, y: 1 },
+        flags: sanitizeFlags((t as { flags?: unknown }).flags),
+        ground: clampGroundToPalette(rawGround, palette),
+        elevation: sanitizeGrid((t as { elevation?: unknown }).elevation),
+        palette,
+        noise,
+        lighting
+      };
+    });
   }
   if (typeof data.current === 'number') currentTerrain = data.current;
-  terrain = terrains[currentTerrain]?.name || 'Gentle Hills';
+  terrain = terrains[currentTerrain]?.name || 'Perlin Foothills';
 }
 
 async function saveTerrains() {
   const data = {
     _comment: [
       'Summary: Persisted terrain details and selected index for Tanks for Nothing.',
-      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags,ground,elevation}.',
+      'Structure: JSON object with _comment array, current index and terrains list of {name,type,size,flags,ground,elevation,palette,noise,lighting}.',
       'Usage: Managed automatically by server; do not edit manually.'
     ],
     current: currentTerrain,
-    terrains
+    terrains: terrains.map((t) => ({
+      name: t.name,
+      type: t.type,
+      size: t.size,
+      flags: t.flags,
+      ground: t.ground,
+      elevation: t.elevation,
+      palette: t.palette,
+      noise: t.noise,
+      lighting: t.lighting
+    }))
   };
   await safeWriteJson(TERRAIN_FILE, data);
 }
@@ -865,12 +1021,25 @@ app.post('/api/terrains', requireAdmin, async (req, res) => {
   const flags = sanitizeFlags(req.body.flags);
   const ground = sanitizeGrid(req.body.ground);
   const elevation = sanitizeGrid(req.body.elevation);
+  const palette = sanitizePalette(req.body.palette);
+  const noise = sanitizeNoise(req.body.noise);
+  const lighting = sanitizeLighting(req.body.lighting);
   if (!name) return res.status(400).json({ error: 'invalid name' });
   if (!type) return res.status(400).json({ error: 'invalid type' });
   if (!size || typeof size.x !== 'number' || typeof size.y !== 'number') {
     return res.status(400).json({ error: 'invalid size' });
   }
-  terrains.push({ name, type, size, flags, ground, elevation });
+  terrains.push({
+    name,
+    type,
+    size,
+    flags,
+    ground: clampGroundToPalette(ground, palette),
+    elevation,
+    palette,
+    noise,
+    lighting
+  });
   await saveTerrains();
   res.json({ success: true });
 });
@@ -883,10 +1052,23 @@ app.put('/api/terrains/:idx', requireAdmin, async (req, res) => {
   const flags = sanitizeFlags(req.body.flags);
   const ground = sanitizeGrid(req.body.ground);
   const elevation = sanitizeGrid(req.body.elevation);
+  const palette = sanitizePalette(req.body.palette);
+  const noise = sanitizeNoise(req.body.noise);
+  const lighting = sanitizeLighting(req.body.lighting);
   if (!name || !type || typeof size?.x !== 'number' || typeof size?.y !== 'number') {
     return res.status(400).json({ error: 'invalid data' });
   }
-  terrains[idx] = { name, type, size, flags, ground, elevation };
+  terrains[idx] = {
+    name,
+    type,
+    size,
+    flags,
+    ground: clampGroundToPalette(ground, palette),
+    elevation,
+    palette,
+    noise,
+    lighting
+  };
   await saveTerrains();
   res.json({ success: true });
 });
@@ -895,7 +1077,7 @@ app.delete('/api/terrains/:idx', requireAdmin, async (req, res) => {
   if (idx < 0 || idx >= terrains.length) return res.status(404).json({ error: 'not found' });
   terrains.splice(idx, 1);
   if (currentTerrain >= terrains.length) currentTerrain = 0;
-  terrain = terrains[currentTerrain]?.name || 'flat';
+  terrain = terrains[currentTerrain]?.name || 'Perlin Foothills';
   await saveTerrains();
   res.json({ success: true });
 });
@@ -909,7 +1091,7 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
   players.clear();
   baseBR = null;
   io.emit('restart');
-  io.emit('terrain', terrain);
+  io.emit('terrain', buildTerrainPayload());
   res.json({ success: true });
 });
 
@@ -918,7 +1100,7 @@ io.on('connection', (socket) => {
   console.log('player connected', socket.id);
   socket.emit('tanks', tanks);
   socket.emit('ammo', ammo);
-  socket.emit('terrain', terrain);
+  socket.emit('terrain', buildTerrainPayload());
 
   socket.on('join', (payload) => {
     const clientTank = payload?.tank || payload;

@@ -1,19 +1,24 @@
 // hud.ts
 // Summary: Provides an on-screen heads-up display showing current speed, inclination,
 //          health and currently selected ammunition with remaining rounds, alongside a
-//          center-screen crosshair for aiming.
+//          center-screen crosshair and a reload progress indicator for the active shell type.
 // Structure: initHUD() creates overlay elements; updateHUD() refreshes tank metrics;
 //            updateAmmoHUD() renders ammo counts and highlights the active selection;
-//            showCrosshair() toggles the crosshair visibility.
-// Usage: Import { initHUD, updateHUD, updateAmmoHUD, showCrosshair } and call initHUD once
+//            updateCooldownHUD() animates the reload bar; showCrosshair() toggles visibility.
+// Usage: Import { initHUD, updateHUD, updateAmmoHUD, updateCooldownHUD, showCrosshair } and call initHUD once
 //        during startup. Call updateHUD(speed, incline, health) each frame, updateAmmoHUD()
-//        whenever ammo counts change and showCrosshair(true) when gameplay starts.
+//        whenever ammo counts change, updateCooldownHUD(remaining, total) after firing and
+//        showCrosshair(true) when gameplay starts.
 // ---------------------------------------------------------------------------
 let speedEl: HTMLDivElement | null;
 let inclineEl: HTMLDivElement | null;
 let healthEl: HTMLDivElement | null;
 let ammoHudEl: HTMLDivElement | null;
 let crosshairEl: HTMLDivElement | null;
+let ammoSlotsEl: HTMLDivElement | null;
+let cooldownEl: HTMLDivElement | null;
+let cooldownFillEl: HTMLDivElement | null;
+let cooldownLabelEl: HTMLSpanElement | null;
 
 /**
  * Initialize HUD elements and add them to the document body.
@@ -41,9 +46,27 @@ export function initHUD(): void {
   ammoHudEl = document.createElement('div');
   ammoHudEl.id = 'ammoHud';
   ammoHudEl.style.display = 'none';
+  ammoSlotsEl = document.createElement('div');
+  ammoSlotsEl.className = 'ammo-slots';
+  ammoHudEl.appendChild(ammoSlotsEl);
+
+  cooldownEl = document.createElement('div');
+  cooldownEl.className = 'cooldown';
+  cooldownEl.style.display = 'none';
+  cooldownLabelEl = document.createElement('span');
+  cooldownLabelEl.className = 'cooldown-label';
+  cooldownEl.appendChild(cooldownLabelEl);
+  const bar = document.createElement('div');
+  bar.className = 'cooldown-bar';
+  cooldownFillEl = document.createElement('div');
+  cooldownFillEl.className = 'cooldown-fill';
+  bar.appendChild(cooldownFillEl);
+  cooldownEl.appendChild(bar);
+  ammoHudEl.appendChild(cooldownEl);
   document.body.appendChild(ammoHudEl);
 
   updateHUD(0, 0, 100);
+  updateCooldownHUD(0, 1);
 }
 
 /**
@@ -67,15 +90,17 @@ export function updateAmmoHUD(
   ammoList: Array<{ name: string; count: number }>,
   selected = ''
 ): void {
-  if (!ammoHudEl) return;
-  ammoHudEl.innerHTML = '';
+  if (!ammoHudEl || !ammoSlotsEl) return;
+  ammoSlotsEl.innerHTML = '';
   ammoList.forEach(({ name, count }) => {
-    const span = document.createElement('span');
-    span.textContent = `${name}: ${count}`;
-    if (name === selected) span.classList.add('selected');
-    ammoHudEl.appendChild(span);
+    const item = document.createElement('span');
+    item.className = 'ammo-item';
+    item.textContent = `${name}: ${count}`;
+    if (name === selected) item.classList.add('selected');
+    ammoSlotsEl.appendChild(item);
   });
   ammoHudEl.style.display = ammoList.length ? 'flex' : 'none';
+  if (cooldownEl) cooldownEl.style.display = 'none';
 }
 
 /**
@@ -84,4 +109,24 @@ export function updateAmmoHUD(
  */
 export function showCrosshair(show: boolean): void {
   if (crosshairEl) crosshairEl.style.display = show ? 'block' : 'none';
+}
+
+/**
+ * Update the reload cooldown bar for the selected ammunition type.
+ * @param {number} remainingSeconds - Seconds until the gun is ready.
+ * @param {number} totalSeconds - Total reload time in seconds.
+ */
+export function updateCooldownHUD(remainingSeconds: number, totalSeconds: number): void {
+  if (!cooldownEl || !cooldownFillEl || !cooldownLabelEl) return;
+  const total = totalSeconds > 0 ? totalSeconds : 1;
+  if (remainingSeconds <= 0.05) {
+    cooldownEl.style.display = 'none';
+    cooldownFillEl.style.width = '100%';
+    cooldownLabelEl.textContent = 'Ready';
+    return;
+  }
+  cooldownEl.style.display = 'flex';
+  const clamped = Math.max(0, Math.min(1, remainingSeconds / total));
+  cooldownFillEl.style.width = `${(1 - clamped) * 100}%`;
+  cooldownLabelEl.textContent = `Reloading ${remainingSeconds.toFixed(1)}s`;
 }

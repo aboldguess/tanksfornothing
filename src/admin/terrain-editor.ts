@@ -12,11 +12,19 @@
 
 // Default ground types with color, traction and viscosity for quick start
 const defaultGroundTypes = [
-  { name: 'grass', color: '#3cb043', traction: 0.9, viscosity: 0.1 },
-  { name: 'mud', color: '#6b4423', traction: 0.5, viscosity: 0.5 },
-  { name: 'snow', color: '#ffffff', traction: 0.4, viscosity: 0.2 },
-  { name: 'sand', color: '#c2b280', traction: 0.6, viscosity: 0.3 },
-  { name: 'water', color: '#1e90ff', traction: 0.2, viscosity: 0.8 }
+  { name: 'grass', color: '#3cb043', traction: 0.9, viscosity: 0.1, texture: 'grass' },
+  { name: 'mud', color: '#6b4423', traction: 0.5, viscosity: 0.5, texture: 'mud' },
+  { name: 'snow', color: '#ffffff', traction: 0.4, viscosity: 0.2, texture: 'snow' },
+  { name: 'sand', color: '#c2b280', traction: 0.6, viscosity: 0.3, texture: 'sand' },
+  { name: 'water', color: '#1e90ff', traction: 0.2, viscosity: 0.8, texture: 'rock' }
+];
+
+const textureOptions = [
+  { id: 'grass', label: 'Grassland' },
+  { id: 'mud', label: 'Muddy Ruts' },
+  { id: 'snow', label: 'Powder Snow' },
+  { id: 'sand', label: 'Desert Dunes' },
+  { id: 'rock', label: 'Rocky Plate' }
 ];
 
 let groundTypes = [...defaultGroundTypes];
@@ -33,6 +41,16 @@ const maxHeight = 100; // max elevation value used for shading
 let currentMode = 'ground'; // currently active editing tool
 let terrainEditorMissingListWarned = false; // prevent repeated console noise when markup changes
 let terrainEditorInitialized = false; // ensure DOM wiring happens only once
+let editingGroundIndex: number | null = null;
+let currentNoise = { scale: 12, amplitude: 24 };
+
+function defaultLighting() {
+  return {
+    sunPosition: { x: 200, y: 400, z: 200 },
+    sunColor: '#ffe8a3',
+    ambientColor: '#1f2a3c'
+  };
+}
 
 // Capture-the-flag positions for red and blue teams (a-d each)
 function defaultFlags() {
@@ -45,14 +63,103 @@ let flags = defaultFlags();
 window.getTerrainFlags = () => flags; // exposed for admin.js persistence
 window.getTerrainGround = () => groundGrid;
 window.getTerrainElevation = () => elevationGrid;
+window.getTerrainPalette = () => groundTypes;
+window.getTerrainNoise = () => currentNoise;
+
+let lighting = defaultLighting();
+window.getTerrainLighting = () => lighting;
 
 // Render available ground types as selectable buttons
+function populateTextureSelect() {
+  const select = document.getElementById('groundTexture');
+  if (!select) return;
+  select.innerHTML = textureOptions
+    .map((opt) => `<option value="${opt.id}">${opt.label}</option>`)
+    .join('');
+}
+
+function updateGroundButtonLabel() {
+  const btn = document.getElementById('addGroundBtn');
+  if (!btn) return;
+  btn.textContent = editingGroundIndex === null ? 'Add Ground Type' : 'Update Ground Type';
+}
+
+function fillGroundFormFromType(type) {
+  const name = document.getElementById('groundName');
+  const color = document.getElementById('groundColor');
+  const traction = document.getElementById('groundTraction');
+  const viscosity = document.getElementById('groundViscosity');
+  const texture = document.getElementById('groundTexture');
+  if (name) name.value = type.name;
+  if (color) color.value = type.color;
+  if (traction) traction.value = String(type.traction);
+  if (viscosity) viscosity.value = String(type.viscosity);
+  if (texture) texture.value = type.texture || 'grass';
+  updateGroundButtonLabel();
+}
+
+function resetGroundForm() {
+  editingGroundIndex = null;
+  const name = document.getElementById('groundName');
+  const color = document.getElementById('groundColor');
+  const traction = document.getElementById('groundTraction');
+  const viscosity = document.getElementById('groundViscosity');
+  const texture = document.getElementById('groundTexture');
+  if (name) name.value = '';
+  if (color) color.value = '#777777';
+  if (traction) traction.value = '0.5';
+  if (viscosity) viscosity.value = '0.5';
+  if (texture) texture.value = 'grass';
+  updateGroundButtonLabel();
+}
+
+function clampGroundGridToPalette() {
+  const maxIndex = Math.max(0, groundTypes.length - 1);
+  groundGrid = groundGrid.map((row) =>
+    row.map((value) => {
+      if (!Number.isFinite(value)) return 0;
+      const clamped = Math.min(Math.max(0, Math.round(value)), maxIndex);
+      return clamped;
+    })
+  );
+}
+
+function syncLightingInputs() {
+  const sunX = document.getElementById('sunPosX');
+  const sunY = document.getElementById('sunPosY');
+  const sunZ = document.getElementById('sunPosZ');
+  const sunColor = document.getElementById('sunColor');
+  const ambientColor = document.getElementById('ambientColor');
+  if (sunX) sunX.value = String(lighting.sunPosition.x);
+  if (sunY) sunY.value = String(lighting.sunPosition.y);
+  if (sunZ) sunZ.value = String(lighting.sunPosition.z);
+  if (sunColor) sunColor.value = lighting.sunColor;
+  if (ambientColor) ambientColor.value = lighting.ambientColor;
+}
+
+function handleLightingInputChange() {
+  const sunX = Number(document.getElementById('sunPosX').value);
+  const sunY = Number(document.getElementById('sunPosY').value);
+  const sunZ = Number(document.getElementById('sunPosZ').value);
+  const sunColor = document.getElementById('sunColor').value;
+  const ambientColor = document.getElementById('ambientColor').value;
+  lighting = {
+    sunPosition: {
+      x: Number.isFinite(sunX) ? sunX : lighting.sunPosition.x,
+      y: Number.isFinite(sunY) ? sunY : lighting.sunPosition.y,
+      z: Number.isFinite(sunZ) ? sunZ : lighting.sunPosition.z
+    },
+    sunColor,
+    ambientColor
+  };
+}
+
 function renderGroundTypes() {
   const list = document.getElementById('groundTypesList');
   list.innerHTML = '';
   groundTypes.forEach((g, i) => {
     const btn = document.createElement('button');
-    btn.textContent = g.name;
+    btn.innerHTML = `<strong>${g.name}</strong><small>${textureOptions.find((opt) => opt.id === g.texture)?.label || 'Custom'}</small>`;
     btn.style.background = g.color;
     btn.className = i === currentGround ? 'selected' : '';
     btn.addEventListener('click', () => selectGroundType(i));
@@ -66,11 +173,15 @@ function renderGroundTypes() {
     btn.appendChild(del);
     list.appendChild(btn);
   });
+  updateGroundButtonLabel();
   update3DPlot();
 }
 
 function selectGroundType(i) {
   currentGround = i;
+  editingGroundIndex = i;
+  const type = groundTypes[i];
+  fillGroundFormFromType(type);
   renderGroundTypes();
 }
 
@@ -78,6 +189,14 @@ function deleteGroundType(i) {
   if (groundTypes.length === 1) return; // keep at least one type
   groundTypes.splice(i, 1);
   if (currentGround >= groundTypes.length) currentGround = 0;
+  if (editingGroundIndex !== null) {
+    if (editingGroundIndex === i) {
+      resetGroundForm();
+    } else if (editingGroundIndex > i) {
+      editingGroundIndex -= 1;
+    }
+  }
+  clampGroundGridToPalette();
   renderGroundTypes();
 }
 
@@ -87,8 +206,17 @@ function addGroundType() {
   const color = document.getElementById('groundColor').value;
   const traction = Number(document.getElementById('groundTraction').value);
   const viscosity = Number(document.getElementById('groundViscosity').value);
-  groundTypes.push({ name, color, traction, viscosity });
-  document.getElementById('groundName').value = '';
+  const texture = document.getElementById('groundTexture').value;
+  const entry = { name, color, traction, viscosity, texture };
+  if (editingGroundIndex !== null) {
+    groundTypes[editingGroundIndex] = entry;
+    currentGround = editingGroundIndex;
+  } else {
+    groundTypes.push(entry);
+    currentGround = groundTypes.length - 1;
+  }
+  editingGroundIndex = currentGround;
+  fillGroundFormFromType(groundTypes[currentGround]);
   renderGroundTypes();
 }
 
@@ -105,14 +233,49 @@ function initializeTerrain() {
   mapHeightMeters = gridHeight * cellMeters;
   console.debug('Initializing terrain', { type, gridWidth, gridHeight, mapWidthMeters, mapHeightMeters });
   flags = window.existingFlags ? JSON.parse(JSON.stringify(window.existingFlags)) : defaultFlags();
+  groundTypes = window.existingPalette
+    ? window.existingPalette.map((g) => ({
+        name: g.name,
+        color: g.color,
+        traction: g.traction,
+        viscosity: g.viscosity,
+        texture: g.texture || 'grass'
+      }))
+    : defaultGroundTypes.map((g) => ({ ...g }));
+  if (groundTypes.length === 0) groundTypes = defaultGroundTypes.map((g) => ({ ...g }));
   groundGrid = window.existingGround
     ? window.existingGround.map(row => row.slice())
     : Array.from({ length: gridHeight }, () => Array(gridWidth).fill(currentGround));
   elevationGrid = window.existingElevation
     ? window.existingElevation.map(row => row.slice())
     : Array.from({ length: gridHeight }, () => Array(gridWidth).fill(0));
+  currentNoise = window.existingNoise
+    ? { scale: Number(window.existingNoise.scale) || 12, amplitude: Number(window.existingNoise.amplitude) || 24 }
+    : { scale: 12, amplitude: 24 };
+  document.getElementById('perlinScale').value = String(currentNoise.scale);
+  document.getElementById('perlinAmplitude').value = String(currentNoise.amplitude);
+  lighting = window.existingLighting
+    ? {
+        sunPosition: {
+          x: Number(window.existingLighting.sunPosition?.x) || 200,
+          y: Number(window.existingLighting.sunPosition?.y) || 400,
+          z: Number(window.existingLighting.sunPosition?.z) || 200
+        },
+        sunColor: window.existingLighting.sunColor || '#ffe8a3',
+        ambientColor: window.existingLighting.ambientColor || '#1f2a3c'
+      }
+    : defaultLighting();
+  syncLightingInputs();
+  editingGroundIndex = null;
+  currentGround = 0;
+  clampGroundGridToPalette();
+  renderGroundTypes();
+  if (groundTypes.length) {
+    selectGroundType(0);
+  } else {
+    resetGroundForm();
+  }
   if (!window.existingElevation) {
-    document.getElementById('perlinAmplitude').value = 20;
     generatePerlinTerrain();
   } else {
     update3DPlot();
@@ -244,6 +407,7 @@ function generatePerlinTerrain() {
   const amplitudeInput = Number(document.getElementById('perlinAmplitude').value);
   const scale = Math.max(1, scaleInput || 10);
   const amplitude = Math.max(1, Math.min(maxHeight, amplitudeInput || maxHeight));
+  currentNoise = { scale, amplitude };
   elevationGrid = Array.from({ length: gridHeight }, (_, y) =>
     Array.from({ length: gridWidth }, (_, x) => {
       const value = noise.noise(x / scale, y / scale, 0);
@@ -380,14 +544,22 @@ function setupTerrainEditor(e) {
   if (!terrainEditorInitialized) {
     const ids = [
       'addGroundBtn',
+      'resetGroundBtn',
       'perlinBtn',
+      'perlinScale',
+      'perlinAmplitude',
       'showAxes',
       'viewSelect',
       'projectionType',
       'lockCamera',
       'sizeX',
       'sizeY',
-      'terrainType'
+      'terrainType',
+      'sunPosX',
+      'sunPosY',
+      'sunPosZ',
+      'sunColor',
+      'ambientColor'
     ];
     const elements = {};
     for (const id of ids) {
@@ -405,11 +577,21 @@ function setupTerrainEditor(e) {
       return;
     }
 
-    // Only render ground types after confirming the list exists
-    renderGroundTypes();
+    populateTextureSelect();
+    resetGroundForm();
 
     elements.addGroundBtn.addEventListener('click', addGroundType);
+    elements.resetGroundBtn.addEventListener('click', () => {
+      resetGroundForm();
+      renderGroundTypes();
+    });
     elements.perlinBtn.addEventListener('click', generatePerlinTerrain);
+    elements.perlinScale.addEventListener('change', () => {
+      currentNoise.scale = Math.max(1, Number(elements.perlinScale.value) || currentNoise.scale);
+    });
+    elements.perlinAmplitude.addEventListener('change', () => {
+      currentNoise.amplitude = Math.max(1, Math.min(maxHeight, Number(elements.perlinAmplitude.value) || currentNoise.amplitude));
+    });
     elements.showAxes.addEventListener('change', update3DPlot);
     elements.viewSelect.addEventListener('change', update3DPlot);
     elements.projectionType.addEventListener('change', update3DPlot);
@@ -418,6 +600,10 @@ function setupTerrainEditor(e) {
 
     ['sizeX', 'sizeY', 'terrainType'].forEach(id => {
       elements[id].addEventListener('change', initializeTerrain);
+    });
+
+    ['sunPosX', 'sunPosY', 'sunPosZ', 'sunColor', 'ambientColor'].forEach((id) => {
+      elements[id].addEventListener('change', handleLightingInputChange);
     });
 
     terrainEditorInitialized = true;
