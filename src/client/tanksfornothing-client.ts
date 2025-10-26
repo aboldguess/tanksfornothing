@@ -26,7 +26,8 @@ import * as THREE from '../libs/three.module.js';
 // cannon-es provides lightweight rigid body physics with vehicle helpers.
 // Imported from CDN to keep repository light while using the latest version.
 import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
-import { initHUD, updateHUD, updateAmmoHUD, showCrosshair } from './hud.js';
+import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud.js';
+import { buildGroundTexture } from './ground-textures.js';
 
 declare global {
   interface Window {
@@ -86,6 +87,22 @@ let playerHealth = 100;
 // root mesh plus references to the turret and gun so orientation can be synced
 // on network updates.
 const otherPlayers = new Map(); // id -> { mesh, turret, gun }
+const fallbackPalette = [
+  { name: 'grass', color: '#3cb043', texture: 'grass' },
+  { name: 'mud', color: '#6b4423', texture: 'mud' },
+  { name: 'snow', color: '#ffffff', texture: 'snow' },
+  { name: 'sand', color: '#c2b280', texture: 'sand' },
+  { name: 'rock', color: '#80868b', texture: 'rock' }
+];
+const fallbackLighting = {
+  sunPosition: { x: 200, y: 400, z: 200 },
+  sunColor: '#ffe8a3',
+  ambientColor: '#1f2a3c'
+};
+let ambientLight = null;
+let sunLight = null;
+let currentTerrainDefinition = null;
+let groundTexture = null;
 
 // Build a simplified tank mesh for remote players using dimensions from the
 // server. These meshes are purely visual and have no physics bodies.
@@ -139,7 +156,7 @@ if (window.io) {
   socket.on('connect', () => console.log('Connected to server'));
   socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
   socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
-  socket.on('terrain', (name) => buildTerrain(name));
+  socket.on('terrain', (payload) => applyTerrainPayload(payload));
   socket.on('projectile-fired', (p) => {
     if (!scene) return;
     // Debug: log projectile spawn details so firing issues are easier to trace.
@@ -227,6 +244,8 @@ if (window.io) {
     });
     ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
     updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+    lastFireTime = 0;
+    updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
   });
 } else {
   showError('Socket.IO failed to load. Running offline.');
@@ -534,6 +553,12 @@ let ammoLeft = defaultTank.ammoCapacity;
 let lastFireTime = 0;
 // Static friction coefficient representing tracks on typical terrain.
 const GROUND_FRICTION = 0.3;
+// Viscosity-driven damping ranges keep motion believable across mud/sand/water.
+const MIN_ROLLING_DAMPING = 0.15;
+const MAX_ROLLING_DAMPING = 0.65;
+const BRAKE_DAMPING = 0.85;
+// Default traction/viscosity values when palette data is missing or malformed.
+const DEFAULT_SURFACE = { traction: 0.9, viscosity: 0.3 };
 // Torque applied for A/D rotation; derived from mass, friction, and desired acceleration
 let TURN_TORQUE = 0;
 let MAX_TURRET_INCLINE = THREE.MathUtils.degToRad(defaultTank.maxTurretIncline);
@@ -572,115 +597,253 @@ let lastState = { x: 0, y: 0, z: 0, rot: 0, turret: 0, gun: 0 };
 // Always initialize scene so the client can operate even without networking.
 init();
 
-// Build ground mesh based on terrain name.
-function buildTerrain(name) {
-  if (!scene) return;
-  // Remove old graphics and physics terrain
+function disposeTerrain() {
   if (ground) {
-    ground.geometry.dispose();
-    ground.material.dispose();
     scene.remove(ground);
+    if (ground.geometry) ground.geometry.dispose();
+    if (Array.isArray(ground.material)) {
+      ground.material.forEach((mat) => mat.dispose());
+    } else if (ground.material) {
+      ground.material.dispose();
+    }
+    ground = null;
+  }
+  if (groundTexture) {
+    groundTexture.dispose();
+    groundTexture = null;
   }
   if (world && groundBody) {
     world.removeBody(groundBody);
     groundBody = null;
   }
+}
 
-  // Helper to generate height data for physics heightfields
-  const buildHeightField = (evaluator) => {
-    const size = 10; // segments per side
-    const data = [];
-    for (let i = 0; i <= size; i++) {
-      data[i] = [];
-      for (let j = 0; j <= size; j++) {
-        const x = (i - size / 2) * (200 / size);
-        const y = (j - size / 2) * (200 / size);
-        data[i][j] = evaluator(x, y);
-      }
-    }
-    const shape = new CANNON.Heightfield(data, { elementSize: 200 / size });
-    const body = new CANNON.Body({ mass: 0 });
-    body.addShape(shape, new CANNON.Vec3(-100, 0, -100)); // shift to match mesh
-    body.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-    world.addBody(body);
-    groundBody = body;
-  };
+function updateLighting(lightingSettings) {
+  const settings = lightingSettings && typeof lightingSettings === 'object' ? lightingSettings : fallbackLighting;
+  if (sunLight) {
+    const sunPos = settings.sunPosition || fallbackLighting.sunPosition;
+    sunLight.position.set(sunPos.x ?? fallbackLighting.sunPosition.x, sunPos.y ?? fallbackLighting.sunPosition.y, sunPos.z ?? fallbackLighting.sunPosition.z);
+    sunLight.color.set(settings.sunColor || fallbackLighting.sunColor);
+  }
+  if (ambientLight) {
+    ambientLight.color.set(settings.ambientColor || fallbackLighting.ambientColor);
+  }
+  if (scene) {
+    const base = new THREE.Color(settings.ambientColor || fallbackLighting.ambientColor);
+    const highlight = new THREE.Color(settings.sunColor || fallbackLighting.sunColor);
+    const sky = base.clone().lerp(highlight, 0.35);
+    scene.background = sky;
+    if (renderer) renderer.setClearColor(sky);
+  }
+}
 
-  switch (name) {
-    case 'hill': {
-      ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(200, 200, 10, 10),
-        new THREE.MeshStandardMaterial({ color: 0x228822 })
-      );
-      const pos = ground.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const y = pos.getY(i);
-        const dist = Math.sqrt(x * x + y * y);
-        const height = Math.max(0, 10 - dist / 5);
-        pos.setZ(i, height);
-      }
-      ground.geometry.computeVertexNormals();
-      buildHeightField((x, y) => {
-        const dist = Math.sqrt(x * x + y * y);
-        return Math.max(0, 10 - dist / 5);
-      });
-      break;
+function buildLegacyTerrain(name) {
+  if (!scene) return;
+  disposeTerrain();
+  const geometry = name === 'hill' || name === 'valley'
+    ? new THREE.PlaneGeometry(200, 200, 10, 10)
+    : new THREE.PlaneGeometry(200, 200, 1, 1);
+  const material = new THREE.MeshStandardMaterial({ color: 0x507140 });
+  ground = new THREE.Mesh(geometry, material);
+  const pos = geometry.attributes.position;
+  if (name === 'hill' || name === 'valley') {
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const y = pos.getY(i);
+      const dist = Math.sqrt(x * x + y * y);
+      const height = Math.max(0, 10 - dist / 5);
+      pos.setZ(i, name === 'valley' ? -height : height);
     }
-    case 'valley': {
-      ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(200, 200, 10, 10),
-        new THREE.MeshStandardMaterial({ color: 0x228822 })
-      );
-      const pos = ground.geometry.attributes.position;
-      for (let i = 0; i < pos.count; i++) {
-        const x = pos.getX(i);
-        const y = pos.getY(i);
-        const dist = Math.sqrt(x * x + y * y);
-        const height = -Math.max(0, 10 - dist / 5);
-        pos.setZ(i, height);
-      }
-      ground.geometry.computeVertexNormals();
-      buildHeightField((x, y) => {
-        const dist = Math.sqrt(x * x + y * y);
-        return -Math.max(0, 10 - dist / 5);
-      });
-      break;
-    }
-    default: {
-      ground = new THREE.Mesh(
-        new THREE.PlaneGeometry(200, 200),
-        new THREE.MeshStandardMaterial({ color: 0x228822 })
-      );
-      const plane = new CANNON.Plane();
-      groundBody = new CANNON.Body({ mass: 0 });
-      groundBody.addShape(plane);
-      groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
-      world.addBody(groundBody);
-      break;
-    }
+    geometry.computeVertexNormals();
   }
   ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
   scene.add(ground);
+  if (world) {
+    const elementSize = 200 / 10;
+    let shape;
+    if (name === 'hill' || name === 'valley') {
+      const data = [];
+      for (let i = 0; i <= 10; i++) {
+        data[i] = [];
+        for (let j = 0; j <= 10; j++) {
+          const x = (i - 5) * elementSize;
+          const y = (j - 5) * elementSize;
+          const dist = Math.sqrt(x * x + y * y);
+          const height = Math.max(0, 10 - dist / 5);
+          data[i][j] = name === 'valley' ? -height : height;
+        }
+      }
+      shape = new CANNON.Heightfield(data, { elementSize });
+      groundBody = new CANNON.Body({ mass: 0 });
+      groundBody.addShape(shape, new CANNON.Vec3(-100, 0, -100));
+      groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    } else {
+      shape = new CANNON.Plane();
+      groundBody = new CANNON.Body({ mass: 0 });
+      groundBody.addShape(shape);
+      groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    }
+    world.addBody(groundBody);
+  }
+  updateLighting(null);
+  currentTerrainDefinition = null;
+}
+
+function buildTerrainFromDefinition(definition) {
+  if (!scene || !definition) {
+    buildLegacyTerrain('flat');
+    return;
+  }
+  const elevation = Array.isArray(definition.elevation) ? definition.elevation : [];
+  if (!elevation.length || !Array.isArray(elevation[0])) {
+    buildLegacyTerrain(definition.name || 'flat');
+    return;
+  }
+  disposeTerrain();
+  const rows = elevation.length;
+  const cols = elevation[0].length;
+  const widthMeters = Math.max(1, (definition.size?.x ?? 1) * 1000);
+  const heightMeters = Math.max(1, (definition.size?.y ?? 1) * 1000);
+  const geometry = new THREE.PlaneGeometry(widthMeters, heightMeters, Math.max(1, cols - 1), Math.max(1, rows - 1));
+  const positions = geometry.attributes.position;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const index = y * cols + x;
+      const value = elevation[y][x];
+      positions.setZ(index, Number.isFinite(value) ? value : 0);
+    }
+  }
+  geometry.computeVertexNormals();
+  const palette = Array.isArray(definition.palette) && definition.palette.length ? definition.palette : fallbackPalette;
+  const groundGrid = Array.isArray(definition.ground) && definition.ground.length ? definition.ground : Array.from({ length: rows }, () => Array(cols).fill(0));
+  if (groundTexture) {
+    groundTexture.dispose();
+    groundTexture = null;
+  }
+  groundTexture = buildGroundTexture(palette, groundGrid);
+  const material = new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    map: groundTexture,
+    roughness: 0.95,
+    metalness: 0.05
+  });
+  ground = new THREE.Mesh(geometry, material);
+  ground.rotation.x = -Math.PI / 2;
+  ground.receiveShadow = true;
+  scene.add(ground);
+  if (world) {
+    // Use a Cannon Trimesh so physics matches the rendered mesh for any map ratio.
+    const physicsGeometry = geometry.clone();
+    physicsGeometry.rotateX(-Math.PI / 2);
+    const positionAttr = physicsGeometry.attributes.position;
+    const vertices = new Float32Array(positionAttr.array.length);
+    vertices.set(positionAttr.array);
+    let indicesArray;
+    if (physicsGeometry.index) {
+      const indexAttr = physicsGeometry.index.array;
+      indicesArray = indexAttr instanceof Uint32Array
+        ? new Uint32Array(indexAttr)
+        : new Uint16Array(indexAttr);
+    } else {
+      const vertexCount = positionAttr.count;
+      indicesArray = vertexCount > 65535
+        ? new Uint32Array(vertexCount)
+        : new Uint16Array(vertexCount);
+      for (let i = 0; i < indicesArray.length; i++) indicesArray[i] = i;
+    }
+    const shape = new CANNON.Trimesh(vertices, indicesArray);
+    groundBody = new CANNON.Body({ mass: 0 });
+    groundBody.addShape(shape);
+    world.addBody(groundBody);
+    physicsGeometry.dispose();
+  }
+  updateLighting(definition.lighting);
+  currentTerrainDefinition = definition;
+}
+
+function applyTerrainPayload(payload) {
+  if (payload && typeof payload === 'object' && payload.definition) {
+    buildTerrainFromDefinition(payload.definition);
+  } else if (typeof payload === 'string') {
+    buildLegacyTerrain(payload);
+  } else {
+    buildLegacyTerrain('flat');
+  }
+}
+
+// Determine the traction and viscosity under the provided world-space position.
+// Values default to sane behaviour when palette data is missing so gameplay continues.
+function sampleSurfaceResponse(position) {
+  if (!currentTerrainDefinition || !position) return { ...DEFAULT_SURFACE };
+  const ground = Array.isArray(currentTerrainDefinition.ground)
+    ? currentTerrainDefinition.ground
+    : null;
+  const palette = Array.isArray(currentTerrainDefinition.palette)
+    ? currentTerrainDefinition.palette
+    : null;
+  if (!ground || !ground.length || !palette || !palette.length) return { ...DEFAULT_SURFACE };
+  const rows = ground.length;
+  const cols = ground[0].length;
+  if (!rows || !cols) return { ...DEFAULT_SURFACE };
+  const width = Math.max(1, (currentTerrainDefinition.size?.x ?? 1) * 1000);
+  const height = Math.max(1, (currentTerrainDefinition.size?.y ?? 1) * 1000);
+  const normX = THREE.MathUtils.clamp((position.x + width / 2) / width, 0, 0.999);
+  const normZ = THREE.MathUtils.clamp((position.z + height / 2) / height, 0, 0.999);
+  const xIndex = Math.min(cols - 1, Math.floor(normX * cols));
+  const zIndex = Math.min(rows - 1, Math.floor(normZ * rows));
+  const row = Array.isArray(ground[zIndex]) ? ground[zIndex] : null;
+  if (!row || !row.length) return { ...DEFAULT_SURFACE };
+  const paletteIndex = row[Math.min(xIndex, row.length - 1)];
+  const entry =
+    Number.isFinite(paletteIndex) && palette[paletteIndex]
+      ? palette[paletteIndex]
+      : null;
+  const traction = Number.isFinite(entry?.traction)
+    ? entry.traction
+    : DEFAULT_SURFACE.traction;
+  const viscosity = Number.isFinite(entry?.viscosity)
+    ? entry.viscosity
+    : DEFAULT_SURFACE.viscosity;
+  return {
+    traction: THREE.MathUtils.clamp(traction, 0.05, 2),
+    viscosity: THREE.MathUtils.clamp(viscosity, 0, 1)
+  };
 }
 
 function init() {
   scene = new THREE.Scene();
-  scene.background = new THREE.Color(0xa0d0ff);
+  scene.background = new THREE.Color(fallbackLighting.ambientColor);
 
-  const light = new THREE.HemisphereLight(0xffffff, 0x444444);
-  light.position.set(0, 20, 0);
-  scene.add(light);
+  ambientLight = new THREE.AmbientLight(fallbackLighting.ambientColor, 0.6);
+  scene.add(ambientLight);
+  sunLight = new THREE.DirectionalLight(fallbackLighting.sunColor, 1.1);
+  sunLight.position.set(
+    fallbackLighting.sunPosition.x,
+    fallbackLighting.sunPosition.y,
+    fallbackLighting.sunPosition.z
+  );
+  sunLight.castShadow = true;
+  sunLight.shadow.mapSize.set(2048, 2048);
+  sunLight.shadow.camera.near = 1;
+  sunLight.shadow.camera.far = 1500;
+  sunLight.shadow.camera.left = -600;
+  sunLight.shadow.camera.right = 600;
+  sunLight.shadow.camera.top = 600;
+  sunLight.shadow.camera.bottom = -600;
+  scene.add(sunLight);
 
   // Physics world with standard gravity
   world = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
-  buildTerrain('flat');
+  buildLegacyTerrain('flat');
 
   // Tank body graphics
   const body = new THREE.Mesh(
     new THREE.BoxGeometry(defaultTank.bodyWidth, defaultTank.bodyHeight, defaultTank.bodyLength),
     new THREE.MeshStandardMaterial({ color: 0x555555 })
   );
+  body.castShadow = true;
+  body.receiveShadow = true;
   scene.add(body);
   tank = body;
 
@@ -689,6 +852,8 @@ function init() {
     new THREE.BoxGeometry(defaultTank.turretWidth, defaultTank.turretHeight, defaultTank.turretLength),
     new THREE.MeshStandardMaterial({ color: 0x777777 })
   );
+  turret.castShadow = true;
+  turret.receiveShadow = true;
   turret.position.set(
     (defaultTank.turretYPercent / 100 - 0.5) * defaultTank.bodyWidth,
     defaultTank.bodyHeight / 2 + defaultTank.turretHeight / 2,
@@ -707,6 +872,8 @@ function init() {
   );
   barrel.rotation.x = -Math.PI / 2; // orient along -Z
   barrel.position.z = -defaultTank.barrelLength / 2; // move so base sits at turret center
+  barrel.castShadow = true;
+  barrel.receiveShadow = true;
   gun.add(barrel);
   turret.add(gun);
   tank.add(turret);
@@ -728,17 +895,21 @@ function init() {
   chassisBody.angularFactor.set(0, 1, 0);
   // Lower angular damping so applied torque produces visible rotation.
   chassisBody.angularDamping = 0.2;
-  chassisBody.linearDamping = 0.3; // simulate ground friction/drag
+  chassisBody.linearDamping = MIN_ROLLING_DAMPING; // simulate base ground drag
   world.addBody(chassisBody);
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer();
+  renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   document.body.appendChild(renderer.domElement);
+  updateLighting(currentTerrainDefinition?.lighting ?? null);
 
   // Build HUD overlay to display runtime metrics and hide crosshair until gameplay
   initHUD();
   updateAmmoHUD([]);
+  updateCooldownHUD(0, 1);
   showCrosshair(false);
 
   // Only engage pointer lock once the lobby is hidden so menu interactions
@@ -829,6 +1000,7 @@ function applyTankConfig(t) {
   FIRE_DELAY = 60 / (t.mainCannonFireRate ?? defaultTank.mainCannonFireRate);
   ammoLeft = t.ammoCapacity ?? defaultTank.ammoCapacity;
   lastFireTime = 0;
+  updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 
   // Reset orientation targets so camera and turret start aligned for new stats
   cameraYaw = 0;
@@ -895,7 +1067,7 @@ function applyTankConfig(t) {
   chassisBody.angularFactor.set(0, 1, 0);
   // Reduced damping keeps hull rotation responsive.
   chassisBody.angularDamping = 0.2;
-  chassisBody.linearDamping = 0.3;
+  chassisBody.linearDamping = MIN_ROLLING_DAMPING;
   world.addBody(chassisBody);
   currentSpeed = 0;
 }
@@ -929,6 +1101,9 @@ function onMouseMove(e) {
  * chassis to horizontal movement while allowing yaw rotation.
  */
 function updateMovement() {
+  const surface = sampleSurfaceResponse(chassisBody?.position);
+  const tractionScale = surface.traction;
+  const viscosity = surface.viscosity;
   // Translate key input into continuous forces rather than direct velocity changes
   let throttle = 0;
   if (keys['w']) throttle = 1;
@@ -938,7 +1113,7 @@ function updateMovement() {
       (throttle > 0 && currentSpeed < MAX_SPEED) ||
       (throttle < 0 && currentSpeed > -MAX_REVERSE_SPEED);
     if (withinLimits) {
-      const force = throttle * ACCELERATION * chassisBody.mass;
+      const force = throttle * ACCELERATION * tractionScale * chassisBody.mass;
       // Negative Z is forward in local space; applying at center of mass
       chassisBody.applyLocalForce(new CANNON.Vec3(0, 0, -force), new CANNON.Vec3(0, 0, 0));
     }
@@ -950,11 +1125,12 @@ function updateMovement() {
   else if (keys['d']) turn = -1;
   if (turn !== 0) {
     chassisBody.wakeUp(); // ensure sleeping bodies respond immediately
-    chassisBody.torque.y += turn * TURN_TORQUE;
+    chassisBody.torque.y += turn * TURN_TORQUE * tractionScale;
   }
 
   // Simple hand brake: increase damping while space is held
-  chassisBody.linearDamping = keys[' '] ? 0.8 : 0.3;
+  const rollingDrag = THREE.MathUtils.lerp(MIN_ROLLING_DAMPING, MAX_ROLLING_DAMPING, viscosity);
+  chassisBody.linearDamping = keys[' '] ? BRAKE_DAMPING : rollingDrag;
 }
 
 function animate() {
@@ -1017,6 +1193,8 @@ function animate() {
 
   updateCamera();
   renderer.render(scene, camera);
+  const reloadRemaining = Math.max(0, FIRE_DELAY - (Date.now() - lastFireTime) / 1000);
+  updateCooldownHUD(reloadRemaining, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 
   // Throttle network updates to minimize bandwidth
   if (socket) {
