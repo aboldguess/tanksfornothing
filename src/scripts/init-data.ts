@@ -1,12 +1,14 @@
-// init-data.js
+// init-data.ts
 // Summary: Ensures data directory plus tanks.json, nations.json, ammo.json and terrains.json exist for persistence.
 // Structure: create data folder -> write default JSON files if missing.
-// Usage: Run with `node scripts/init-data.js` prior to starting server.
+// Usage: Run with `npm run setup` or `node dist/scripts/init-data.js` prior to starting the server.
 // ---------------------------------------------------------------------------
 
-import { promises as fs } from 'fs';
+import { promises as fs } from 'node:fs';
 import { generateGentleHills } from '../utils/terrain-noise.js';
-const dataDir = new URL('../data/', import.meta.url);
+
+const projectRoot = new URL('../../', import.meta.url);
+const dataDir = new URL('./data/', projectRoot);
 const tanksFile = new URL('tanks.json', dataDir);
 const nationsFile = new URL('nations.json', dataDir);
 const ammoFile = new URL('ammo.json', dataDir);

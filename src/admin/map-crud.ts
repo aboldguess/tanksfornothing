@@ -1,4 +1,5 @@
-// map-crud.js
+// map-crud.ts
+// @ts-nocheck
 // Summary: Wires the Map CRUD UI, enabling opening and cancellation of the map editor and emitting
 //          debug info.
 // Structure: DOMContentLoaded listener -> add/cancel handlers -> debug logging.

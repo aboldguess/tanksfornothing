@@ -1,11 +1,12 @@
 /**
  * Summary: Applies approximate real-world geometry and fire-rate values to tank definitions.
  * Structure: Reads existing data/tanks.json, merges per-tank updates, writes file back with consistent formatting.
- * Usage: node scripts/apply-realistic-tank-data.js
+ * Usage: npm run build && node dist/scripts/apply-realistic-tank-data.js
  */
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 
-const file = new URL('../data/tanks.json', import.meta.url);
+const projectRoot = new URL('../../', import.meta.url);
+const file = new URL('./data/tanks.json', projectRoot);
 const data = JSON.parse(await readFile(file, 'utf8'));
 
 const updates = {

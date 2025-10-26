@@ -1,6 +1,6 @@
 # Tanks for Nothing
 
-A minimal browser-based multiplayer tank demo built with Node.js, Express, Socket.IO and Three.js. Tanks are rendered as simple blocks with basic movement and turret controls.
+A minimal browser-based multiplayer tank demo built with Node.js, Express, Socket.IO, Three.js and TypeScript. Tanks are rendered as simple blocks with basic movement and turret controls.
 
 ## Features
 - WASD driving, Space brake, mouse-look turret control
@@ -21,6 +21,7 @@ Run these commands from a terminal (PowerShell on Windows):
 ```bash
 cd tanksfornothing
 npm install
+npm run build   # compile TypeScript (also runs automatically via other scripts)
 npm run setup   # create data files
 npm start
 ```
@@ -29,6 +30,7 @@ npm start
 ```powershell
 cd tanksfornothing
 npm install
+npm run build   # compile TypeScript (also runs automatically via other scripts)
 npm run setup   # create data files
 npm start
 ```
@@ -74,4 +76,5 @@ The tank editor now includes additional sliders for turret elevation limits and 
 - Turret Width, Length and Height (1–3m / 1–5m / 0.25–2m)
 
 ## Debugging
-The server logs player connections and updates to the console. Use `npm run dev` to auto-restart on changes.
+The server logs player connections and updates to the console. Use `npm run dev` to run the TypeScript server via `ts-node`
+with auto-reload on changes.

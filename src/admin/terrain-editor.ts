@@ -1,4 +1,5 @@
-// terrain-editor.js
+// terrain-editor.ts
+// @ts-nocheck
 // Summary: Terrain editor enabling direct 3D surface sculpting with a raised-cosine brush, camera presets,
 //          perspective control, shading, Perlin-noise-based terrain generation (with adjustable scale
 //          and amplitude controls) and capture-the-flag position placement. Ground, elevation and flag

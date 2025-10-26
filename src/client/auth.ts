@@ -1,13 +1,15 @@
-// auth.js
+// auth.ts
 // Summary: Handles signup and login form submissions plus navbar profile menu for Tanks for Nothing.
 // Structure: detect which form is present -> attach submit handlers -> toggle profile menu -> optional sign-out.
 // Usage: Included by login.html and signup.html pages.
 // ---------------------------------------------------------------------------
 
-function initMenu() {
+function initMenu(): void {
   const menu = document.querySelector('.profile-menu');
   const pic = document.getElementById('profilePic');
-  if (pic) pic.addEventListener('click', () => menu.classList.toggle('show'));
+  if (pic && menu instanceof HTMLElement) {
+    pic.addEventListener('click', () => menu.classList.toggle('show'));
+  }
   const signOut = document.getElementById('signOut');
   if (signOut)
     signOut.addEventListener('click', async (e) => {
@@ -16,13 +18,16 @@ function initMenu() {
     });
 }
 
-async function handleSignup(e) {
+async function handleSignup(e: Event): Promise<void> {
   e.preventDefault();
-  const username = document.getElementById('signupUser').value;
-  const password = document.getElementById('signupPass').value;
+  const usernameEl = document.getElementById('signupUser') as HTMLInputElement | null;
+  const passwordEl = document.getElementById('signupPass') as HTMLInputElement | null;
+  const messageEl = document.getElementById('authError');
+  if (!usernameEl || !passwordEl || !messageEl) return;
+  const username = usernameEl.value;
+  const password = passwordEl.value;
   if (password.length < 6) {
-    const msg = document.getElementById('authError');
-    msg.textContent = 'Password must be at least 6 characters';
+    messageEl.textContent = 'Password must be at least 6 characters';
     return;
   }
   const res = await fetch('/api/signup', {
@@ -30,31 +35,33 @@ async function handleSignup(e) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
-  const msg = document.getElementById('authError');
   if (res.ok) {
-    msg.style.color = '#80ff80';
-    msg.textContent = 'Signup successful. Please log in.';
+    messageEl.style.color = '#80ff80';
+    messageEl.textContent = 'Signup successful. Please log in.';
   } else {
     const data = await res.json().catch(() => ({}));
-    msg.textContent = data.error || 'Signup failed';
+    messageEl.textContent = data.error || 'Signup failed';
   }
 }
 
-async function handleLogin(e) {
+async function handleLogin(e: Event): Promise<void> {
   e.preventDefault();
-  const username = document.getElementById('loginUser').value;
-  const password = document.getElementById('loginPass').value;
+  const usernameEl = document.getElementById('loginUser') as HTMLInputElement | null;
+  const passwordEl = document.getElementById('loginPass') as HTMLInputElement | null;
+  const messageEl = document.getElementById('authError');
+  if (!usernameEl || !passwordEl || !messageEl) return;
+  const username = usernameEl.value;
+  const password = passwordEl.value;
   const res = await fetch('/api/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
   });
-  const msg = document.getElementById('authError');
   if (res.ok) {
     window.location.href = '/index.html';
   } else {
     const data = await res.json().catch(() => ({}));
-    msg.textContent = data.error || 'Login failed';
+    messageEl.textContent = data.error || 'Login failed';
   }
 }
 
