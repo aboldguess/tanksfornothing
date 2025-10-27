@@ -187,6 +187,17 @@ const adminDir = fileURLToPath(new URL('./admin', projectRootUrl));
 const uploadBase = path.join(clientPublicDir, 'uploads');
 const ammoDir = path.join(uploadBase, 'ammo');
 
+// Detect whether a Vite production build exists so the server can prioritise
+// hashed assets in dist while gracefully falling back to the raw public files
+// during development.
+let clientBuildAvailable = false;
+try {
+  await fs.access(clientDistDir);
+  clientBuildAvailable = true;
+} catch {
+  console.warn('Client dist assets missing; development build will serve unbundled public files.');
+}
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     fs.mkdir(ammoDir, { recursive: true })
@@ -633,8 +644,11 @@ await loadUsers();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // support classic form posts
 app.use(cookieParser()); // ensure req.cookies is populated for auth checks
+if (clientBuildAvailable) {
+  app.use(express.static(clientDistDir));
+  app.use('/js', express.static(clientDistDir));
+}
 app.use(express.static(clientPublicDir));
-app.use('/js', express.static(clientDistDir));
 
 // Admin HTML pages require authentication; login assets remain public
 app.get('/admin', (req: Request, res: Response) => {
