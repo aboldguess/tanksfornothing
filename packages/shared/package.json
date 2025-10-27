@@ -1,0 +1,25 @@
+{
+  "_comment": [
+    "Summary: Workspace manifest for Tanks for Nothing shared utilities and data models.",
+    "Structure: Provides TypeScript build scripts and package exports that expose reusable helpers.",
+    "Usage: Imported by the server and client workspaces via the '@tanksfornothing/shared' name."
+  ],
+  "name": "@tanksfornothing/shared",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./terrain-noise": "./dist/terrain-noise.js"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "node -e \"(async()=>{const fs=await import('node:fs/promises');await fs.rm('dist',{recursive:true,force:true});})()\"",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "echo \"Shared package has no runtime tests yet\""
+  },
+  "dependencies": {},
+  "devDependencies": {}
+}

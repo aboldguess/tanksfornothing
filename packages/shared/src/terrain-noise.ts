@@ -2,7 +2,7 @@
 // Summary: Provides TypeScript Perlin noise utilities for creating gentle hill elevation grids used by the
 //          terrain editor and default terrain setup.
 // Structure: PerlinNoise class -> generateGentleHills(width,height,scale,amplitude) export.
-// Usage: import { generateGentleHills } from '../utils/terrain-noise.js' to produce a 2D array of elevation values.
+// Usage: import { generateGentleHills } from '@tanksfornothing/shared' to produce a 2D array of elevation values.
 // ---------------------------------------------------------------------------
 
 // Classic Perlin noise implementation adapted from Stefan Gustavson's public domain code.
