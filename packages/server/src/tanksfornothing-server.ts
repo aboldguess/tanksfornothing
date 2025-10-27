@@ -1067,7 +1067,8 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
   res.json({ success: true });
 });
 if (process.argv[1] === __filename) {
-  server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
+  await gameServer.listen(PORT);
+  console.log(`Tanks for Nothing server and Colyseus transport running on port ${PORT}`);
 }
 
 export { app, server, validateTank };
