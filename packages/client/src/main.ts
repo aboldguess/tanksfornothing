@@ -395,6 +395,14 @@ function attachRoomListeners(activeRoom) {
     stateChangeSignal.add(attemptSchemaBinding);
   } else {
     console.warn('Colyseus room missing onStateChange signal helpers; multiplayer state may not sync correctly');
+  if (typeof activeRoom.onStateChange === 'function') {
+    activeRoom.onStateChange((state) => {
+      if (!stateListenersBound) {
+        bindSchemaCollections(state);
+      }
+    });
+  } else {
+    console.warn('Colyseus room missing onStateChange handler; multiplayer state may not sync correctly');
   }
 
   activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
