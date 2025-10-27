@@ -12,7 +12,8 @@
   "main": "./dist/index.js",
   "exports": {
     ".": "./dist/index.js",
-    "./terrain-noise": "./dist/terrain-noise.js"
+    "./terrain-noise": "./dist/terrain-noise.js",
+    "./schema": "./dist/schema.js"
   },
   "scripts": {
     "build": "tsc -b",
@@ -20,6 +21,8 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "echo \"Shared package has no runtime tests yet\""
   },
-  "dependencies": {},
+  "dependencies": {
+    "@colyseus/schema": "^3.0.65"
+  },
   "devDependencies": {}
 }

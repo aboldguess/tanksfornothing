@@ -5,7 +5,7 @@
 //          handles user input, camera control and firing mechanics. Camera defaults
 //          (height/distance) can be adjusted via the admin settings page. Uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
-//          with a server via Socket.IO. Camera immediately reflects mouse movement while
+//          with a server via Colyseus WebSocket rooms. Camera immediately reflects mouse movement while
 //          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
 //          under gravity. Remote players are represented with simple meshes that now
 //          include a visible cannon barrel and update as network events arrive so
@@ -14,7 +14,7 @@
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Registered as the Vite entry module (see ../public/index.html). Relies on bundled
-//         dependencies (Three.js, Cannon-es, Socket.IO client) and automatically wires up the
+//         dependencies (Three.js, Cannon-es, Colyseus.js client) and automatically wires up the
 //         navigation HUD and debugging overlays when loaded in the browser.
 // ---------------------------------------------------------------------------
 // Security & Debugging: All critical operations log descriptive errors and surface fatal
@@ -23,7 +23,12 @@
 // CDN includes.
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
-import { io } from 'socket.io-client';
+import { Client as ColyseusClient } from 'colyseus.js';
+import {
+  GAME_COMMAND,
+  GAME_EVENT,
+  TanksForNothingState
+} from '@tanksfornothing/shared';
 
 import './nav';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
@@ -67,29 +72,25 @@ function renderExplosion(position) {
   }, 500);
 }
 
-// Establish a resilient Socket.IO client using the bundled dependency so the
-// multiplayer channel functions in both dev (Vite) and production builds.
-let socket = null;
+// Establish a resilient Colyseus client so the multiplayer channel functions in both
+// dev (Vite) and production builds.
+let networkClient = null;
+let room = null;
 try {
-  socket = io({
-    transports: ['websocket'],
-    autoConnect: true,
-    reconnectionAttempts: 5
-  });
+  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  networkClient = new ColyseusClient(`${scheme}://${window.location.host}/colyseus`);
 } catch (error) {
-  console.warn('Socket.io client failed to initialise; continuing offline mode.', error);
+  console.warn('Colyseus client failed to initialise; continuing offline mode.', error);
 }
 // Client-side ammo handling
 let playerAmmo = [];
 let selectedAmmo = null;
-const projectiles = new Map(); // id -> { mesh, vx, vy, vz }
-// Gravity acceleration for local projectile simulation (m/s^2)
-const GRAVITY = -9.81;
+const projectiles = new Map(); // id -> { mesh, schema }
 let playerHealth = 100;
-// Track other players in the session by their socket.id. Each entry stores the
+// Track other players in the session by their Colyseus sessionId. Each entry stores the
 // root mesh plus references to the turret and gun so orientation can be synced
 // on network updates.
-const otherPlayers = new Map(); // id -> { mesh, turret, gun }
+const otherPlayers = new Map(); // sessionId -> { mesh, turret, gun }
 const fallbackPalette = [
   { name: 'grass', color: '#3cb043', texture: 'grass' },
   { name: 'mud', color: '#6b4423', texture: 'mud' },
@@ -154,103 +155,217 @@ function createRemoteTank(t) {
   return { mesh: body, turret: turt, gun: gunObj };
 }
 
-if (socket) {
-  socket.on('connect', () => console.log('Connected to server'));
-  socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
-  socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));
-  socket.on('terrain', (payload) => applyTerrainPayload(payload));
-  socket.on('projectile-fired', (p) => {
-    if (!scene) return;
-    // Debug: log projectile spawn details so firing issues are easier to trace.
-    console.debug('Projectile spawned', p);
-    // Previous shells were too small to see; increase radius for visibility.
-    const geom = new THREE.SphereGeometry(0.3, 12, 12);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
-    const mesh = new THREE.Mesh(geom, mat);
-    mesh.position.set(p.x, p.y, p.z);
-    scene.add(mesh);
-    projectiles.set(p.id, { mesh, vx: p.vx, vy: p.vy, vz: p.vz });
+if (!networkClient) {
+  showError('Colyseus client failed to load. Running offline.');
+}
+
+function clearRemotePlayers() {
+  for (const { mesh } of otherPlayers.values()) {
+    scene?.remove(mesh);
+    mesh.traverse((obj) => {
+      if (obj.geometry) obj.geometry.dispose();
+      if (obj.material) obj.material.dispose();
+    });
+  }
+  otherPlayers.clear();
+}
+
+function resetGameState() {
+  if (!tank || !turret) return;
+  tank.position.set(0, 0, 0);
+  tank.rotation.set(0, 0, 0);
+  turret.rotation.set(0, 0, 0);
+  if (gun) gun.rotation.set(0, 0, 0);
+  cameraYaw = 0;
+  cameraPitch = 0;
+  targetYaw = 0;
+  targetPitch = 0;
+  if (chassisBody) {
+    chassisBody.position.set(0, 1, 0);
+    chassisBody.velocity.set(0, 0, 0);
+    chassisBody.angularVelocity.set(0, 0, 0);
+    chassisBody.quaternion.set(0, 0, 0, 1);
+  }
+  currentSpeed = 0;
+  playerHealth = 100;
+  clearRemotePlayers();
+  for (const id of Array.from(projectiles.keys())) {
+    removeProjectileVisual(id);
+  }
+  playerAmmo.forEach((a) => {
+    a.count = loadout[a.name] || 0;
   });
-  socket.on('projectile-exploded', (p) => {
-    const proj = projectiles.get(p.id);
-    if (proj) {
-      scene.remove(proj.mesh);
-      proj.mesh.geometry.dispose();
-      proj.mesh.material.dispose();
-      projectiles.delete(p.id);
+  ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
+  updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+  lastFireTime = 0;
+  updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
+}
+
+function createProjectileVisual(id, projectile) {
+  if (!scene) return;
+  console.debug('Projectile spawned', projectile);
+  const geom = new THREE.SphereGeometry(0.3, 12, 12);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.set(projectile.x, projectile.y, projectile.z);
+  scene.add(mesh);
+  projectiles.set(id, { mesh, schema: projectile });
+}
+
+function removeProjectileVisual(id) {
+  const record = projectiles.get(id);
+  if (!record) return;
+  scene?.remove(record.mesh);
+  record.mesh.traverse((obj) => {
+    if (obj.geometry) obj.geometry.dispose();
+    if (obj.material) obj.material.dispose();
+  });
+  projectiles.delete(id);
+}
+
+function extractAmmoLoadoutFromState(player) {
+  const list = [];
+  if (!player?.ammoLoadout) return list;
+  if (selectedTank && Array.isArray(selectedTank.ammo)) {
+    selectedTank.ammo.forEach((name) => {
+      const value = player.ammoLoadout.get(name) ?? 0;
+      if (value > 0) list.push({ name, count: value });
+    });
+  } else {
+    player.ammoLoadout.forEach((value, name) => {
+      if (value > 0) list.push({ name, count: value });
+    });
+  }
+  return list;
+}
+
+function syncLocalPlayerState(player) {
+  const newAmmo = extractAmmoLoadoutFromState(player);
+  const newTotal = newAmmo.reduce((sum, entry) => sum + entry.count, 0);
+  const ammoChanged =
+    newTotal !== ammoLeft ||
+    newAmmo.length !== playerAmmo.length ||
+    newAmmo.some((entry, index) => playerAmmo[index]?.name !== entry.name || playerAmmo[index]?.count !== entry.count);
+  if (ammoChanged) {
+    const previousSelection = selectedAmmo ? selectedAmmo.name : null;
+    playerAmmo = newAmmo;
+    selectedAmmo =
+      playerAmmo.find((entry) => entry.name === previousSelection) || playerAmmo[0] || null;
+    ammoLeft = newTotal;
+    updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+  }
+  if (typeof player?.health === 'number') {
+    playerHealth = player.health;
+  }
+}
+
+function attachRoomListeners(activeRoom) {
+  activeRoom.onLeave(() => {
+    showError('Disconnected from server. Running offline.');
+    for (const id of Array.from(projectiles.keys())) {
+      removeProjectileVisual(id);
     }
-    renderExplosion(new THREE.Vector3(p.x, p.y, p.z));
+    clearRemotePlayers();
+    room = null;
   });
-  socket.on('tank-damaged', ({ id, health }) => {
-    if (id === socket.id) playerHealth = health;
-  });
-  // --- Multiplayer player management ---
-  socket.on('player-joined', ({ id, tank: t }) => {
-    if (!scene || id === socket.id || otherPlayers.has(id)) return;
-    const remote = createRemoteTank(t);
-    remote.mesh.position.set(t.x || 0, t.y || 0, t.z || 0);
+
+  activeRoom.state.players.onAdd = (player, sessionId) => {
+    if (sessionId === activeRoom.sessionId) {
+      syncLocalPlayerState(player);
+      return;
+    }
+    if (!scene || otherPlayers.has(sessionId)) return;
+    const remote = createRemoteTank(player);
+    remote.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
     scene.add(remote.mesh);
-    otherPlayers.set(id, remote);
-    console.log('Player joined', id);
-  });
-  socket.on('player-update', ({ id, state }) => {
-    const remote = otherPlayers.get(id);
+    otherPlayers.set(sessionId, remote);
+    console.log('Player joined', sessionId);
+  };
+
+  activeRoom.state.players.onChange = (player, sessionId) => {
+    if (sessionId === activeRoom.sessionId) {
+      syncLocalPlayerState(player);
+      return;
+    }
+    const remote = otherPlayers.get(sessionId);
     if (!remote) return;
-    remote.mesh.position.set(state.x, state.y, state.z);
-    remote.mesh.rotation.y = state.rot;
-    remote.turret.rotation.y = state.turret;
-    if (remote.gun) remote.gun.rotation.x = state.gun ?? 0;
-  });
-  socket.on('player-left', (id) => {
-    const remote = otherPlayers.get(id);
+    remote.mesh.position.set(player.x, player.y, player.z);
+    remote.mesh.rotation.y = player.rot;
+    remote.turret.rotation.y = player.turret;
+    if (remote.gun) remote.gun.rotation.x = player.gun ?? 0;
+  };
+
+  activeRoom.state.players.onRemove = (_player, sessionId) => {
+    const remote = otherPlayers.get(sessionId);
     if (!remote) return;
-    scene.remove(remote.mesh);
+    scene?.remove(remote.mesh);
     remote.mesh.traverse((obj) => {
       if (obj.geometry) obj.geometry.dispose();
       if (obj.material) obj.material.dispose();
     });
-    otherPlayers.delete(id);
-    console.log('Player left', id);
-  });
-  socket.on('restart', () => {
-    // Reset graphics and physics state
-    tank.position.set(0, 0, 0);
-    tank.rotation.set(0, 0, 0);
-    turret.rotation.set(0, 0, 0);
-    if (gun) gun.rotation.set(0, 0, 0); // keep turret level; reset barrel pitch
-    cameraYaw = 0;
-    cameraPitch = 0;
-    targetYaw = 0;
-    targetPitch = 0;
-    if (chassisBody) {
-      chassisBody.position.set(0, 1, 0);
-      chassisBody.velocity.set(0, 0, 0);
-      chassisBody.angularVelocity.set(0, 0, 0);
-      chassisBody.quaternion.set(0, 0, 0, 1);
-    }
-    currentSpeed = 0;
-    playerHealth = 100;
-    // Clear out any remote players so the scene resets cleanly.
-    for (const { mesh } of otherPlayers.values()) {
-      scene.remove(mesh);
-      mesh.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
-    }
-    otherPlayers.clear();
+    otherPlayers.delete(sessionId);
+    console.log('Player left', sessionId);
+  };
 
-    // Restore ammunition to the original loadout on restart
-    playerAmmo.forEach(a => {
-      a.count = loadout[a.name] || 0;
-    });
-    ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
-    updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
-    lastFireTime = 0;
-    updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
+  activeRoom.state.projectiles.onAdd = (projectile, key) => {
+    createProjectileVisual(key, projectile);
+  };
+  activeRoom.state.projectiles.onRemove = (_projectile, key) => {
+    removeProjectileVisual(key);
+  };
+
+  activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
+  activeRoom.onMessage(GAME_EVENT.ProjectileExploded, (p) => {
+    removeProjectileVisual(p.id);
+    renderExplosion(new THREE.Vector3(p.x, p.y, p.z));
   });
-} else {
-  showError('Socket.IO failed to load. Running offline.');
+  activeRoom.onMessage(GAME_EVENT.TankDamaged, ({ id, health }) => {
+    if (id === activeRoom.sessionId) playerHealth = health;
+  });
+  activeRoom.onMessage(GAME_EVENT.Restart, () => resetGameState());
+  activeRoom.onMessage(GAME_EVENT.TanksCatalog, (serverTanks) => {
+    if (Array.isArray(serverTanks) && serverTanks.length) {
+      availableTanks = serverTanks;
+      if (selectedNation) renderTanks();
+    }
+  });
+  activeRoom.onMessage(GAME_EVENT.AmmoCatalog, (serverAmmo) => {
+    if (Array.isArray(serverAmmo) && serverAmmo.length) {
+      ammoDefs = serverAmmo;
+      if (selectedTank) renderAmmo();
+    }
+  });
+}
+
+async function joinRoomWithSelection(tankConfig, ammoLoadout) {
+  if (!networkClient) {
+    throw new Error('Multiplayer unavailable');
+  }
+  if (room) {
+    try {
+      await room.leave();
+    } catch (err) {
+      console.warn('Previous room leave failed', err);
+    }
+    room = null;
+  }
+  const options = {
+    tank: { name: tankConfig.name, nation: tankConfig.nation },
+    loadout: ammoLoadout
+  };
+  const newRoom = await networkClient.joinOrCreate('tanksfornothing', options);
+  room = newRoom;
+  console.log('Connected to server');
+  attachRoomListeners(newRoom);
+  newRoom.send(GAME_COMMAND.PlayerUpdate, {
+    x: chassisBody?.position.x ?? 0,
+    y: chassisBody?.position.y ?? 0,
+    z: chassisBody?.position.z ?? 0,
+    rot: turret?.rotation.y ?? 0,
+    turret: turret?.rotation.y ?? 0,
+    gun: gun?.rotation.x ?? 0,
+    health: playerHealth
+  });
 }
 
 // Lobby DOM elements for tank selection
@@ -481,7 +596,7 @@ function renderAmmo() {
   });
 }
 
-joinBtn.addEventListener('click', () => {
+joinBtn.addEventListener('click', async () => {
   lobbyError.textContent = '';
   if (!selectedTank) {
     lobbyError.textContent = 'Select a tank';
@@ -500,17 +615,21 @@ joinBtn.addEventListener('click', () => {
   ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
   updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
 
-  if (socket) socket.emit('join', { tank: selectedTank, loadout });
-});
-
-if (socket) {
-  socket.on('join-denied', (msg) => {
-    lobbyError.textContent = msg;
+  if (!networkClient) {
+    showError('Multiplayer unavailable; running offline.');
+    return;
+  }
+  try {
+    await joinRoomWithSelection(selectedTank, loadout);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    lobbyError.textContent = message || 'Failed to join room';
     lobby.style.display = 'block';
     instructions.style.display = 'none';
+    showCrosshair(false);
     updateAmmoHUD([]);
-  });
-}
+  }
+});
 
 loadLobbyData();
 
@@ -962,7 +1081,7 @@ function init() {
 
   // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
-    if (document.pointerLockElement && socket && selectedAmmo) {
+    if (document.pointerLockElement && room && selectedAmmo) {
       const now = Date.now();
       if (
         now - lastFireTime >= FIRE_DELAY * 1000 &&
@@ -970,7 +1089,7 @@ function init() {
         selectedAmmo.count > 0
       ) {
         console.debug('Firing', selectedAmmo.name);
-        socket.emit('fire', selectedAmmo.name);
+        room.send(GAME_COMMAND.PlayerFire, selectedAmmo.name);
         lastFireTime = now;
         selectedAmmo.count -= 1;
         ammoLeft -= 1;
@@ -1155,12 +1274,10 @@ function animate() {
   tank.position.copy(chassisBody.position);
   tank.quaternion.copy(chassisBody.quaternion);
 
-  // Move client-side projectile meshes based on server-provided velocities
+  // Move client-side projectile meshes based on authoritative server state
   for (const proj of projectiles.values()) {
-    proj.vy += GRAVITY * delta;
-    proj.mesh.position.x += proj.vx * delta;
-    proj.mesh.position.y += proj.vy * delta;
-    proj.mesh.position.z += proj.vz * delta;
+    if (!proj.schema) continue;
+    proj.mesh.position.set(proj.schema.x, proj.schema.y, proj.schema.z);
   }
 
   // Smoothly rotate turret and gun toward target angles
@@ -1199,7 +1316,7 @@ function animate() {
   updateCooldownHUD(reloadRemaining, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 
   // Throttle network updates to minimize bandwidth
-  if (socket) {
+  if (room) {
     const now = performance.now();
     if (now - lastNetwork > 100) {
       const state = {
@@ -1218,7 +1335,7 @@ function animate() {
         Math.abs(state.turret - lastState.turret) +
         Math.abs(state.gun - lastState.gun);
       if (diff > 0.01) {
-        socket.emit('update', state);
+        room.send(GAME_COMMAND.PlayerUpdate, state);
         lastState = state;
       }
       lastNetwork = now;
