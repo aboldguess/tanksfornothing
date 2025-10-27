@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import express, { type NextFunction, type Request, type Response } from 'express';
-import http from 'node:http';
+import http, { type IncomingHttpHeaders } from 'node:http';
 import { Server as ColyseusServer, type AuthContext } from 'colyseus';
 import { WebSocketTransport } from '@colyseus/ws-transport';
 import cookieParser from 'cookie-parser';
@@ -557,10 +557,50 @@ function recordDeath(username: string): void {
   record.stats.deaths += 1;
 }
 
+/**
+ * Extract the Cookie header from the wide variety of objects Colyseus may expose on the
+ * authentication context. Different transports populate either `req`, `request`, or
+ * nested `handshake` objects, so we need to gracefully inspect each option.
+ */
+function readCookieHeader(context: AuthContext): string {
+  interface HeaderLike {
+    get?: (name: string) => string | null | undefined;
+    [key: string]: unknown;
+  }
+  type HeaderCarrier = IncomingHttpHeaders | HeaderLike;
+  const carriers: Array<HeaderCarrier | undefined> = [
+    context.req?.headers as IncomingHttpHeaders | undefined,
+    (context as { request?: { headers?: HeaderCarrier } }).request?.headers,
+    (context as { handshake?: { headers?: HeaderCarrier } }).handshake?.headers,
+    (context as { connection?: { handshake?: { headers?: HeaderCarrier } } }).connection?.handshake?.headers,
+    context.headers as IncomingHttpHeaders | undefined
+  ];
+
+  for (const carrier of carriers) {
+    if (!carrier) continue;
+    const headerLike = carrier as HeaderLike;
+    if (typeof headerLike.get === 'function') {
+      const value = headerLike.get('cookie');
+      if (typeof value === 'string' && value) return value;
+      continue;
+    }
+    const headerValue = (carrier as IncomingHttpHeaders).cookie ??
+      (carrier as IncomingHttpHeaders).Cookie ??
+      (carrier as IncomingHttpHeaders).COOKIE;
+    if (Array.isArray(headerValue)) {
+      const first = headerValue.find((entry) => typeof entry === 'string');
+      if (first) return first;
+    } else if (typeof headerValue === 'string') {
+      return headerValue;
+    }
+  }
+
+  return '';
+}
+
 function authenticateHandshake(context: AuthContext): { username: string } | { error: string } {
   try {
-    const headerSource = context.req?.headers ?? context.headers ?? {};
-    const cookiesHeader = headerSource.cookie ?? '';
+    const cookiesHeader = readCookieHeader(context);
     const cookies = cookie.parse(cookiesHeader);
     const token = cookies.token;
     if (!token) throw new Error('Authentication required');
