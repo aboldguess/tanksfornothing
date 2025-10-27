@@ -301,50 +301,94 @@ function attachRoomListeners(activeRoom) {
     room = null;
   });
 
-  activeRoom.state.players.onAdd = (player, sessionId) => {
-    if (sessionId === activeRoom.sessionId) {
-      syncLocalPlayerState(player);
+  let stateListenersBound = false;
+  let waitingForSchemaState = false;
+
+  const bindSchemaCollections = (state) => {
+    if (stateListenersBound) return;
+    if (!state || !state.players || !state.projectiles) {
+      if (!waitingForSchemaState) {
+        console.debug('Waiting for Colyseus state to initialise before binding listeners');
+        waitingForSchemaState = true;
+      }
       return;
     }
-    if (!scene || otherPlayers.has(sessionId)) return;
-    const remote = createRemoteTank(player);
-    remote.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
-    scene.add(remote.mesh);
-    otherPlayers.set(sessionId, remote);
-    console.log('Player joined', sessionId);
-  };
 
-  activeRoom.state.players.onChange = (player, sessionId) => {
-    if (sessionId === activeRoom.sessionId) {
-      syncLocalPlayerState(player);
-      return;
-    }
-    const remote = otherPlayers.get(sessionId);
-    if (!remote) return;
-    remote.mesh.position.set(player.x, player.y, player.z);
-    remote.mesh.rotation.y = player.rot;
-    remote.turret.rotation.y = player.turret;
-    if (remote.gun) remote.gun.rotation.x = player.gun ?? 0;
-  };
+    waitingForSchemaState = false;
 
-  activeRoom.state.players.onRemove = (_player, sessionId) => {
-    const remote = otherPlayers.get(sessionId);
-    if (!remote) return;
-    scene?.remove(remote.mesh);
-    remote.mesh.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) obj.material.dispose();
+    const handlePlayerAdded = (player, sessionId) => {
+      if (!player) return;
+      if (sessionId === activeRoom.sessionId) {
+        syncLocalPlayerState(player);
+        return;
+      }
+      if (!scene || otherPlayers.has(sessionId)) return;
+      const remote = createRemoteTank(player);
+      remote.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
+      scene.add(remote.mesh);
+      otherPlayers.set(sessionId, remote);
+      console.log('Player joined', sessionId);
+    };
+
+    state.players.onAdd = handlePlayerAdded;
+    state.players.onChange = (player, sessionId) => {
+      if (sessionId === activeRoom.sessionId) {
+        syncLocalPlayerState(player);
+        return;
+      }
+      const remote = otherPlayers.get(sessionId);
+      if (!remote) return;
+      remote.mesh.position.set(player.x, player.y, player.z);
+      remote.mesh.rotation.y = player.rot;
+      remote.turret.rotation.y = player.turret;
+      if (remote.gun) remote.gun.rotation.x = player.gun ?? 0;
+    };
+
+    state.players.onRemove = (_player, sessionId) => {
+      const remote = otherPlayers.get(sessionId);
+      if (!remote) return;
+      scene?.remove(remote.mesh);
+      remote.mesh.traverse((obj) => {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      otherPlayers.delete(sessionId);
+      console.log('Player left', sessionId);
+    };
+
+    state.projectiles.onAdd = (projectile, key) => {
+      createProjectileVisual(key, projectile);
+    };
+    state.projectiles.onRemove = (_projectile, key) => {
+      removeProjectileVisual(key);
+    };
+
+    stateListenersBound = true;
+    console.debug('Colyseus schema listeners bound for active room', { sessionId: activeRoom.sessionId });
+
+    state.players.forEach((player, sessionId) => {
+      handlePlayerAdded(player, sessionId);
     });
-    otherPlayers.delete(sessionId);
-    console.log('Player left', sessionId);
+    state.projectiles.forEach((projectile, key) => {
+      if (!projectiles.has(key)) {
+        createProjectileVisual(key, projectile);
+      }
+    });
   };
 
-  activeRoom.state.projectiles.onAdd = (projectile, key) => {
-    createProjectileVisual(key, projectile);
-  };
-  activeRoom.state.projectiles.onRemove = (_projectile, key) => {
-    removeProjectileVisual(key);
-  };
+  if (activeRoom.state) {
+    bindSchemaCollections(activeRoom.state);
+  }
+
+  if (typeof activeRoom.onStateChange === 'function') {
+    activeRoom.onStateChange((state) => {
+      if (!stateListenersBound) {
+        bindSchemaCollections(state);
+      }
+    });
+  } else {
+    console.warn('Colyseus room missing onStateChange handler; multiplayer state may not sync correctly');
+  }
 
   activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
   activeRoom.onMessage(GAME_EVENT.ProjectileExploded, (p) => {
