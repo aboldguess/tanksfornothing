@@ -41,6 +41,32 @@ Isolate the Node.js version per machine so Linux, macOS, Windows, and Raspberry 
   ```
   PowerShell 7 is recommended for best compatibility.
 
+#### Installing `nvs` on Windows
+
+If PowerShell reports `nvs` is not recognized, the tool has not been installed
+or the session has not been reloaded yet. Install it with one of the following
+approaches, then start a **new** PowerShell window so the `$env:PATH` update
+takes effect before running the `nvs add latest` / `nvs use latest` commands
+above.
+
+- **Winget (recommended)**
+  ```powershell
+  winget install --id jasongin.nvs -e
+  ```
+- **Manual Git install** (if Winget is unavailable)
+  ```powershell
+  git clone https://github.com/jasongin/nvs "$env:LOCALAPPDATA\nvs"
+  & "$env:LOCALAPPDATA\nvs\nvs.ps1" install
+  ```
+
+Verify that PowerShell can find the command:
+```powershell
+Get-Command nvs
+```
+If it still cannot, ensure `$env:LOCALAPPDATA\nvs` is listed in your PATH or
+fall back to [nvm-windows](https://github.com/coreybutler/nvm-windows) which
+exposes similar `nvm install 20` / `nvm use 20` commands.
+
 ## Setup
 Run these commands from a terminal (PowerShell on Windows). Replace `~/code` with a directory of your choice.
 
