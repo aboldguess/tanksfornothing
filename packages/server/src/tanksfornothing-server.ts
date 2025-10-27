@@ -60,7 +60,10 @@ const gameServer = new ColyseusServer({
 });
 
 // Configuration
-const PORT = process.env.PORT || 3000;
+const rawPort = process.env.PORT;
+// Normalise the runtime port to a numeric value so Node's HTTP server receives a
+// concrete number even when the environment exposes a string (e.g. from cloud hosts).
+const PORT: number = rawPort ? Number.parseInt(rawPort, 10) || 3000 : 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
