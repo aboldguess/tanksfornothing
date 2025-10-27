@@ -10,14 +10,20 @@
   "type": "module",
   "files": ["dist"],
   "scripts": {
-    "build": "tsc -b",
+    "build": "vite build --config vite.config.ts",
     "clean": "node -e \"(async()=>{const fs=await import('node:fs/promises');await fs.rm('dist',{recursive:true,force:true});})()\"",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "echo \"Client package has no automated tests yet\"",
-    "dev": "echo \"Launch the Vite dev server once the dedicated configuration lands.\""
+    "dev": "vite dev --config vite.config.ts",
+    "preview": "vite preview --config vite.config.ts"
   },
   "dependencies": {
     "@tanksfornothing/shared": "^1.0.0",
+    "cannon-es": "^0.20.0",
+    "socket.io-client": "^4.8.1",
     "three": "^0.180.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.10"
   }
 }

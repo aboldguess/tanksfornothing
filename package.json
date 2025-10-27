@@ -14,10 +14,11 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
+    "build": "npm run build --workspace @tanksfornothing/client",
+    "build:all": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "lint": "npm run lint --workspaces",
-    "dev": "npm run dev --workspaces",
+    "dev": "npm run dev --workspace @tanksfornothing/client",
     "clean": "npm run clean --workspaces --if-present",
     "start": "npm run start --workspace @tanksfornothing/server",
     "setup": "npm run setup --workspace @tanksfornothing/server",

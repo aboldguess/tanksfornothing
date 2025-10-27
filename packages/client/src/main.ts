@@ -1,4 +1,4 @@
-// tanksfornothing-client.ts
+// main.ts
 // @ts-nocheck
 // Summary: Browser client for Tanks for Nothing. Provides lobby flag, tabbed tank-class
 //          and ammo selection, renders a dimensioned 3D tank based on server-supplied parameters,
@@ -13,27 +13,21 @@
 //          and remaining rounds.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
-// Usage: Included by index.html; requires Socket.IO for multiplayer networking and
-//         loads Cannon.js from CDN for physics.
+// Usage: Registered as the Vite entry module (see ../public/index.html). Relies on bundled
+//         dependencies (Three.js, Cannon-es, Socket.IO client) and automatically wires up the
+//         navigation HUD and debugging overlays when loaded in the browser.
 // ---------------------------------------------------------------------------
-// Three.js is served from /public/libs rather than nested within /public/js, so we
-// import it via a parent-relative path. The previous './libs/three.module.js'
-// resolved to /js/libs/three.module.js once compiled, which does not exist and
-// caused the "Failed to load game client" error after login because the module
-// failed to download. Using '../libs/three.module.js' matches the actual static
-// asset layout and restores the client bundle.
-import * as THREE from '../libs/three.module.js';
-// cannon-es provides lightweight rigid body physics with vehicle helpers.
-// Imported from CDN to keep repository light while using the latest version.
-import * as CANNON from 'https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js';
-import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud.js';
-import { buildGroundTexture } from './ground-textures.js';
+// Security & Debugging: All critical operations log descriptive errors and surface fatal
+// issues directly within the page so testers immediately see failures without opening the
+// console. Imports reference npm packages that Vite pins and audits, removing the old ad-hoc
+// CDN includes.
+import * as THREE from 'three';
+import * as CANNON from 'cannon-es';
+import { io } from 'socket.io-client';
 
-declare global {
-  interface Window {
-    io?: (...args: unknown[]) => any;
-  }
-}
+import './nav';
+import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
+import { buildGroundTexture } from './ground-textures';
 
 // Utility: render fatal errors directly on screen for easier debugging.
 function showError(message) {
@@ -73,9 +67,18 @@ function renderExplosion(position) {
   }, 500);
 }
 
-// `io` is provided globally by the socket.io script tag in index.html. Create a
-// socket when available and surface connection issues to the player.
+// Establish a resilient Socket.IO client using the bundled dependency so the
+// multiplayer channel functions in both dev (Vite) and production builds.
 let socket = null;
+try {
+  socket = io({
+    transports: ['websocket'],
+    autoConnect: true,
+    reconnectionAttempts: 5
+  });
+} catch (error) {
+  console.warn('Socket.io client failed to initialise; continuing offline mode.', error);
+}
 // Client-side ammo handling
 let playerAmmo = [];
 let selectedAmmo = null;
@@ -151,8 +154,7 @@ function createRemoteTank(t) {
   return { mesh: body, turret: turt, gun: gunObj };
 }
 
-if (window.io) {
-  socket = window.io();
+if (socket) {
   socket.on('connect', () => console.log('Connected to server'));
   socket.on('connect_error', () => showError('Unable to connect to server. Running offline.'));
   socket.on('disconnect', () => showError('Disconnected from server. Running offline.'));

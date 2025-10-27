@@ -4,10 +4,10 @@
 //          Generates small canvas tiles for each texture type and stitches them into a terrain-wide texture used by the
 //          client renderer. Designed to avoid external asset dependencies while still delivering readable biomes.
 // Structure: colour helpers -> per-texture painters -> tile caching -> buildGroundTexture export.
-// Usage: import { buildGroundTexture } from './ground-textures.js'; pass the palette and ground grid from the server to
+// Usage: import { buildGroundTexture } from './ground-textures'; pass the palette and ground grid from the server to
 //        receive a THREE.CanvasTexture ready for use on the terrain mesh.
 // ---------------------------------------------------------------------------
-import * as THREE from '../libs/three.module.js';
+import * as THREE from 'three';
 
 const tileCache = new Map<string, HTMLCanvasElement>();
 
