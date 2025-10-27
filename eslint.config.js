@@ -7,7 +7,7 @@ import js from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
-const sharedIgnores = ['dist/**', 'node_modules/**', 'public/libs/**'];
+const sharedIgnores = ['**/dist/**', 'node_modules/**', 'packages/client/public/libs/**'];
 
 export default tseslint.config(
   {

@@ -9,7 +9,7 @@
 // and projectiles spawn from the muzzle using that orientation and arc under gravity.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
 //            persistence helpers -> projectile physics loop -> server start.
-// Usage: Run with `npm start` (which builds then executes dist/server/tanksfornothing-server.js).
+// Usage: Run with `npm start` (which builds then executes dist/src/tanksfornothing-server.js).
 // ---------------------------------------------------------------------------
 
 import express, { type NextFunction, type Request, type Response } from 'express';
@@ -23,7 +23,7 @@ import cookie from 'cookie';
 import multer from 'multer';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { generateGentleHills } from '../utils/terrain-noise.js';
+import { generateGentleHills } from '@tanksfornothing/shared';
 
 interface NationRecord {
   name: string;
@@ -176,10 +176,15 @@ const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const projectRootUrl = new URL('../../', import.meta.url);
-const publicDir = fileURLToPath(new URL('./public', projectRootUrl));
+const moduleDir = new URL('.', import.meta.url);
+const workspaceDir = moduleDir.pathname.includes('/dist/')
+  ? new URL('../../', moduleDir)
+  : new URL('../', moduleDir);
+const projectRootUrl = new URL('../../', workspaceDir);
+const clientPublicDir = fileURLToPath(new URL('./packages/client/public', projectRootUrl));
+const clientDistDir = fileURLToPath(new URL('./packages/client/dist', projectRootUrl));
 const adminDir = fileURLToPath(new URL('./admin', projectRootUrl));
-const uploadBase = path.join(publicDir, 'uploads');
+const uploadBase = path.join(clientPublicDir, 'uploads');
 const ammoDir = path.join(uploadBase, 'ammo');
 
 const storage = multer.diskStorage({
@@ -628,7 +633,8 @@ await loadUsers();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false })); // support classic form posts
 app.use(cookieParser()); // ensure req.cookies is populated for auth checks
-app.use(express.static(publicDir));
+app.use(express.static(clientPublicDir));
+app.use('/js', express.static(clientDistDir));
 
 // Admin HTML pages require authentication; login assets remain public
 app.get('/admin', (req: Request, res: Response) => {

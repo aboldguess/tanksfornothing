@@ -1,14 +1,14 @@
 // import-warthunder-vehicles.ts
 // Summary: Imports ground vehicle data from the War Thunder Vehicles API into local tanks.json.
 // Structure: fetch remote vehicles -> filter ground types -> map to local tank schema -> validate -> safe write results.
-// Usage: Run with `npm run import-wt` after setting up network proxy variables if required.
+// Usage: Run with `npm run import-wt` (or `node dist/src/scripts/import-warthunder-vehicles.js`) after setting up any required network proxy variables.
 // ---------------------------------------------------------------------------
 
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { fetch, ProxyAgent } from 'undici';
-import { validateTank } from '../server/tanksfornothing-server.js';
-import type { TankDefinition } from '../server/tanksfornothing-server.js';
+import { validateTank } from '../tanksfornothing-server.js';
+import type { TankDefinition } from '../tanksfornothing-server.js';
 
 // War Thunder Vehicles API endpoint. Adjust if the upstream service changes.
 const API_URL = 'https://wt.warthunder.com/encyclopedia/api/vehicles/';
@@ -24,7 +24,11 @@ const proxyUrl =
 const dispatcher = proxyUrl ? new ProxyAgent(proxyUrl) : undefined;
 
 // Resolve path to data/tanks.json relative to this script.
-const projectRoot = new URL('../../', import.meta.url);
+const moduleDir = new URL('.', import.meta.url);
+const workspaceDir = moduleDir.pathname.includes('/dist/')
+  ? new URL('../../..', moduleDir)
+  : new URL('../..', moduleDir);
+const projectRoot = new URL('../../', workspaceDir);
 const dataDir = new URL('./data/', projectRoot);
 const tanksFile = new URL('tanks.json', dataDir);
 

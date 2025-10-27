@@ -1,0 +1,23 @@
+{
+  "_comment": [
+    "Summary: Workspace manifest for the Tanks for Nothing browser client.",
+    "Structure: Tracks shared dependency usage and exposes build/test/lint/dev scripts for the client bundle.",
+    "Usage: Invoked via root npm scripts or by running 'npm run <command> --workspace @tanksfornothing/client'."
+  ],
+  "name": "@tanksfornothing/client",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "node -e \"(async()=>{const fs=await import('node:fs/promises');await fs.rm('dist',{recursive:true,force:true});})()\"",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "echo \"Client package has no automated tests yet\"",
+    "dev": "echo \"Launch the Vite dev server once the dedicated configuration lands.\""
+  },
+  "dependencies": {
+    "@tanksfornothing/shared": "^1.0.0",
+    "three": "^0.180.0"
+  }
+}

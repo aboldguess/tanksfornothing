@@ -1,49 +1,37 @@
 {
   "_comment": [
-    "Summary: Node package manifest for Tanks for Nothing with a TypeScript build pipeline.",
-    "Structure: documents npm scripts, module type, runtime dependencies, and typed tooling.",
-    "Usage: Run 'npm install' to install dependencies, 'npm run build' to compile TypeScript, then 'npm start' to launch the server."
+    "Summary: Root npm manifest orchestrating the Tanks for Nothing monorepo workspaces.",
+    "Structure: Declares workspace layout, repository-level scripts, and shared development tooling versions.",
+    "Usage: Run 'npm install' once, then use scripts such as 'npm run build' to operate across all workspaces."
   ],
   "name": "tanksfornothing",
   "version": "1.0.0",
   "description": "Blocky multiplayer tank game",
-  "main": "dist/server/tanksfornothing-server.js",
+  "private": true,
+  "license": "ISC",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
-    "build": "tsc -b",
-    "test": "npm run build && node --test dist/tests",
-    "start": "npm run build && node dist/server/tanksfornothing-server.js",
-    "dev": "ts-node --esm src/server/tanksfornothing-server.ts",
-    "setup": "npm run build && node dist/scripts/init-data.js",
-    "lint": "eslint .",
-    "import-wt": "npm run build && node dist/scripts/import-warthunder-vehicles.js"
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "dev": "npm run dev --workspaces",
+    "clean": "npm run clean --workspaces --if-present",
+    "start": "npm run start --workspace @tanksfornothing/server",
+    "setup": "npm run setup --workspace @tanksfornothing/server",
+    "import-wt": "npm run import-wt --workspace @tanksfornothing/server"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "type": "module",
-  "dependencies": {
-    "bcryptjs": "^2.4.3",
-    "cookie": "^0.6.0",
-    "cookie-parser": "^1.4.7",
-    "express": "^5.1.0",
-    "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
-    "socket.io": "^4.8.1",
-    "three": "^0.179.1",
-    "undici": "^7.15.0"
-  },
   "devDependencies": {
     "@eslint/js": "^9.34.0",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cookie": "^0.6.0",
-    "@types/cookie-parser": "^1.4.7",
-    "@types/jsonwebtoken": "^9.0.6",
-    "@types/multer": "^1.4.12",
     "@types/node": "^22.10.2",
     "eslint": "^9.34.0",
-    "typescript-eslint": "^8.18.2",
     "globals": "^16.3.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.18.2"
   }
 }

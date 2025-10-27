@@ -1,0 +1,41 @@
+{
+  "_comment": [
+    "Summary: Workspace manifest for the Tanks for Nothing game server.",
+    "Structure: Declares runtime dependencies, TypeScript build scripts, and operational utilities for data seeding.",
+    "Usage: Run 'npm run build --workspace @tanksfornothing/server' or delegate via the root scripts."
+  ],
+  "name": "@tanksfornothing/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/src/tanksfornothing-server.js",
+  "files": ["dist"],
+  "scripts": {
+    "build": "tsc -b",
+    "clean": "node -e \"(async()=>{const fs=await import('node:fs/promises');await fs.rm('dist',{recursive:true,force:true});})()\"",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "test": "npm run build && node --test dist/tests",
+    "dev": "ts-node --esm src/tanksfornothing-server.ts",
+    "start": "npm run build && node ./dist/src/tanksfornothing-server.js",
+    "setup": "npm run build && node ./dist/src/scripts/init-data.js",
+    "import-wt": "npm run build && node ./dist/src/scripts/import-warthunder-vehicles.js"
+  },
+  "dependencies": {
+    "@tanksfornothing/shared": "^1.0.0",
+    "bcryptjs": "^3.0.2",
+    "cookie": "^1.0.2",
+    "cookie-parser": "^1.4.7",
+    "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.0.2",
+    "socket.io": "^4.8.1",
+    "undici": "^7.16.0"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie": "^0.6.0",
+    "@types/cookie-parser": "^1.4.7",
+    "@types/jsonwebtoken": "^9.0.6",
+    "@types/multer": "^1.4.12"
+  }
+}

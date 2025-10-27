@@ -1,17 +1,21 @@
 // terrain.test.ts
 // Summary: Integration tests for default terrain setup and editing through the REST API.
 // Structure: spawn server on random port -> verify default terrain exists -> update terrain and confirm change.
-// Usage: run with `npm test` which executes `node --test` against the compiled dist/tests output.
+// Usage: run with `npm test` which executes `node --test packages/server/dist/tests` after the workspace build step.
 // ---------------------------------------------------------------------------
 
 import test from 'node:test';
 import assert from 'node:assert';
 import { promises as fs } from 'node:fs';
 import type { AddressInfo } from 'node:net';
-import { generateGentleHills } from '../utils/terrain-noise.js';
+import { generateGentleHills } from '@tanksfornothing/shared';
 
 process.env.PORT = '0'; // allow system to choose an open port
-const projectRoot = new URL('../../', import.meta.url);
+const testsDir = new URL('.', import.meta.url);
+const workspaceDir = testsDir.pathname.includes('/dist/')
+  ? new URL('../../', testsDir)
+  : new URL('../', testsDir);
+const projectRoot = new URL('../../', workspaceDir);
 const terrainFile = new URL('./data/terrains.json', projectRoot);
 const elevation = generateGentleHills(20, 20);
 const ground = Array.from({ length: 20 }, () => Array(20).fill(0));
@@ -33,7 +37,7 @@ const seed = {
 };
 await fs.writeFile(terrainFile, JSON.stringify(seed, null, 2));
 
-const { server } = await import('../server/tanksfornothing-server.js');
+const { server } = await import('../src/tanksfornothing-server.js');
 await new Promise<void>((resolve, reject) => {
   const onError = (error: Error) => {
     server.off('error', onError);

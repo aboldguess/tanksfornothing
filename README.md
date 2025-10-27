@@ -11,29 +11,60 @@ A minimal browser-based multiplayer tank demo built with Node.js, Express, Socke
 - Secure player accounts with signup/login and persistent tracking of games, kills and deaths
 - Adjustable third-person camera height and distance via Game Settings page
 
+## Repository layout
+- `packages/client` – Vite-ready browser workspace containing TypeScript sources under `src/`, static assets in `public/`, and the compiled output in `dist/`.
+- `packages/server` – Express/Socket.IO server workspace with its own `dist/`, automated tests in `tests/`, and maintenance scripts under `src/scripts/`.
+- `packages/shared` – Shared TypeScript helpers (currently terrain noise generation) exported for both client and server.
+- `admin` – Existing admin panel assets (TypeScript output still targets `admin/js`).
+- `data` – JSON persistence written by the server and setup scripts.
+
+Each workspace exposes aligned npm scripts (`build`, `test`, `lint`, `dev`, `clean`) and compiles into its own `dist` folder. The root `package.json` delegates to these scripts via npm workspaces.
+
 ## Requirements
-- Node.js 18+ and npm
+- Node.js 18+ (or newer) and npm.
+- Git for fetching the repository.
+
+### Recommended Node "virtual environment"
+Isolate the Node.js version per machine so Linux, macOS, Windows, and Raspberry Pi installations stay consistent.
+
+- **Linux / macOS / Raspberry Pi** – Install [nvm](https://github.com/nvm-sh/nvm) then run:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+  source "$HOME/.nvm/nvm.sh"
+  nvm install 20
+  nvm use 20
+  ```
+- **Windows** – Install [nvs](https://github.com/jasongin/nvs) (or [nvm-windows](https://github.com/coreybutler/nvm-windows)) and run:
+  ```powershell
+  nvs add latest
+  nvs use latest
+  ```
+  PowerShell 7 is recommended for best compatibility.
 
 ## Setup
-Run these commands from a terminal (PowerShell on Windows):
+Run these commands from a terminal (PowerShell on Windows). Replace `~/code` with a directory of your choice.
 
 ### Linux / macOS / Raspberry Pi
 ```bash
-cd tanksfornothing
-npm install
-npm run build   # compile TypeScript (also runs automatically via other scripts)
-npm run setup   # create data files
-npm start
+git clone https://github.com/<your-user>/tanksfornothing.git ~/code/tanksfornothing
+cd ~/code/tanksfornothing
+npm install                     # installs workspace dependencies once
+npm run build                   # builds shared, server, and client workspaces
+npm run setup                   # seeds JSON data files via the server workspace
+npm start                       # compiles server then launches it on port 3000
 ```
 
-### Windows
+### Windows (PowerShell)
 ```powershell
-cd tanksfornothing
-npm install
-npm run build   # compile TypeScript (also runs automatically via other scripts)
-npm run setup   # create data files
-npm start
+git clone https://github.com/<your-user>/tanksfornothing.git $HOME\code\tanksfornothing
+Set-Location $HOME\code\tanksfornothing
+npm install                     # installs workspace dependencies once
+npm run build                   # builds shared, server, and client workspaces
+npm run setup                   # seeds JSON data files via the server workspace
+npm start                       # compiles server then launches it on port 3000
 ```
+
+Need to clean the compiled artefacts before a fresh build? Run `npm run clean` to invoke each workspace's clean script.
 
 The server listens on port **3000** by default. Use the `PORT` environment variable to change it:
 ```bash
@@ -76,5 +107,6 @@ The tank editor now includes additional sliders for turret elevation limits and 
 - Turret Width, Length and Height (1–3m / 1–5m / 0.25–2m)
 
 ## Debugging
-The server logs player connections and updates to the console. Use `npm run dev` to run the TypeScript server via `ts-node`
-with auto-reload on changes.
+The server logs player connections and updates to the console. Use `npm run dev` to broadcast the `dev` script to each workspace—currently the client prints a reminder about the forthcoming Vite dev server while the server starts via `ts-node` with auto-reload. Workspace-specific scripts are also available, e.g. `npm run dev --workspace @tanksfornothing/server`.
+
+Lint the entire monorepo with `npm run lint`, and run automated tests with `npm run test` (which delegates to `node --test` inside `packages/server/dist/tests`).
