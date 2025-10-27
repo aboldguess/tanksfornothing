@@ -1,20 +1,21 @@
 // tanksfornothing-server.ts
 // Summary: TypeScript entry point server for Tanks for Nothing, the blocky multiplayer tank game.
-// This script sets up an Express web server with Socket.IO for real-time tank and projectile
-// updates, handles image uploads for ammo types, stores flag emojis for nations,
+// This script now hosts an Express web server alongside a Colyseus room for authoritative
+// multiplayer simulation, handles image uploads for ammo types, stores flag emojis for nations,
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
 // to disk and enforces Battle Rating constraints when players join. Tank definitions
-// now also store an ammoCapacity value to limit carried rounds and the server
-// tracks turret and gun orientation so remote players render complete cannons
-// and projectiles spawn from the muzzle using that orientation and arc under gravity.
-// Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
-//            persistence helpers -> projectile physics loop -> server start.
+// store an ammoCapacity value to limit carried rounds while the Colyseus room tracks
+// turret and gun orientation so remote players render complete cannons and projectiles
+// spawn from the muzzle using that orientation and arc under gravity.
+// Structure: configuration -> express setup -> Colyseus bootstrap -> in-memory stores ->
+//            persistence helpers -> admin APIs -> server start.
 // Usage: Run with `npm start` (which builds then executes dist/src/tanksfornothing-server.js).
 // ---------------------------------------------------------------------------
 
 import express, { type NextFunction, type Request, type Response } from 'express';
 import http from 'node:http';
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as ColyseusServer, type AuthContext } from 'colyseus';
+import { WebSocketTransport } from '@colyseus/ws-transport';
 import cookieParser from 'cookie-parser';
 import { promises as fs } from 'node:fs';
 import bcrypt from 'bcryptjs';
@@ -25,137 +26,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { generateGentleHills } from '@tanksfornothing/shared';
 
-interface NationRecord {
-  name: string;
-  flag: string;
-}
-
-interface TankDefinition {
-  name: string;
-  nation: string;
-  br: number;
-  class: string;
-  armor: number;
-  turretArmor: number;
-  cannonCaliber: number;
-  ammo: string[];
-  ammoCapacity: number;
-  barrelLength: number;
-  mainCannonFireRate: number;
-  crew: number;
-  engineHp: number;
-  maxSpeed: number;
-  maxReverseSpeed: number;
-  incline: number;
-  bodyRotation: number;
-  turretRotation: number;
-  maxTurretIncline: number;
-  maxTurretDecline: number;
-  horizontalTraverse: number;
-  bodyWidth: number;
-  bodyLength: number;
-  bodyHeight: number;
-  turretWidth: number;
-  turretLength: number;
-  turretHeight: number;
-  turretXPercent: number;
-  turretYPercent: number;
-  [extra: string]: unknown;
-}
-
-interface AmmoDefinition {
-  name: string;
-  nation: string;
-  caliber: number;
-  armorPen: number;
-  type: string;
-  explosionRadius: number;
-  pen0: number;
-  pen100: number;
-  image: string;
-  speed: number;
-  damage: number;
-  penetration: number;
-  explosion: number;
-}
-
-type FlagPoint = { x: number; y: number } | null;
-
-interface TeamFlags {
-  a: FlagPoint;
-  b: FlagPoint;
-  c: FlagPoint;
-  d: FlagPoint;
-}
-
-interface TerrainGroundPaletteEntry {
-  name: string;
-  color: string;
-  traction: number;
-  viscosity: number;
-  texture: string;
-}
-
-interface TerrainNoiseSettings {
-  scale: number;
-  amplitude: number;
-}
-
-interface TerrainLightingSettings {
-  sunPosition: { x: number; y: number; z: number };
-  sunColor: string;
-  ambientColor: string;
-}
-
-interface TerrainDefinition {
-  name: string;
-  type: string;
-  size: { x: number; y: number };
-  flags: { red: TeamFlags; blue: TeamFlags };
-  ground: number[][];
-  elevation: number[][];
-  palette: TerrainGroundPaletteEntry[];
-  noise: TerrainNoiseSettings;
-  lighting: TerrainLightingSettings;
-}
-
-interface UserStats {
-  games: number;
-  kills: number;
-  deaths: number;
-}
-
-interface UserRecord {
-  passwordHash: string;
-  stats: UserStats;
-}
-
-interface PlayerState extends TankDefinition {
-  username: string;
-  ammoLoadout: Record<string, number>;
-  x: number;
-  y: number;
-  z: number;
-  rot: number;
-  turret: number;
-  gun: number;
-  health: number;
-  ammoRemaining: number;
-  lastFire: number;
-}
-
-interface ProjectileState {
-  id: string;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  ammo: string;
-  shooter: string;
-  life: number;
-}
+import { TanksForNothingRoom } from './game/tanks-room.js';
+import type {
+  AmmoDefinition,
+  FlagPoint,
+  NationRecord,
+  TankDefinition,
+  TeamFlags,
+  TerrainDefinition,
+  TerrainGroundPaletteEntry,
+  TerrainLightingSettings,
+  TerrainNoiseSettings,
+  TerrainPayload,
+  UserRecord,
+  UserStats
+} from './types.js';
 
 interface AuthenticatedRequest extends Request {
   username?: string;
@@ -167,10 +52,18 @@ interface AuthJwtPayload extends JwtPayload {
 
 const app = express();
 const server = http.createServer(app);
-const io = new SocketIOServer(server);
+const gameServer = new ColyseusServer({
+  transport: new WebSocketTransport({
+    server,
+    path: '/colyseus'
+  })
+});
 
 // Configuration
-const PORT = process.env.PORT || 3000;
+const rawPort = process.env.PORT;
+// Normalise the runtime port to a numeric value so Node's HTTP server receives a
+// concrete number even when the environment exposes a string (e.g. from cloud hosts).
+const PORT: number = rawPort ? Number.parseInt(rawPort, 10) || 3000 : 3000;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'adminpass';
 const JWT_SECRET = process.env.JWT_SECRET || 'change-me';
 
@@ -219,7 +112,6 @@ const upload = multer({
 });
 
 // In-memory stores (tanks/ammo/terrains persisted to disk)
-const players = new Map<string, PlayerState>(); // socket.id -> player state
 let tanks: TankDefinition[] = []; // CRUD via admin, loaded from JSON file
 let ammo: AmmoDefinition[] = []; // CRUD via admin, loaded from JSON file
 const defaultAmmo: AmmoDefinition[] = [
@@ -254,10 +146,6 @@ const defaultAmmo: AmmoDefinition[] = [
     image: ''
   }
 ];
-// Active projectile list; each projectile contains position, velocity and metadata
-const projectiles = new Map<string, ProjectileState>(); // id -> projectile state
-// Gravity acceleration applied to shells (m/s^2)
-const GRAVITY = -9.81;
 // Terrains now include metadata so map listings can show thumbnails and size
 function defaultFlags(): { red: TeamFlags; blue: TeamFlags } {
   return {
@@ -392,7 +280,6 @@ let terrains: TerrainDefinition[] = [{
 }];
 let currentTerrain = 0; // index into terrains
 let terrain = 'Perlin Foothills'; // currently active terrain name
-let baseBR: number | null = null; // Battle Rating of first player
 // Nations persisted separately; maintain array and Set for validation
 let nations: NationRecord[] = []; // CRUD via admin, loaded from JSON file
 let nationsSet = new Set<string>();
@@ -406,7 +293,7 @@ const TERRAIN_FILE = new URL('./data/terrains.json', projectRootUrl);
 const AMMO_FILE = new URL('./data/ammo.json', projectRootUrl);
 const USERS_FILE = new URL('./data/users.json', projectRootUrl);
 
-function buildTerrainPayload() {
+function buildTerrainPayload(): TerrainPayload {
   return {
     name: terrain,
     definition: terrains[currentTerrain] ?? null
@@ -634,11 +521,81 @@ async function saveUsers() {
   await safeWriteJson(USERS_FILE, data);
 }
 
+function getAmmoCatalog(): AmmoDefinition[] {
+  return ammo.length ? ammo : defaultAmmo;
+}
+
+function findTankDefinition(name: string, nation: string): TankDefinition | undefined {
+  return tanks.find((t) => t.name === name && t.nation === nation);
+}
+
+const persistUsers = async (): Promise<void> => {
+  try {
+    await saveUsers();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('Failed to persist users', message);
+  }
+};
+
+function recordGameStart(username: string): void {
+  const record = users.get(username);
+  if (!record) return;
+  record.stats.games += 1;
+  void persistUsers();
+}
+
+function recordKill(username: string): void {
+  const record = users.get(username);
+  if (!record) return;
+  record.stats.kills += 1;
+}
+
+function recordDeath(username: string): void {
+  const record = users.get(username);
+  if (!record) return;
+  record.stats.deaths += 1;
+}
+
+function authenticateHandshake(context: AuthContext): { username: string } | { error: string } {
+  try {
+    const headerSource = context.req?.headers ?? context.headers ?? {};
+    const cookiesHeader = headerSource.cookie ?? '';
+    const cookies = cookie.parse(cookiesHeader);
+    const token = cookies.token;
+    if (!token) throw new Error('Authentication required');
+    const payload = jwt.verify(token, JWT_SECRET);
+    if (!payload || typeof payload === 'string') throw new Error('Authentication required');
+    const jwtPayload = payload as AuthJwtPayload;
+    if (!jwtPayload.username) throw new Error('Authentication required');
+    if (!users.has(jwtPayload.username)) throw new Error('Authentication required');
+    return { username: jwtPayload.username };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('Colyseus authentication failed:', message);
+    return { error: 'Authentication required' };
+  }
+}
+
 await loadNations();
 await loadTanks();
 await loadAmmo();
 await loadTerrains();
 await loadUsers();
+
+gameServer.define('tanksfornothing', TanksForNothingRoom, {
+  dependencies: {
+    authenticate: authenticateHandshake,
+    findTank: findTankDefinition,
+    getTanks: () => tanks,
+    getAmmo: getAmmoCatalog,
+    getTerrain: buildTerrainPayload,
+    recordGameStart,
+    recordKill,
+    recordDeath,
+    persistUsers
+  }
+});
 
 // Middleware: parsers must run before routes that read cookies or body data
 app.use(express.json());
@@ -1108,196 +1065,14 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
   currentTerrain = idx;
   terrain = terrains[currentTerrain].name;
   await saveTerrains();
-  players.clear();
-  baseBR = null;
-  io.emit('restart');
-  io.emit('terrain', buildTerrainPayload());
+  const payload = buildTerrainPayload();
+  TanksForNothingRoom.restartAll(payload);
   res.json({ success: true });
 });
-
-// Socket.IO connections
-io.on('connection', (socket) => {
-  console.log('player connected', socket.id);
-  socket.emit('tanks', tanks);
-  socket.emit('ammo', ammo);
-  socket.emit('terrain', buildTerrainPayload());
-
-  socket.on('join', (payload) => {
-    const clientTank = payload?.tank || payload;
-    const loadout = payload?.loadout || {};
-    const cookies = cookie.parse(socket.handshake.headers.cookie || '');
-    try {
-      const payload = jwt.verify(cookies.token || '', JWT_SECRET);
-      if (!payload || typeof payload === 'string') throw new Error('invalid token');
-      const jwtPayload = payload as AuthJwtPayload;
-      const username = jwtPayload.username;
-      const userRecord = users.get(username);
-      if (!userRecord) throw new Error('no user');
-      const tank = tanks.find(
-        (t) => t.name === clientTank.name && t.nation === clientTank.nation
-      );
-      if (!tank) {
-        socket.emit('join-denied', 'Invalid tank');
-        return;
-      }
-      if (baseBR === null) baseBR = tank.br;
-      if (tank.br > baseBR + 1) {
-        socket.emit('join-denied', 'Tank BR too high');
-        return;
-      }
-      players.set(socket.id, {
-        ...tank,
-        username,
-        ammoLoadout: loadout,
-        x: 0,
-        y: 0,
-        z: 0,
-        rot: 0,
-        turret: 0,
-        gun: 0,
-        health: 100,
-        crew: tank.crew || 3,
-        armor: tank.armor || 20,
-        ammoRemaining: tank.ammoCapacity ?? 0,
-        lastFire: 0
-      });
-      // Synchronize the newcomer with any players already in the game world.
-      // Send existing player info before broadcasting the new arrival so the
-      // client can immediately render all tanks.
-      for (const [id, p] of players) {
-        if (id === socket.id) continue;
-        socket.emit('player-joined', { id, tank: p, username: p.username });
-        socket.emit('player-update', { id, state: p });
-      }
-      userRecord.stats.games += 1;
-      saveUsers();
-      io.emit('player-joined', { id: socket.id, tank, username });
-    } catch {
-      socket.emit('join-denied', 'Authentication required');
-    }
-  });
-
-  socket.on('update', (state) => {
-    const p = players.get(socket.id);
-    if (!p) return;
-    Object.assign(p, state);
-    socket.broadcast.emit('player-update', { id: socket.id, state: p });
-  });
-
-  // Handle firing requests from clients. Validate ammo selection and
-  // compute projectile trajectory based on trusted server-side tank state.
-  socket.on('fire', (ammoName) => {
-    const shooter = players.get(socket.id);
-    if (!shooter) return;
-    const now = Date.now();
-    const delay = 60000 / (shooter.mainCannonFireRate || 10);
-    if (now - shooter.lastFire < delay || shooter.ammoRemaining <= 0) return;
-    const ammoDef = ammo.find((a) => a.name === ammoName) as AmmoDefinition | undefined;
-    if (!ammoDef) {
-      socket.emit('error', 'Invalid ammo selection');
-      return;
-    }
-    // Derive projectile origin and direction from turret yaw and gun pitch so shells
-    // leave the barrel in the direction it faces.
-    const yaw = (shooter.rot || 0) + (shooter.turret || 0);
-    const pitch = shooter.gun || 0;
-    const cosPitch = Math.cos(pitch);
-    const sinYaw = Math.sin(yaw);
-    const cosYaw = Math.cos(yaw);
-    shooter.lastFire = now;
-    shooter.ammoRemaining -= 1;
-    const id = `${now}-${Math.random().toString(16).slice(2)}`;
-    const ammoData = ammoDef as AmmoDefinition;
-    const speed = ammoData.speed ?? 200;
-    const barrelLen = shooter.barrelLength ?? 3;
-    const muzzleX =
-      shooter.x +
-      (shooter.turretYPercent / 100 - 0.5) * shooter.bodyWidth -
-      sinYaw * cosPitch * barrelLen;
-    const muzzleY = shooter.y + 1 + Math.sin(pitch) * barrelLen;
-    const muzzleZ =
-      shooter.z +
-      (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
-      cosYaw * cosPitch * barrelLen;
-    const projectile: ProjectileState = {
-      id,
-      x: muzzleX,
-      y: muzzleY,
-      z: muzzleZ,
-      vx: -sinYaw * cosPitch * speed,
-      vy: Math.sin(pitch) * speed,
-      vz: -cosYaw * cosPitch * speed,
-      ammo: ammoData.name,
-      shooter: socket.id,
-      life: 5
-    };
-    projectiles.set(id, projectile);
-    io.emit('projectile-fired', projectile);
-    // Debug: log projectile to server console to trace firing events.
-    console.debug('Projectile fired', projectile);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('player disconnected', socket.id);
-    players.delete(socket.id);
-    io.emit('player-left', socket.id);
-    if (players.size === 0) baseBR = null; // reset BR when game empty
-  });
-});
-
-// Basic projectile physics loop. Moves projectiles forward and checks for
-// simple spherical collisions with players, applying damage on impact.
-setInterval(() => {
-  const dt = 0.05; // 20 ticks per second
-  for (const [id, p] of projectiles) {
-    p.vy += GRAVITY * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.z += p.vz * dt;
-    if (p.y <= 0) {
-      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-      projectiles.delete(id);
-      continue;
-    }
-    for (const [pid, player] of players) {
-      if (pid === p.shooter) continue;
-      const dx = player.x - p.x;
-      const dy = player.y - p.y;
-      const dz = player.z - p.z;
-      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
-        const ammoDef = ammo.find((a) => a.name === p.ammo);
-        const armor = player.armor || 0;
-        const dmg = ammoDef?.damage ?? ammoDef?.armorPen ?? 10;
-        const pen = ammoDef?.penetration ?? ammoDef?.pen0 ?? 0;
-        const explosion = ammoDef?.explosion ?? ammoDef?.explosionRadius ?? 0;
-        let total = pen > armor ? dmg : dmg / 2;
-        total += explosion;
-        player.health = Math.max(0, (player.health ?? 100) - total);
-        io.emit('tank-damaged', { id: pid, health: player.health });
-        if (player.health <= 0) {
-          const shooter = players.get(p.shooter);
-          const shooterUser = shooter && users.get(shooter.username);
-          const victimUser = users.get(player.username);
-          if (shooterUser) shooterUser.stats.kills += 1;
-          if (victimUser) victimUser.stats.deaths += 1;
-          saveUsers();
-        }
-        io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-        projectiles.delete(id);
-        break;
-      }
-    }
-    p.life -= dt;
-    if (projectiles.has(id) && p.life <= 0) {
-      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-      projectiles.delete(id);
-    }
-  }
-}, 50).unref();
-
 if (process.argv[1] === __filename) {
-  server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
+  await gameServer.listen(PORT);
+  console.log(`Tanks for Nothing server and Colyseus transport running on port ${PORT}`);
 }
 
 export { app, server, validateTank };
-export type { TankDefinition, AmmoDefinition };
+export type { TankDefinition, AmmoDefinition } from './types.js';

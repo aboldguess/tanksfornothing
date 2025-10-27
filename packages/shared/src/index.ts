@@ -5,3 +5,13 @@
 // ---------------------------------------------------------------------------
 
 export { generateGentleHills } from './terrain-noise.js';
+export {
+  PlayerStateSchema,
+  ProjectileStateSchema,
+  TanksForNothingState,
+  GAME_COMMAND,
+  GAME_EVENT,
+  type GameCommand,
+  type GameEvent,
+  type AmmoLoadout
+} from './schema.js';
