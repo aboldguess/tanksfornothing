@@ -5,7 +5,9 @@
 //          handles user input, camera control and firing mechanics. Camera defaults
 //          (height/distance) can be adjusted via the admin settings page. Uses Cannon.js for
 //          simple collision physics, force-based tank movement and synchronizes state
-//          with a server via Colyseus WebSocket rooms. Camera immediately reflects mouse movement while
+//          with a server via Colyseus WebSocket rooms, now resolving the multiplayer
+//          endpoint via environment-aware helpers so development and production hosts
+//          both connect successfully. Camera immediately reflects mouse movement while
 //          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
 //          under gravity. Remote players are represented with simple meshes that now
 //          include a visible cannon barrel and update as network events arrive so
@@ -72,13 +74,43 @@ function renderExplosion(position) {
   }, 500);
 }
 
+// Resolve Colyseus endpoint with awareness of build-time env vars so the development
+// client (served from Vite) can still reach the Node server that typically listens on
+// port 3000 while production continues to use same-origin requests.
+function resolveColyseusEndpoint() {
+  // Allow a fully qualified origin override first so deployments behind proxies can
+  // pin the exact WebSocket URL without worrying about host/port assembly here.
+  const explicitOrigin = (import.meta.env.VITE_SERVER_ORIGIN ?? '').trim().replace(/\/$/, '');
+  const explicitPath = (import.meta.env.VITE_SERVER_PATH ?? '/colyseus').trim() || '/colyseus';
+  const normalizedPath = explicitPath.startsWith('/') ? explicitPath : `/${explicitPath}`;
+  if (explicitOrigin) {
+    return `${explicitOrigin}${normalizedPath}`;
+  }
+
+  const fallbackProtocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+  const explicitProtocol = (import.meta.env.VITE_SERVER_PROTOCOL ?? '').trim().replace(/:$/, '');
+  const protocol = explicitProtocol || fallbackProtocol;
+
+  const explicitHost = (import.meta.env.VITE_SERVER_HOST ?? '').trim();
+  const host = explicitHost || window.location.hostname;
+
+  // If a host override already includes a port (e.g. example.com:4000) we respect it
+  // otherwise prefer the explicit port env var or fall back to window.location.port.
+  const explicitPort = (import.meta.env.VITE_SERVER_PORT ?? '').trim().replace(/^:/, '');
+  const portFromHost = host.includes(':') ? '' : explicitPort || window.location.port;
+  const portSegment = portFromHost ? `:${portFromHost}` : '';
+
+  return `${protocol}://${host}${portSegment}${normalizedPath}`;
+}
+
 // Establish a resilient Colyseus client so the multiplayer channel functions in both
-// dev (Vite) and production builds.
+// dev (Vite) and production builds, logging the chosen endpoint for easier debugging.
 let networkClient = null;
 let room = null;
+const colyseusEndpoint = resolveColyseusEndpoint();
 try {
-  const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  networkClient = new ColyseusClient(`${scheme}://${window.location.host}/colyseus`);
+  console.info('Initialising Colyseus client', { endpoint: colyseusEndpoint });
+  networkClient = new ColyseusClient(colyseusEndpoint);
 } catch (error) {
   console.warn('Colyseus client failed to initialise; continuing offline mode.', error);
 }
@@ -156,7 +188,7 @@ function createRemoteTank(t) {
 }
 
 if (!networkClient) {
-  showError('Colyseus client failed to load. Running offline.');
+  showError(`Unable to connect to server at ${colyseusEndpoint}. Running offline.`);
 }
 
 function clearRemotePlayers() {
