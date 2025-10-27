@@ -52,11 +52,20 @@ interface AuthJwtPayload extends JwtPayload {
 
 const app = express();
 const server = http.createServer(app);
+// Use a shared HTTP server so Express routes and the Colyseus WebSocket transport share the
+// same port. Avoid providing a `path` option because the Colyseus client appends dynamic
+// `/processId/roomId` segments to the WebSocket URL. The underlying `ws` library expects an
+// exact path match, so providing `/colyseus` here would cause the transport to reject every
+// upgrade request with HTTP 400 and the client would report "Failed to join room". Allowing
+// the transport to accept all paths lets Colyseus handle the routing internally while HTTP
+// matchmaking endpoints continue to work under `/colyseus/...` thanks to its own request
+// handler logic.
+const websocketTransport = new WebSocketTransport({
+  server
+});
+
 const gameServer = new ColyseusServer({
-  transport: new WebSocketTransport({
-    server,
-    path: '/colyseus'
-  })
+  transport: websocketTransport
 });
 
 // Configuration

@@ -77,7 +77,7 @@ export class TanksForNothingRoom extends Room<TanksForNothingState> {
     TanksForNothingRoom.activeRooms.delete(this);
   }
 
-  async onAuth(client: Client, options: JoinOptions, context: AuthContext): Promise<boolean> {
+  async onAuth(client: Client, options: JoinOptions, context: AuthContext): Promise<TanksClientAuth> {
     const auth = this.dependencies.authenticate(context);
     if ('error' in auth) {
       throw new Error(auth.error);
@@ -101,13 +101,14 @@ export class TanksForNothingRoom extends Room<TanksForNothingState> {
     const ammoCapacity = Number.isFinite(tank.ammoCapacity) ? Number(tank.ammoCapacity) : 0;
     const ammoRemaining = totalLoadout > 0 ? Math.min(totalLoadout, ammoCapacity || totalLoadout) : ammoCapacity;
 
-    (client as Client & { auth: TanksClientAuth }).auth = {
+    const authPayload = {
       username: auth.username,
       tank,
       loadout,
       ammoRemaining
     } satisfies TanksClientAuth;
-    return true;
+    (client as Client & { auth: TanksClientAuth }).auth = authPayload;
+    return authPayload;
   }
 
   onJoin(client: Client, _options: JoinOptions): void {
