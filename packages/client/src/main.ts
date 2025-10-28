@@ -26,11 +26,7 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Client as ColyseusClient } from 'colyseus.js';
-import {
-  GAME_COMMAND,
-  GAME_EVENT,
-  TanksForNothingState
-} from '@tanksfornothing/shared';
+import { GAME_COMMAND, GAME_EVENT } from '@tanksfornothing/shared';
 
 import './nav';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
@@ -139,6 +135,10 @@ let ambientLight = null;
 let sunLight = null;
 let currentTerrainDefinition = null;
 let groundTexture = null;
+// Normalised terrain height cache describing the rendered/physics ground so we can
+// clamp player spawns onto the surface even when the admin-provided heightmaps
+// sit entirely above or below world origin.
+let terrainHeightData = null;
 
 // Build a simplified tank mesh for remote players using dimensions from the
 // server. These meshes are purely visual and have no physics bodies.
@@ -217,6 +217,7 @@ function resetGameState() {
     chassisBody.velocity.set(0, 0, 0);
     chassisBody.angularVelocity.set(0, 0, 0);
     chassisBody.quaternion.set(0, 0, 0, 1);
+    repositionTankOnTerrain();
   }
   currentSpeed = 0;
   playerHealth = 100;
@@ -767,6 +768,8 @@ let MAX_TURRET_TRAVERSE = Infinity;
 let ACCELERATION = MAX_SPEED / 3;
 let currentSpeed = 0;
 let cameraMode = 'third'; // 'first' or 'third'
+// Track the active hull height so we can place the chassis just above the terrain surface.
+let currentTankBodyHeight = defaultTank.bodyHeight;
 
 // Target angles driven by mouse movement; turret/gun ease toward these each frame.
 // cameraYaw/cameraPitch represent the desired view orientation and can spin freely.
@@ -813,6 +816,67 @@ function disposeTerrain() {
     world.removeBody(groundBody);
     groundBody = null;
   }
+  terrainHeightData = null;
+}
+
+// Persist the current terrain's sampled heights for rapid lookup when positioning
+// the player's physics body on the surface. Data is stored in world metres.
+function updateTerrainHeightData(widthMeters, heightMeters, heights) {
+  if (!Array.isArray(heights) || !heights.length || !Array.isArray(heights[0])) {
+    terrainHeightData = null;
+    return;
+  }
+  terrainHeightData = {
+    width: widthMeters,
+    height: heightMeters,
+    rows: heights.length,
+    cols: heights[0].length,
+    heights
+  };
+}
+
+// Sample the normalised elevation grid using bilinear interpolation so the
+// chassis can hug the terrain even between vertex points.
+function sampleTerrainHeightAt(x, z) {
+  if (!terrainHeightData) return 0;
+  const { width, height, rows, cols, heights } = terrainHeightData;
+  if (!rows || !cols) return 0;
+  const normX = THREE.MathUtils.clamp((x + width / 2) / width, 0, 0.999);
+  const normZ = THREE.MathUtils.clamp((z + height / 2) / height, 0, 0.999);
+  const gridX = normX * (cols - 1);
+  const gridZ = normZ * (rows - 1);
+  const x0 = Math.floor(gridX);
+  const x1 = Math.min(cols - 1, x0 + 1);
+  const z0 = Math.floor(gridZ);
+  const z1 = Math.min(rows - 1, z0 + 1);
+  const tx = gridX - x0;
+  const tz = gridZ - z0;
+  const h00 = heights[z0]?.[x0] ?? 0;
+  const h10 = heights[z0]?.[x1] ?? h00;
+  const h01 = heights[z1]?.[x0] ?? h00;
+  const h11 = heights[z1]?.[x1] ?? h10;
+  const h0 = THREE.MathUtils.lerp(h00, h10, tx);
+  const h1 = THREE.MathUtils.lerp(h01, h11, tx);
+  return THREE.MathUtils.lerp(h0, h1, tz);
+}
+
+// Ensure the local player starts on top of the terrain instead of buried below
+// heightmaps that never cross y=0. Invoked whenever the map changes or tank
+// geometry is rebuilt so both visuals and physics stay aligned.
+function repositionTankOnTerrain() {
+  if (!chassisBody || !tank) return;
+  const surfaceY = sampleTerrainHeightAt(chassisBody.position.x, chassisBody.position.z);
+  if (!Number.isFinite(surfaceY)) return;
+  const targetY = surfaceY + currentTankBodyHeight / 2;
+  if (!Number.isFinite(targetY)) return;
+  chassisBody.position.y = targetY;
+  chassisBody.previousPosition.y = targetY;
+  chassisBody.interpolatedPosition.y = targetY;
+  chassisBody.velocity.y = 0;
+  chassisBody.angularVelocity.x = 0;
+  chassisBody.angularVelocity.z = 0;
+  tank.position.y = targetY;
+  lastState.y = targetY;
 }
 
 function updateLighting(lightingSettings) {
@@ -837,41 +901,58 @@ function updateLighting(lightingSettings) {
 function buildLegacyTerrain(name) {
   if (!scene) return;
   disposeTerrain();
-  const geometry = name === 'hill' || name === 'valley'
-    ? new THREE.PlaneGeometry(200, 200, 10, 10)
-    : new THREE.PlaneGeometry(200, 200, 1, 1);
+  const isHeightfield = name === 'hill' || name === 'valley';
+  const segments = isHeightfield ? 10 : 1;
+  const geometry = new THREE.PlaneGeometry(200, 200, segments, segments);
   const material = new THREE.MeshStandardMaterial({ color: 0x507140 });
   ground = new THREE.Mesh(geometry, material);
-  const pos = geometry.attributes.position;
-  if (name === 'hill' || name === 'valley') {
-    for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i);
-      const y = pos.getY(i);
-      const dist = Math.sqrt(x * x + y * y);
-      const height = Math.max(0, 10 - dist / 5);
-      pos.setZ(i, name === 'valley' ? -height : height);
+  let heightGrid = null;
+  if (isHeightfield) {
+    const elementSize = 200 / segments;
+    heightGrid = Array.from({ length: segments + 1 }, () => Array(segments + 1).fill(0));
+    let minHeight = Infinity;
+    let maxHeight = -Infinity;
+    for (let row = 0; row <= segments; row++) {
+      for (let col = 0; col <= segments; col++) {
+        const x = (col - segments / 2) * elementSize;
+        const z = (row - segments / 2) * elementSize;
+        const dist = Math.sqrt(x * x + z * z);
+        const magnitude = Math.max(0, 10 - dist / 5);
+        const signed = name === 'valley' ? -magnitude : magnitude;
+        heightGrid[row][col] = signed;
+        minHeight = Math.min(minHeight, signed);
+        maxHeight = Math.max(maxHeight, signed);
+      }
     }
+    const offset = Number.isFinite(minHeight) && Number.isFinite(maxHeight)
+      ? (minHeight + maxHeight) / 2
+      : 0;
+    const pos = geometry.attributes.position;
+    let index = 0;
+    for (let row = 0; row <= segments; row++) {
+      for (let col = 0; col <= segments; col++) {
+        const normalised = heightGrid[row][col] - offset;
+        heightGrid[row][col] = normalised;
+        pos.setZ(index, normalised);
+        index += 1;
+      }
+    }
+    pos.needsUpdate = true;
     geometry.computeVertexNormals();
+  } else {
+    heightGrid = [
+      [0, 0],
+      [0, 0]
+    ];
   }
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
   scene.add(ground);
   if (world) {
-    const elementSize = 200 / 10;
     let shape;
-    if (name === 'hill' || name === 'valley') {
-      const data = [];
-      for (let i = 0; i <= 10; i++) {
-        data[i] = [];
-        for (let j = 0; j <= 10; j++) {
-          const x = (i - 5) * elementSize;
-          const y = (j - 5) * elementSize;
-          const dist = Math.sqrt(x * x + y * y);
-          const height = Math.max(0, 10 - dist / 5);
-          data[i][j] = name === 'valley' ? -height : height;
-        }
-      }
-      shape = new CANNON.Heightfield(data, { elementSize });
+    if (isHeightfield) {
+      const elementSize = 200 / segments;
+      shape = new CANNON.Heightfield(heightGrid, { elementSize });
       groundBody = new CANNON.Body({ mass: 0 });
       groundBody.addShape(shape, new CANNON.Vec3(-100, 0, -100));
       groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
@@ -885,6 +966,8 @@ function buildLegacyTerrain(name) {
   }
   updateLighting(null);
   currentTerrainDefinition = null;
+  updateTerrainHeightData(200, 200, heightGrid);
+  repositionTankOnTerrain();
 }
 
 function buildTerrainFromDefinition(definition) {
@@ -904,13 +987,31 @@ function buildTerrainFromDefinition(definition) {
   const heightMeters = Math.max(1, (definition.size?.y ?? 1) * 1000);
   const geometry = new THREE.PlaneGeometry(widthMeters, heightMeters, Math.max(1, cols - 1), Math.max(1, rows - 1));
   const positions = geometry.attributes.position;
+  let minElevation = Infinity;
+  let maxElevation = -Infinity;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const value = elevation[y][x];
+      const numeric = Number.isFinite(value) ? value : 0;
+      if (numeric < minElevation) minElevation = numeric;
+      if (numeric > maxElevation) maxElevation = numeric;
+    }
+  }
+  const offset = Number.isFinite(minElevation) && Number.isFinite(maxElevation)
+    ? (minElevation + maxElevation) / 2
+    : 0;
+  const normalisedElevation = Array.from({ length: rows }, () => Array(cols).fill(0));
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       const index = y * cols + x;
       const value = elevation[y][x];
-      positions.setZ(index, Number.isFinite(value) ? value : 0);
+      const numeric = Number.isFinite(value) ? value : 0;
+      const normalised = numeric - offset;
+      normalisedElevation[y][x] = normalised;
+      positions.setZ(index, normalised);
     }
   }
+  positions.needsUpdate = true;
   geometry.computeVertexNormals();
   const palette = Array.isArray(definition.palette) && definition.palette.length ? definition.palette : fallbackPalette;
   const groundGrid = Array.isArray(definition.ground) && definition.ground.length ? definition.ground : Array.from({ length: rows }, () => Array(cols).fill(0));
@@ -957,6 +1058,8 @@ function buildTerrainFromDefinition(definition) {
   }
   updateLighting(definition.lighting);
   currentTerrainDefinition = definition;
+  updateTerrainHeightData(widthMeters, heightMeters, normalisedElevation);
+  repositionTankOnTerrain();
 }
 
 function applyTerrainPayload(payload) {
@@ -1094,6 +1197,7 @@ function init() {
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = MIN_ROLLING_DAMPING; // simulate base ground drag
   world.addBody(chassisBody);
+  repositionTankOnTerrain();
 
   camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
   renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -1260,13 +1364,15 @@ function applyTankConfig(t) {
     chassisBody.mass * 9.82 * GROUND_FRICTION * (trackWidth / 2);
   const desiredAngularAccel = ROT_ACCEL;
   TURN_TORQUE = frictionTorque + chassisBody.inertia.y * desiredAngularAccel;
-  chassisBody.position.set(0, (t.bodyHeight ?? defaultTank.bodyHeight) / 2, 0);
+  currentTankBodyHeight = t.bodyHeight ?? defaultTank.bodyHeight;
+  chassisBody.position.set(0, currentTankBodyHeight / 2, 0);
   chassisBody.angularFactor.set(0, 1, 0);
   // Reduced damping keeps hull rotation responsive.
   chassisBody.angularDamping = 0.2;
   chassisBody.linearDamping = MIN_ROLLING_DAMPING;
   world.addBody(chassisBody);
   currentSpeed = 0;
+  repositionTankOnTerrain();
 }
 
 function onMouseMove(e) {
