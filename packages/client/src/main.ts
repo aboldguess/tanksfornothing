@@ -916,7 +916,26 @@ function alignChassisToTerrain(forceSnap = false) {
   if (!chassisBody) return;
   const surfaceY = sampleTerrainHeightAt(chassisBody.position.x, chassisBody.position.z);
   if (!Number.isFinite(surfaceY)) return;
-  const desiredY = surfaceY + currentTankBodyHeight / 2;
+
+  // Determine the terrain normal up-front so we can position the chassis along that
+  // normal rather than world-up. This keeps the underside flush with the surface even
+  // once we tilt the hull to match the slope, preventing the earlier issue where the
+  // tank re-penetrated sloped terrain immediately after alignment.
+  const normal = sampleTerrainNormalAt(
+    chassisBody.position.x,
+    chassisBody.position.z,
+    terrainScratch.normal
+  );
+  if (normal.y <= 0) {
+    // Degenerate cases (e.g. malformed height data) can produce a downward-facing
+    // normal; fall back to world-up so we never flip the chassis underground.
+    normal.set(0, 1, 0);
+  }
+  const normalY = normal.y;
+  // Clamp to a tiny epsilon so we avoid division by zero if the sampled normal is
+  // unexpectedly horizontal, while still biasing the chassis upward to stay on the slope.
+  const safeNormalY = Math.max(normalY, 1e-3);
+  const desiredY = surfaceY + (currentTankBodyHeight / 2) / safeNormalY;
   const belowSurface = chassisBody.position.y < desiredY - 0.01;
   if (forceSnap || belowSurface) {
     chassisBody.position.y = desiredY;
@@ -933,11 +952,6 @@ function alignChassisToTerrain(forceSnap = false) {
   }
 
   // Use the terrain normal to tilt the chassis so it hugs slopes naturally.
-  const normal = sampleTerrainNormalAt(
-    chassisBody.position.x,
-    chassisBody.position.z,
-    terrainScratch.normal
-  );
   terrainScratch.up.copy(normal).normalize();
   terrainScratch.bodyQuat.set(
     chassisBody.quaternion.x,
