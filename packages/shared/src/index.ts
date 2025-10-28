@@ -6,12 +6,37 @@
 
 export { generateGentleHills } from './terrain-noise.js';
 export {
-  PlayerStateSchema,
-  ProjectileStateSchema,
   TanksForNothingState,
+  PlayerMetadataSchema,
+  PlayerRuntimeBufferSchema,
+  ProjectileRuntimeBufferSchema,
   GAME_COMMAND,
   GAME_EVENT,
   type GameCommand,
   type GameEvent,
   type AmmoLoadout
 } from './schema.js';
+export {
+  createGameWorld,
+  createEntity,
+  destroyEntity,
+  TransformComponent,
+  TargetComponent,
+  VelocityComponent,
+  HealthComponent,
+  AmmoStateComponent,
+  CooldownComponent,
+  TankStatsComponent,
+  ProjectileComponent,
+  PlayerTagComponent,
+  type GameWorld
+} from './ecs/components.js';
+export type { PlayerMetadata, ProjectileMetadata, TankSnapshot } from './ecs/metadata.js';
+export {
+  writePlayerRuntimeBuffer,
+  writeProjectileRuntimeBuffer,
+  applyPlayerRuntimeBuffer,
+  applyProjectileRuntimeBuffer,
+  type EnsureEntityForId
+} from './ecs/snapshots.js';
+export { cloneAmmoLoadout } from './ecs/metadata.js';

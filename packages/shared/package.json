@@ -22,7 +22,8 @@
     "test": "echo \"Shared package has no runtime tests yet\""
   },
   "dependencies": {
-    "@colyseus/schema": "^3.0.65"
+    "@colyseus/schema": "^3.0.65",
+    "bitecs": "^0.3.40"
   },
   "devDependencies": {}
 }
