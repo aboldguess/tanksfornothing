@@ -1465,4 +1465,3 @@ function updateCamera() {
     camera.lookAt(camera.position.clone().add(look));
   }
 }
-}
