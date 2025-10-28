@@ -139,6 +139,22 @@ let groundTexture = null;
 // clamp player spawns onto the surface even when the admin-provided heightmaps
 // sit entirely above or below world origin.
 let terrainHeightData = null;
+// Scratch vectors reused when aligning the tank chassis to sampled terrain normals.
+// Declared early so helper functions invoked during initial terrain load can safely
+// access the reused buffers without tripping Temporal Dead Zone rules for const.
+const terrainScratch = {
+  tangentX: new THREE.Vector3(),
+  tangentZ: new THREE.Vector3(),
+  normal: new THREE.Vector3(),
+  up: new THREE.Vector3(),
+  forward: new THREE.Vector3(),
+  projectedForward: new THREE.Vector3(),
+  right: new THREE.Vector3(),
+  temp: new THREE.Vector3(),
+  rotationMatrix: new THREE.Matrix4(),
+  targetQuat: new THREE.Quaternion(),
+  bodyQuat: new THREE.Quaternion()
+};
 
 // Build a simplified tank mesh for remote players using dimensions from the
 // server. These meshes are purely visual and have no physics bodies.
@@ -859,21 +875,6 @@ function sampleTerrainHeightAt(x, z) {
   const h1 = THREE.MathUtils.lerp(h01, h11, tx);
   return THREE.MathUtils.lerp(h0, h1, tz);
 }
-
-// Scratch vectors reused for terrain alignment to avoid per-frame allocations.
-const terrainScratch = {
-  tangentX: new THREE.Vector3(),
-  tangentZ: new THREE.Vector3(),
-  normal: new THREE.Vector3(),
-  up: new THREE.Vector3(),
-  forward: new THREE.Vector3(),
-  projectedForward: new THREE.Vector3(),
-  right: new THREE.Vector3(),
-  temp: new THREE.Vector3(),
-  rotationMatrix: new THREE.Matrix4(),
-  targetQuat: new THREE.Quaternion(),
-  bodyQuat: new THREE.Quaternion()
-};
 
 // Compute an approximate terrain normal using central differences so we can tilt
 // the chassis to match the slope even without reliable physics contacts.

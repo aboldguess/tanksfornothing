@@ -18,6 +18,8 @@ export default defineConfig(({ mode }) => {
   const host = env.CLIENT_HOST ?? '0.0.0.0';
   const port = Number(env.CLIENT_PORT ?? env.PORT ?? '5173');
   const previewPort = Number(env.CLIENT_PREVIEW_PORT ?? env.PREVIEW_PORT ?? '4173');
+  const sharedSrcDir = resolve(__dirname, '../shared/src');
+  const sharedEntry = resolve(sharedSrcDir, 'index.ts');
 
   return {
     root: rootDir,
@@ -48,7 +50,8 @@ export default defineConfig(({ mode }) => {
     },
     resolve: {
       alias: {
-        '/src': srcDir
+        '/src': srcDir,
+        '@tanksfornothing/shared': sharedEntry
       }
     },
     server: {
@@ -57,7 +60,7 @@ export default defineConfig(({ mode }) => {
       strictPort: false,
       open: env.CLIENT_OPEN_BROWSER === 'true',
       fs: {
-        allow: [srcDir, resolve(__dirname)]
+        allow: [srcDir, sharedSrcDir, resolve(__dirname)]
       }
     },
     preview: {
