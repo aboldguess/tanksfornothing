@@ -26,7 +26,19 @@
 import * as THREE from 'three';
 import * as CANNON from 'cannon-es';
 import { Client as ColyseusClient } from 'colyseus.js';
-import { GAME_COMMAND, GAME_EVENT } from '@tanksfornothing/shared';
+import {
+  GAME_COMMAND,
+  GAME_EVENT,
+  applyProjectileRuntimeBuffer,
+  createGameWorld,
+  createEntity,
+  destroyEntity,
+  TransformComponent,
+  ProjectileComponent
+} from '@tanksfornothing/shared';
+import type { EnsureEntityForId } from '@tanksfornothing/shared';
+
+import { RemoteWorldRenderer } from './remote-world';
 
 import './nav';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
@@ -113,12 +125,20 @@ try {
 // Client-side ammo handling
 let playerAmmo = [];
 let selectedAmmo = null;
-const projectiles = new Map(); // id -> { mesh, schema }
+const projectiles = new Map(); // id -> { mesh }
 let playerHealth = 100;
-// Track other players in the session by their Colyseus sessionId. Each entry stores the
-// root mesh plus references to the turret and gun so orientation can be synced
-// on network updates.
-const otherPlayers = new Map(); // sessionId -> { mesh, turret, gun }
+let remoteWorld = null;
+
+let projectileWorld = createGameWorld();
+const projectileServerToLocal = new Map();
+const projectileIdToServer = new Map();
+const ensureProjectileEntity = (serverEntityId) => {
+  if (!projectileServerToLocal.has(serverEntityId)) {
+    const local = createEntity(projectileWorld);
+    projectileServerToLocal.set(serverEntityId, local);
+  }
+  return projectileServerToLocal.get(serverEntityId) ?? null;
+};
 const fallbackPalette = [
   { name: 'grass', color: '#3cb043', texture: 'grass' },
   { name: 'mud', color: '#6b4423', texture: 'mud' },
@@ -208,14 +228,62 @@ if (!networkClient) {
 }
 
 function clearRemotePlayers() {
-  for (const { mesh } of otherPlayers.values()) {
-    scene?.remove(mesh);
-    mesh.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) obj.material.dispose();
-    });
+  remoteWorld?.clear();
+}
+
+function resetProjectileWorld() {
+  for (const id of Array.from(projectiles.keys())) {
+    removeProjectileVisual(id);
   }
-  otherPlayers.clear();
+  projectileServerToLocal.clear();
+  projectileIdToServer.clear();
+  projectileWorld = createGameWorld();
+}
+
+function syncProjectileWorld(buffer) {
+  if (!buffer) return;
+  const seen = applyProjectileRuntimeBuffer(projectileWorld, buffer, ensureProjectileEntity);
+  const activeIds = new Set(buffer.id ? Array.from(buffer.id) : []);
+  for (let i = 0; i < (buffer.id?.length ?? 0); i += 1) {
+    const id = buffer.id[i];
+    const serverEntity = buffer.entityId[i];
+    const localEntity = projectileServerToLocal.get(serverEntity);
+    if (typeof localEntity !== 'number') continue;
+    projectileIdToServer.set(id, serverEntity);
+    const position = {
+      x: TransformComponent.x[localEntity] || 0,
+      y: TransformComponent.y[localEntity] || 0,
+      z: TransformComponent.z[localEntity] || 0
+    };
+    let record = projectiles.get(id);
+    if (!record) {
+      record = createProjectileVisual(id, position);
+    } else {
+      record.mesh.position.set(position.x, position.y, position.z);
+    }
+  }
+
+  for (const [id] of [...projectiles]) {
+    if (!activeIds.has(id)) {
+      removeProjectileVisual(id);
+      const serverEntity = projectileIdToServer.get(id);
+      if (typeof serverEntity === 'number') {
+        const localEntity = projectileServerToLocal.get(serverEntity);
+        if (typeof localEntity === 'number') {
+          destroyEntity(projectileWorld, localEntity);
+        }
+        projectileServerToLocal.delete(serverEntity);
+        projectileIdToServer.delete(id);
+      }
+    }
+  }
+
+  for (const [serverEntity, localEntity] of [...projectileServerToLocal]) {
+    if (!seen.has(serverEntity)) {
+      destroyEntity(projectileWorld, localEntity);
+      projectileServerToLocal.delete(serverEntity);
+    }
+  }
 }
 
 function resetGameState() {
@@ -238,9 +306,7 @@ function resetGameState() {
   currentSpeed = 0;
   playerHealth = 100;
   clearRemotePlayers();
-  for (const id of Array.from(projectiles.keys())) {
-    removeProjectileVisual(id);
-  }
+  resetProjectileWorld();
   playerAmmo.forEach((a) => {
     a.count = loadout[a.name] || 0;
   });
@@ -250,15 +316,16 @@ function resetGameState() {
   updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 }
 
-function createProjectileVisual(id, projectile) {
-  if (!scene) return;
-  console.debug('Projectile spawned', projectile);
+function createProjectileVisual(id, position) {
+  if (!scene) return null;
   const geom = new THREE.SphereGeometry(0.3, 12, 12);
   const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
   const mesh = new THREE.Mesh(geom, mat);
-  mesh.position.set(projectile.x, projectile.y, projectile.z);
+  mesh.position.set(position.x, position.y, position.z);
   scene.add(mesh);
-  projectiles.set(id, { mesh, schema: projectile });
+  const record = { mesh };
+  projectiles.set(id, record);
+  return record;
 }
 
 function removeProjectileVisual(id) {
@@ -272,24 +339,24 @@ function removeProjectileVisual(id) {
   projectiles.delete(id);
 }
 
-function extractAmmoLoadoutFromState(player) {
+function extractAmmoLoadoutFromMetadata(metadata) {
   const list = [];
-  if (!player?.ammoLoadout) return list;
+  if (!metadata?.ammoLoadout) return list;
   if (selectedTank && Array.isArray(selectedTank.ammo)) {
     selectedTank.ammo.forEach((name) => {
-      const value = player.ammoLoadout.get(name) ?? 0;
+      const value = metadata.ammoLoadout.get(name) ?? 0;
       if (value > 0) list.push({ name, count: value });
     });
   } else {
-    player.ammoLoadout.forEach((value, name) => {
+    metadata.ammoLoadout.forEach((value, name) => {
       if (value > 0) list.push({ name, count: value });
     });
   }
   return list;
 }
 
-function syncLocalPlayerState(player) {
-  const newAmmo = extractAmmoLoadoutFromState(player);
+function syncLocalPlayerState(metadata, runtime) {
+  const newAmmo = extractAmmoLoadoutFromMetadata(metadata);
   const newTotal = newAmmo.reduce((sum, entry) => sum + entry.count, 0);
   const ammoChanged =
     newTotal !== ammoLeft ||
@@ -303,17 +370,22 @@ function syncLocalPlayerState(player) {
     ammoLeft = newTotal;
     updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
   }
-  if (typeof player?.health === 'number') {
-    playerHealth = player.health;
+  if (metadata && runtime) {
+    const entityId = metadata.entityId;
+    const index = runtime.entityId.findIndex((value) => value === entityId);
+    if (index >= 0) {
+      const healthValue = runtime.health[index];
+      if (typeof healthValue === 'number') {
+        playerHealth = healthValue;
+      }
+    }
   }
 }
 
 function attachRoomListeners(activeRoom) {
   activeRoom.onLeave(() => {
     showError('Disconnected from server. Running offline.');
-    for (const id of Array.from(projectiles.keys())) {
-      removeProjectileVisual(id);
-    }
+    resetProjectileWorld();
     clearRemotePlayers();
     room = null;
   });
@@ -323,7 +395,7 @@ function attachRoomListeners(activeRoom) {
 
   const bindSchemaCollections = (state) => {
     if (stateListenersBound) return;
-    if (!state || !state.players || !state.projectiles) {
+    if (!state || !state.playerMetadata || !state.playerRuntime || !state.projectileRuntime) {
       if (!waitingForSchemaState) {
         console.debug('Waiting for Colyseus state to initialise before binding listeners');
         waitingForSchemaState = true;
@@ -331,66 +403,51 @@ function attachRoomListeners(activeRoom) {
       return;
     }
 
+    if (!scene) {
+      console.warn('Scene not initialised; deferring ECS bindings');
+      return;
+    }
+
     waitingForSchemaState = false;
+    remoteWorld?.clear();
+    remoteWorld = new RemoteWorldRenderer(scene, createRemoteTank, () => activeRoom.sessionId);
 
-    const handlePlayerAdded = (player, sessionId) => {
-      if (!player) return;
+    const handleMetadataUpdate = (metadata, sessionId) => {
+      if (!metadata) return;
       if (sessionId === activeRoom.sessionId) {
-        syncLocalPlayerState(player);
+        syncLocalPlayerState(metadata, state.playerRuntime);
         return;
       }
-      if (!scene || otherPlayers.has(sessionId)) return;
-      const remote = createRemoteTank(player);
-      remote.mesh.position.set(player.x || 0, player.y || 0, player.z || 0);
-      scene.add(remote.mesh);
-      otherPlayers.set(sessionId, remote);
-      console.log('Player joined', sessionId);
+      remoteWorld?.addOrUpdateMetadata(sessionId, metadata);
     };
 
-    state.players.onAdd = handlePlayerAdded;
-    state.players.onChange = (player, sessionId) => {
-      if (sessionId === activeRoom.sessionId) {
-        syncLocalPlayerState(player);
-        return;
-      }
-      const remote = otherPlayers.get(sessionId);
-      if (!remote) return;
-      remote.mesh.position.set(player.x, player.y, player.z);
-      remote.mesh.rotation.y = player.rot;
-      remote.turret.rotation.y = player.turret;
-      if (remote.gun) remote.gun.rotation.x = player.gun ?? 0;
+    state.playerMetadata.onAdd = handleMetadataUpdate;
+    state.playerMetadata.onChange = handleMetadataUpdate;
+    state.playerMetadata.onRemove = (_metadata, sessionId) => {
+      if (sessionId === activeRoom.sessionId) return;
+      remoteWorld?.removeMetadata(sessionId);
     };
 
-    state.players.onRemove = (_player, sessionId) => {
-      const remote = otherPlayers.get(sessionId);
-      if (!remote) return;
-      scene?.remove(remote.mesh);
-      remote.mesh.traverse((obj) => {
-        if (obj.geometry) obj.geometry.dispose();
-        if (obj.material) obj.material.dispose();
-      });
-      otherPlayers.delete(sessionId);
-      console.log('Player left', sessionId);
-    };
-
-    state.projectiles.onAdd = (projectile, key) => {
-      createProjectileVisual(key, projectile);
-    };
-    state.projectiles.onRemove = (_projectile, key) => {
-      removeProjectileVisual(key);
-    };
+    state.listen(
+      'tick',
+      () => {
+        if (remoteWorld) {
+          remoteWorld.applyRuntime(state.playerRuntime);
+        }
+        const localMetadata = state.playerMetadata.get(activeRoom.sessionId);
+        syncLocalPlayerState(localMetadata, state.playerRuntime);
+        syncProjectileWorld(state.projectileRuntime);
+      },
+      true
+    );
 
     stateListenersBound = true;
     console.debug('Colyseus schema listeners bound for active room', { sessionId: activeRoom.sessionId });
 
-    state.players.forEach((player, sessionId) => {
-      handlePlayerAdded(player, sessionId);
+    state.playerMetadata.forEach((metadata, sessionId) => {
+      handleMetadataUpdate(metadata, sessionId);
     });
-    state.projectiles.forEach((projectile, key) => {
-      if (!projectiles.has(key)) {
-        createProjectileVisual(key, projectile);
-      }
-    });
+    syncProjectileWorld(state.projectileRuntime);
   };
 
   if (activeRoom.state) {
@@ -410,6 +467,15 @@ function attachRoomListeners(activeRoom) {
   activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
   activeRoom.onMessage(GAME_EVENT.ProjectileExploded, (p) => {
     removeProjectileVisual(p.id);
+    const serverEntity = projectileIdToServer.get(p.id);
+    if (typeof serverEntity === 'number') {
+      const localEntity = projectileServerToLocal.get(serverEntity);
+      if (typeof localEntity === 'number') {
+        destroyEntity(projectileWorld, localEntity);
+      }
+      projectileServerToLocal.delete(serverEntity);
+      projectileIdToServer.delete(p.id);
+    }
     renderExplosion(new THREE.Vector3(p.x, p.y, p.z));
   });
   activeRoom.onMessage(GAME_EVENT.TankDamaged, ({ id, health }) => {
@@ -1603,11 +1669,7 @@ function animate() {
   tank.position.copy(chassisBody.position);
   tank.quaternion.copy(chassisBody.quaternion);
 
-  // Move client-side projectile meshes based on authoritative server state
-  for (const proj of projectiles.values()) {
-    if (!proj.schema) continue;
-    proj.mesh.position.set(proj.schema.x, proj.schema.y, proj.schema.z);
-  }
+  remoteWorld?.updateMeshes();
 
   // Smoothly rotate turret and gun toward target angles
   const yawDiff = targetYaw - turret.rotation.y;

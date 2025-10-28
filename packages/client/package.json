@@ -19,6 +19,7 @@
   },
   "dependencies": {
     "@tanksfornothing/shared": "^1.0.0",
+    "bitecs": "^0.3.40",
     "cannon-es": "^0.20.0",
     "colyseus.js": "^0.16.22",
     "three": "^0.180.0"
