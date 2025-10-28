@@ -45,6 +45,12 @@ export class PlayerMetadataSchema extends Schema {
   @type('number') declare turretYPercent: number;
   @type('number') declare ammoCapacity: number;
   @type({ map: 'number' }) declare ammoLoadout: MapSchema<number>;
+
+  constructor() {
+    super();
+    // Ensure ammoLoadout is always a usable MapSchema so server sync logic can iterate safely
+    this.ammoLoadout = new MapSchema<number>();
+  }
 }
 
 /**
