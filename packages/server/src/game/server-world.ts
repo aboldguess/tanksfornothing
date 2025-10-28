@@ -172,7 +172,8 @@ export class ServerWorldController {
     TargetComponent.z[entity] = this.sanitiseNumber(target.z, TargetComponent.z[entity]);
     TargetComponent.rot[entity] = this.normaliseAngle(target.rot, TargetComponent.rot[entity]);
     TargetComponent.turret[entity] = this.normaliseAngle(target.turret, TargetComponent.turret[entity]);
-    TargetComponent.gun[entity] = this.normaliseAngle(target.gun, TargetComponent.gun[entity]);
+    // Preserve negative depression inputs so integratePlayer can clamp against gunDepression correctly.
+    TargetComponent.gun[entity] = this.sanitiseNumber(target.gun, TargetComponent.gun[entity]);
   }
 
   queueFire(sessionId: string, ammoName: string): void {
