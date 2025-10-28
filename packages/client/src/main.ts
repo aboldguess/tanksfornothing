@@ -860,23 +860,165 @@ function sampleTerrainHeightAt(x, z) {
   return THREE.MathUtils.lerp(h0, h1, tz);
 }
 
+// Scratch vectors reused for terrain alignment to avoid per-frame allocations.
+const terrainScratch = {
+  tangentX: new THREE.Vector3(),
+  tangentZ: new THREE.Vector3(),
+  normal: new THREE.Vector3(),
+  up: new THREE.Vector3(),
+  forward: new THREE.Vector3(),
+  projectedForward: new THREE.Vector3(),
+  right: new THREE.Vector3(),
+  temp: new THREE.Vector3(),
+  rotationMatrix: new THREE.Matrix4(),
+  targetQuat: new THREE.Quaternion(),
+  bodyQuat: new THREE.Quaternion()
+};
+
+// Compute an approximate terrain normal using central differences so we can tilt
+// the chassis to match the slope even without reliable physics contacts.
+function sampleTerrainNormalAt(x, z, target = new THREE.Vector3()) {
+  if (!terrainHeightData) return target.set(0, 1, 0);
+  const { width, height, rows, cols } = terrainHeightData;
+  if (rows < 2 || cols < 2) return target.set(0, 1, 0);
+  const stepX = width / Math.max(1, cols - 1);
+  const stepZ = height / Math.max(1, rows - 1);
+  const halfX = stepX / 2;
+  const halfZ = stepZ / 2;
+  const hL = sampleTerrainHeightAt(x - halfX, z);
+  const hR = sampleTerrainHeightAt(x + halfX, z);
+  const hF = sampleTerrainHeightAt(x, z - halfZ);
+  const hB = sampleTerrainHeightAt(x, z + halfZ);
+  if (
+    !Number.isFinite(hL) ||
+    !Number.isFinite(hR) ||
+    !Number.isFinite(hF) ||
+    !Number.isFinite(hB)
+  ) {
+    return target.set(0, 1, 0);
+  }
+  terrainScratch.tangentX.set(stepX, hR - hL, 0);
+  terrainScratch.tangentZ.set(0, hB - hF, stepZ);
+  target
+    .copy(terrainScratch.tangentZ)
+    .cross(terrainScratch.tangentX);
+  if (target.lengthSq() < 1e-6) {
+    return target.set(0, 1, 0);
+  }
+  return target.normalize();
+}
+
+// Align the chassis body with the sampled terrain height/normal so it cannot fall
+// through sparse collision meshes. forceSnap ensures we hard set the Y position
+// (used on spawn / terrain rebuild) while the default mode simply prevents the
+// body from dipping below the surface during gameplay.
+function alignChassisToTerrain(forceSnap = false) {
+  if (!chassisBody) return;
+  const surfaceY = sampleTerrainHeightAt(chassisBody.position.x, chassisBody.position.z);
+  if (!Number.isFinite(surfaceY)) return;
+
+  // Determine the terrain normal up-front so we can position the chassis along that
+  // normal rather than world-up. This keeps the underside flush with the surface even
+  // once we tilt the hull to match the slope, preventing the earlier issue where the
+  // tank re-penetrated sloped terrain immediately after alignment.
+  const normal = sampleTerrainNormalAt(
+    chassisBody.position.x,
+    chassisBody.position.z,
+    terrainScratch.normal
+  );
+  if (normal.y <= 0) {
+    // Degenerate cases (e.g. malformed height data) can produce a downward-facing
+    // normal; fall back to world-up so we never flip the chassis underground.
+    normal.set(0, 1, 0);
+  }
+  const normalY = normal.y;
+  // Clamp to a tiny epsilon so we avoid division by zero if the sampled normal is
+  // unexpectedly horizontal, while still biasing the chassis upward to stay on the slope.
+  const safeNormalY = Math.max(normalY, 1e-3);
+  const desiredY = surfaceY + (currentTankBodyHeight / 2) / safeNormalY;
+  const belowSurface = chassisBody.position.y < desiredY - 0.01;
+  if (forceSnap || belowSurface) {
+    chassisBody.position.y = desiredY;
+    chassisBody.previousPosition.y = desiredY;
+    chassisBody.interpolatedPosition.y = desiredY;
+    if (forceSnap || chassisBody.velocity.y < 0) {
+      chassisBody.velocity.y = 0;
+    }
+    chassisBody.angularVelocity.x = 0;
+    chassisBody.angularVelocity.z = 0;
+    if (forceSnap) {
+      lastState.y = desiredY;
+    }
+  }
+
+  // Use the terrain normal to tilt the chassis so it hugs slopes naturally.
+  terrainScratch.up.copy(normal).normalize();
+  terrainScratch.bodyQuat.set(
+    chassisBody.quaternion.x,
+    chassisBody.quaternion.y,
+    chassisBody.quaternion.z,
+    chassisBody.quaternion.w
+  );
+  terrainScratch.forward
+    .set(0, 0, -1)
+    .applyQuaternion(terrainScratch.bodyQuat);
+  terrainScratch.projectedForward
+    .copy(terrainScratch.forward)
+    .projectOnPlane(terrainScratch.up);
+  if (terrainScratch.projectedForward.lengthSq() < 1e-6) {
+    // Fallback: remove any residual component along the normal manually.
+    terrainScratch.temp
+      .copy(terrainScratch.up)
+      .multiplyScalar(terrainScratch.forward.dot(terrainScratch.up));
+    terrainScratch.projectedForward.copy(terrainScratch.forward).sub(terrainScratch.temp);
+  }
+  if (terrainScratch.projectedForward.lengthSq() < 1e-6) {
+    terrainScratch.projectedForward.set(0, 0, -1);
+  }
+  terrainScratch.projectedForward.normalize();
+  terrainScratch.right
+    .copy(terrainScratch.projectedForward)
+    .cross(terrainScratch.up);
+  if (terrainScratch.right.lengthSq() < 1e-6) {
+    terrainScratch.right
+      .set(1, 0, 0)
+      .applyQuaternion(terrainScratch.bodyQuat)
+      .projectOnPlane(terrainScratch.up);
+  }
+  if (terrainScratch.right.lengthSq() < 1e-6) {
+    terrainScratch.right.crossVectors(terrainScratch.up, terrainScratch.projectedForward);
+  }
+  terrainScratch.right.normalize();
+  terrainScratch.projectedForward.crossVectors(terrainScratch.up, terrainScratch.right).normalize();
+  terrainScratch.rotationMatrix.makeBasis(
+    terrainScratch.right,
+    terrainScratch.up,
+    terrainScratch.projectedForward
+  );
+  terrainScratch.targetQuat.setFromRotationMatrix(terrainScratch.rotationMatrix);
+  chassisBody.quaternion.set(
+    terrainScratch.targetQuat.x,
+    terrainScratch.targetQuat.y,
+    terrainScratch.targetQuat.z,
+    terrainScratch.targetQuat.w
+  );
+  chassisBody.angularVelocity.x = 0;
+  chassisBody.angularVelocity.z = 0;
+}
+
 // Ensure the local player starts on top of the terrain instead of buried below
 // heightmaps that never cross y=0. Invoked whenever the map changes or tank
 // geometry is rebuilt so both visuals and physics stay aligned.
 function repositionTankOnTerrain() {
   if (!chassisBody || !tank) return;
-  const surfaceY = sampleTerrainHeightAt(chassisBody.position.x, chassisBody.position.z);
-  if (!Number.isFinite(surfaceY)) return;
-  const targetY = surfaceY + currentTankBodyHeight / 2;
-  if (!Number.isFinite(targetY)) return;
-  chassisBody.position.y = targetY;
-  chassisBody.previousPosition.y = targetY;
-  chassisBody.interpolatedPosition.y = targetY;
-  chassisBody.velocity.y = 0;
-  chassisBody.angularVelocity.x = 0;
-  chassisBody.angularVelocity.z = 0;
-  tank.position.y = targetY;
-  lastState.y = targetY;
+  alignChassisToTerrain(true);
+  tank.position.copy(chassisBody.position);
+  tank.quaternion.set(
+    chassisBody.quaternion.x,
+    chassisBody.quaternion.y,
+    chassisBody.quaternion.z,
+    chassisBody.quaternion.w
+  );
 }
 
 function updateLighting(lightingSettings) {
@@ -1445,6 +1587,10 @@ function animate() {
 
   // Step physics world with fixed timestep
   world.step(1 / 60, delta, 3);
+
+  // Keep the chassis glued to the sampled heightmap so it never clips through
+  // the terrain when collision meshes fail to register contacts.
+  alignChassisToTerrain(false);
 
   // Calculate speed along the forward vector and log for debugging
   const forward = new CANNON.Vec3(0, 0, -1);
