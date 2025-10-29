@@ -38,7 +38,11 @@ import {
   TanksForNothingState
 } from '@tanksfornothing/shared';
 
-import type { AmmoDefinition, TankDefinition } from '../types.js';
+import { ContactEquation, Vec3 } from 'cannon-es';
+
+import { PhysicsWorldManager, type PhysicsBody } from './physics-world.js';
+
+import type { AmmoDefinition, TankDefinition, TerrainDefinition } from '../types.js';
 
 interface PlayerTargetPayload {
   x?: number;
@@ -59,8 +63,15 @@ interface StepResult {
   kills: Array<{ shooter: string | null; victim: string }>;
 }
 
+interface BodyCollisionEvent {
+  body: PhysicsBody;
+  target: PhysicsBody;
+  contact: ContactEquation;
+}
+
 interface ServerWorldOptions {
   getAmmo: () => AmmoDefinition[];
+  getTerrain?: () => TerrainDefinition | null;
 }
 
 const GRAVITY = -9.81;
@@ -73,12 +84,26 @@ export class ServerWorldController {
   private readonly projectileMetadata = new Map<string, ProjectileMetadata>();
   private readonly fireRequests = new Map<number, FireRequest>();
   private readonly ammoByName = new Map<string, AmmoDefinition>();
+  private readonly physics: PhysicsWorldManager;
+  private readonly bodyByEntity = new Map<number, PhysicsBody>();
+  private readonly projectileBodies = new Map<string, PhysicsBody>();
+  private readonly projectileCollisionHandlers = new Map<string, (event: BodyCollisionEvent) => void>();
+  private readonly destroyedProjectiles = new Set<string>();
+  private activeExplosions: StepResult['explosions'] | null = null;
+  private activeDamage: StepResult['damage'] | null = null;
+  private activeKills: StepResult['kills'] | null = null;
 
   constructor(private readonly options: ServerWorldOptions) {
     this.world = createGameWorld();
+    this.physics = new PhysicsWorldManager(GRAVITY);
+    this.physics.rebuildTerrain(options.getTerrain ? options.getTerrain() : null);
     for (const ammo of options.getAmmo()) {
       this.ammoByName.set(ammo.name, ammo);
     }
+  }
+
+  setTerrain(definition: TerrainDefinition | null): void {
+    this.physics.rebuildTerrain(definition);
   }
 
   refreshAmmoCatalog(): void {
@@ -148,6 +173,20 @@ export class ServerWorldController {
     TankStatsComponent.turretXPercent[entity] = tank.turretXPercent ?? 50;
     TankStatsComponent.turretYPercent[entity] = tank.turretYPercent ?? 50;
 
+    const tankBody = this.physics.createTankBody(
+      {
+        width: TankStatsComponent.bodyWidth[entity] || tank.bodyWidth || 3,
+        height: TankStatsComponent.bodyHeight[entity] || tank.bodyHeight || 2,
+        length: TankStatsComponent.bodyLength[entity] || tank.bodyLength || 6
+      },
+      this.estimateTankMass(tank)
+    );
+    tankBody.position.set(TransformComponent.x[entity], TransformComponent.y[entity], TransformComponent.z[entity]);
+    tankBody.quaternion.setFromEuler(0, TransformComponent.rot[entity], 0);
+    tankBody.userData = { kind: 'tank', entity, sessionId };
+    this.physics.world.addBody(tankBody);
+    this.bodyByEntity.set(entity, tankBody);
+
     const metadata = this.toPlayerMetadata(sessionId, username, tank, entity, loadout);
     metadata.ammoCapacity = AmmoStateComponent.capacity[entity];
     this.metadata.set(sessionId, metadata);
@@ -157,6 +196,11 @@ export class ServerWorldController {
   removePlayer(sessionId: string): void {
     const entity = this.playerEntities.get(sessionId);
     if (typeof entity === 'number') {
+      const body = this.bodyByEntity.get(entity);
+      if (body) {
+        this.physics.world.removeBody(body);
+        this.bodyByEntity.delete(entity);
+      }
       destroyEntity(this.world, entity);
     }
     this.playerEntities.delete(sessionId);
@@ -187,10 +231,15 @@ export class ServerWorldController {
     const damage: StepResult['damage'] = [];
     const kills: StepResult['kills'] = [];
 
-    for (const [sessionId, meta] of this.metadata) {
+    this.activeExplosions = explosions;
+    this.activeDamage = damage;
+    this.activeKills = kills;
+    this.destroyedProjectiles.clear();
+
+    for (const meta of this.metadata.values()) {
       const entity = meta.entity;
       if (!hasComponent(this.world, TransformComponent, entity)) continue;
-      this.integratePlayer(entity, dt);
+      this.applyPlayerForces(entity, dt);
     }
 
     for (const [entity, request] of [...this.fireRequests]) {
@@ -198,7 +247,20 @@ export class ServerWorldController {
       this.fireRequests.delete(entity);
     }
 
-    this.stepProjectiles(dt, explosions, damage, kills);
+    this.physics.world.step(1 / 60, dt, 8);
+
+    for (const meta of this.metadata.values()) {
+      const entity = meta.entity;
+      if (!hasComponent(this.world, TransformComponent, entity)) continue;
+      this.updateTankFromPhysics(entity, dt);
+    }
+
+    this.updateProjectiles(dt);
+
+    this.activeExplosions = null;
+    this.activeDamage = null;
+    this.activeKills = null;
+    this.destroyedProjectiles.clear();
 
     return { explosions, damage, kills };
   }
@@ -276,9 +338,10 @@ export class ServerWorldController {
   }
 
   removeExpiredProjectiles(): void {
-    for (const [id, meta] of this.projectileMetadata) {
+    for (const [id, meta] of [...this.projectileMetadata]) {
       if (!hasComponent(this.world, ProjectileComponent, meta.entity)) {
-        this.projectileMetadata.delete(id);
+        const body = this.projectileBodies.get(id);
+        this.destroyProjectile(id, body ? body.position.clone() : null, { spawnExplosion: false });
       }
     }
   }
@@ -348,52 +411,105 @@ export class ServerWorldController {
     return AmmoStateComponent.remaining[entity];
   }
 
-  private integratePlayer(entity: number, dt: number): void {
+  private applyPlayerForces(entity: number, dt: number): void {
+    const body = this.bodyByEntity.get(entity);
+    if (!body) return;
+
     const targetX = TargetComponent.x[entity];
     const targetY = TargetComponent.y[entity];
     const targetZ = TargetComponent.z[entity];
-    const targetRot = TargetComponent.rot[entity];
-    const targetTurret = TargetComponent.turret[entity];
-    const targetGun = TargetComponent.gun[entity];
-
     const maxSpeed = TankStatsComponent.maxSpeed[entity] || 10;
     const maxReverse = TankStatsComponent.maxReverseSpeed[entity] || 5;
+
+    const dx = targetX - body.position.x;
+    const dz = targetZ - body.position.z;
+    const distance = Math.sqrt(dx * dx + dz * dz);
+
+    if (distance > 0.1) {
+      const directionX = dx / distance;
+      const directionZ = dz / distance;
+      const desiredSpeed = Math.min(maxSpeed, distance / Math.max(dt, 0.016));
+      const forwardVelocity = body.velocity.x * directionX + body.velocity.z * directionZ;
+      const allowedSpeed = forwardVelocity >= 0 ? maxSpeed : maxReverse;
+      const clampedSpeed = Math.min(allowedSpeed, Math.abs(desiredSpeed));
+      const desiredVelX = directionX * clampedSpeed;
+      const desiredVelZ = directionZ * clampedSpeed;
+      const impulseX = (desiredVelX - body.velocity.x) * body.mass;
+      const impulseZ = (desiredVelZ - body.velocity.z) * body.mass;
+      body.applyImpulse(new Vec3(impulseX, 0, impulseZ));
+    } else {
+      body.velocity.x *= 0.6;
+      body.velocity.z *= 0.6;
+    }
+
+    if (Number.isFinite(targetY)) {
+      const dy = targetY - body.position.y;
+      if (Math.abs(dy) > 0.25) {
+        const desiredVy = this.clamp(dy / Math.max(dt, 0.016), -5, 5);
+        const impulseY = (desiredVy - body.velocity.y) * body.mass;
+        body.applyImpulse(new Vec3(0, impulseY, 0));
+      }
+    }
+  }
+
+  private updateTankFromPhysics(entity: number, dt: number): void {
+    const body = this.bodyByEntity.get(entity);
+    if (!body) return;
+
+    const maxSpeed = TankStatsComponent.maxSpeed[entity] || 10;
     const maxTurretRate = TankStatsComponent.turretRotation[entity] || 30;
     const gunElevation = TankStatsComponent.gunElevation[entity] || 10;
     const gunDepression = TankStatsComponent.gunDepression[entity] || -10;
 
-    const dx = targetX - TransformComponent.x[entity];
-    const dy = targetY - TransformComponent.y[entity];
-    const dz = targetZ - TransformComponent.z[entity];
+    const horizontalSpeed = Math.hypot(body.velocity.x, body.velocity.z);
+    if (horizontalSpeed > maxSpeed) {
+      const scale = maxSpeed / horizontalSpeed;
+      body.velocity.x *= scale;
+      body.velocity.z *= scale;
+    }
 
-    const desiredSpeed = Math.sqrt(dx * dx + dz * dz) / Math.max(dt, 0.0001);
-    const clampedSpeed = Math.min(desiredSpeed, dx >= 0 ? maxSpeed : maxReverse);
-    const speedRatio = desiredSpeed > 0 ? clampedSpeed / desiredSpeed : 0;
+    TransformComponent.x[entity] = body.position.x;
+    TransformComponent.y[entity] = body.position.y;
+    TransformComponent.z[entity] = body.position.z;
 
-    TransformComponent.x[entity] += dx * speedRatio * dt;
-    TransformComponent.y[entity] += dy * Math.min(1, dt * 10);
-    TransformComponent.z[entity] += dz * speedRatio * dt;
+    VelocityComponent.vx[entity] = body.velocity.x;
+    VelocityComponent.vy[entity] = body.velocity.y;
+    VelocityComponent.vz[entity] = body.velocity.z;
 
-    VelocityComponent.vx[entity] = dx * speedRatio;
-    VelocityComponent.vy[entity] = dy * Math.min(1, dt * 10);
-    VelocityComponent.vz[entity] = dz * speedRatio;
-
-    const rotDelta = this.shortestAngleDelta(TransformComponent.rot[entity], targetRot);
+    const targetRot = TargetComponent.rot[entity];
+    const currentYaw = this.getYawFromBody(body);
+    const rotDelta = this.shortestAngleDelta(currentYaw, targetRot);
     const maxRotStep = (maxSpeed > 0 ? maxSpeed : 30) * dt * 0.5;
-    TransformComponent.rot[entity] = this.wrapAngle(TransformComponent.rot[entity] + this.clamp(rotDelta, -maxRotStep, maxRotStep));
+    const nextYaw = this.wrapAngle(currentYaw + this.clamp(rotDelta, -maxRotStep, maxRotStep));
+    body.quaternion.setFromEuler(0, nextYaw, 0);
+    TransformComponent.rot[entity] = nextYaw;
 
+    const targetTurret = TargetComponent.turret[entity];
     const turretDelta = this.shortestAngleDelta(TransformComponent.turret[entity], targetTurret);
     const maxTurretStep = (maxTurretRate || 30) * dt * (Math.PI / 180);
-    TransformComponent.turret[entity] = this.wrapAngle(TransformComponent.turret[entity] + this.clamp(turretDelta, -maxTurretStep, maxTurretStep));
+    TransformComponent.turret[entity] = this.wrapAngle(
+      TransformComponent.turret[entity] + this.clamp(turretDelta, -maxTurretStep, maxTurretStep)
+    );
 
-    const gunDelta = targetGun - TransformComponent.gun[entity];
-    const clampedGunTarget = this.clamp(targetGun, gunDepression * (Math.PI / 180), gunElevation * (Math.PI / 180));
+    const clampedGunTarget = this.clamp(
+      TargetComponent.gun[entity],
+      gunDepression * (Math.PI / 180),
+      gunElevation * (Math.PI / 180)
+    );
     const gunStep = this.clamp(clampedGunTarget - TransformComponent.gun[entity], -maxTurretStep, maxTurretStep);
     TransformComponent.gun[entity] += gunStep;
 
     if (CooldownComponent.value[entity] > 0) {
       CooldownComponent.value[entity] = Math.max(0, CooldownComponent.value[entity] - dt);
     }
+
+    const userData = body.userData ?? { kind: 'tank' as const };
+    userData.entity = entity;
+    const meta = this.getMetadataForEntity(entity);
+    if (meta) {
+      userData.sessionId = meta.sessionId;
+    }
+    body.userData = userData;
   }
 
   private processFireRequest(entity: number, request: FireRequest): boolean {
@@ -423,6 +539,18 @@ export class ServerWorldController {
     ProjectileComponent.life[projectileEntity] = PROJECTILE_LIFETIME;
     ProjectileComponent.shooter[projectileEntity] = entity;
 
+    const projectileBody = this.physics.createProjectileBody(Math.max(0.2, (ammo.caliber ?? 75) / 1000), 5);
+    projectileBody.position.set(muzzleX, muzzleY, muzzleZ);
+    projectileBody.velocity.set(vx, vy, vz);
+    projectileBody.userData = { kind: 'projectile', entity: projectileEntity, projectileId };
+    const collisionHandler = (event: BodyCollisionEvent) => {
+      this.handleProjectileCollision(projectileId, projectileEntity, projectileBody, event);
+    };
+    projectileBody.addEventListener('collide', collisionHandler);
+    this.physics.world.addBody(projectileBody);
+    this.projectileBodies.set(projectileId, projectileBody);
+    this.projectileCollisionHandlers.set(projectileId, collisionHandler);
+
     meta.ammoLoadout[ammo.name] = current - 1;
     this.recalculateAmmoRemaining(meta);
 
@@ -441,51 +569,104 @@ export class ServerWorldController {
     return true;
   }
 
-  private stepProjectiles(
-    dt: number,
-    explosions: StepResult['explosions'],
-    damage: StepResult['damage'],
-    kills: StepResult['kills']
-  ): void {
+  private updateProjectiles(dt: number): void {
     for (const [id, meta] of [...this.projectileMetadata]) {
       const entity = meta.entity;
       if (!hasComponent(this.world, ProjectileComponent, entity) || !hasComponent(this.world, TransformComponent, entity)) {
-        this.projectileMetadata.delete(id);
+        this.destroyProjectile(id, null, { spawnExplosion: false });
         continue;
       }
 
-      ProjectileComponent.vy[entity] += GRAVITY * dt;
-      TransformComponent.x[entity] += ProjectileComponent.vx[entity] * dt;
-      TransformComponent.y[entity] += ProjectileComponent.vy[entity] * dt;
-      TransformComponent.z[entity] += ProjectileComponent.vz[entity] * dt;
+      const body = this.projectileBodies.get(id);
+      if (!body) {
+        this.destroyProjectile(id, null, { spawnExplosion: false });
+        continue;
+      }
+
+      TransformComponent.x[entity] = body.position.x;
+      TransformComponent.y[entity] = body.position.y;
+      TransformComponent.z[entity] = body.position.z;
+
+      ProjectileComponent.vx[entity] = body.velocity.x;
+      ProjectileComponent.vy[entity] = body.velocity.y;
+      ProjectileComponent.vz[entity] = body.velocity.z;
       ProjectileComponent.life[entity] -= dt;
 
-      if (TransformComponent.y[entity] <= 0 || ProjectileComponent.life[entity] <= 0) {
-        explosions.push({ id, x: TransformComponent.x[entity], y: TransformComponent.y[entity], z: TransformComponent.z[entity] });
-        destroyEntity(this.world, entity);
-        this.projectileMetadata.delete(id);
-        continue;
+      if (ProjectileComponent.life[entity] <= 0 || body.position.y <= -5) {
+        this.destroyProjectile(id, body.position.clone());
       }
+    }
+  }
 
-      for (const [sessionId, playerMeta] of this.metadata) {
-        if (playerMeta.entity === ProjectileComponent.shooter[entity]) continue;
-        const targetEntity = playerMeta.entity;
-        if (!hasComponent(this.world, TransformComponent, targetEntity)) continue;
-        const dx = TransformComponent.x[targetEntity] - TransformComponent.x[entity];
-        const dy = TransformComponent.y[targetEntity] - TransformComponent.y[entity];
-        const dz = TransformComponent.z[targetEntity] - TransformComponent.z[entity];
-        if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
-          const remainingHealth = this.applyDamage(targetEntity, meta);
-          damage.push({ sessionId, health: remainingHealth, shooter: meta.shooterSessionId });
-          explosions.push({ id, x: TransformComponent.x[entity], y: TransformComponent.y[entity], z: TransformComponent.z[entity] });
-          destroyEntity(this.world, entity);
-          this.projectileMetadata.delete(id);
-          if (remainingHealth <= 0) {
-            kills.push({ shooter: meta.shooterSessionId, victim: sessionId });
-          }
-          break;
+  private handleProjectileCollision(
+    projectileId: string,
+    projectileEntity: number,
+    projectileBody: PhysicsBody,
+    event: BodyCollisionEvent
+  ): void {
+    if (this.destroyedProjectiles.has(projectileId)) return;
+
+    const projectileMeta = this.projectileMetadata.get(projectileId);
+    if (!projectileMeta) return;
+
+    const shooterEntity = ProjectileComponent.shooter[projectileEntity] ?? null;
+    const otherBody = event.body;
+    const otherData = otherBody?.userData;
+
+    if (otherBody === projectileBody) return;
+    if (otherData?.kind === 'projectile') return;
+    if (otherData?.kind === 'tank' && typeof otherData.entity === 'number') {
+      if (otherData.entity === shooterEntity) return;
+      const remaining = this.applyDamage(otherData.entity, projectileMeta);
+      const victimMeta = this.getMetadataForEntity(otherData.entity);
+      if (victimMeta && this.activeDamage) {
+        this.activeDamage.push({ sessionId: victimMeta.sessionId, health: remaining, shooter: projectileMeta.shooterSessionId });
+        if (remaining <= 0 && this.activeKills) {
+          this.activeKills.push({ shooter: projectileMeta.shooterSessionId, victim: victimMeta.sessionId });
         }
       }
+    }
+
+    const position = projectileBody.position.clone();
+    this.destroyProjectile(projectileId, position);
+  }
+
+  private destroyProjectile(
+    projectileId: string,
+    explosionPosition: Vec3 | null,
+    options: { spawnExplosion?: boolean } = {}
+  ): void {
+    if (this.destroyedProjectiles.has(projectileId)) return;
+    this.destroyedProjectiles.add(projectileId);
+
+    const spawnExplosion = options.spawnExplosion ?? true;
+
+    const body = this.projectileBodies.get(projectileId);
+    const handler = this.projectileCollisionHandlers.get(projectileId);
+    if (body) {
+      this.physics.world.removeBody(body);
+      if (handler) {
+        body.removeEventListener('collide', handler);
+      }
+      this.projectileBodies.delete(projectileId);
+    }
+    if (handler) {
+      this.projectileCollisionHandlers.delete(projectileId);
+    }
+
+    const meta = this.projectileMetadata.get(projectileId);
+    if (meta) {
+      destroyEntity(this.world, meta.entity);
+      this.projectileMetadata.delete(projectileId);
+    }
+
+    if (spawnExplosion && explosionPosition && this.activeExplosions) {
+      this.activeExplosions.push({
+        id: projectileId,
+        x: explosionPosition.x,
+        y: explosionPosition.y,
+        z: explosionPosition.z
+      });
     }
   }
 
@@ -529,6 +710,23 @@ export class ServerWorldController {
     const vy = Math.sin(pitch) * speed;
     const vz = -cosYaw * cosPitch * speed;
     return { muzzleX, muzzleY, muzzleZ, vx, vy, vz };
+  }
+
+  private getYawFromBody(body: PhysicsBody): number {
+    const { x, y, z, w } = body.quaternion;
+    const siny = 2 * (w * y + z * x);
+    const cosy = 1 - 2 * (y * y + z * z);
+    return Math.atan2(siny, cosy);
+  }
+
+  private estimateTankMass(tank: TankDefinition): number {
+    const width = Number.isFinite(tank.bodyWidth) ? Number(tank.bodyWidth) : 3;
+    const height = Number.isFinite(tank.bodyHeight) ? Number(tank.bodyHeight) : 2;
+    const length = Number.isFinite(tank.bodyLength) ? Number(tank.bodyLength) : 6;
+    const engine = Number.isFinite(tank.engineHp) ? Number(tank.engineHp) : 600;
+    const volumeEstimate = width * height * length;
+    const tonnage = volumeEstimate * 1.2 + engine / 60;
+    return Math.max(20, Math.min(80, tonnage));
   }
 
   private clamp(value: number, min: number, max: number): number {
