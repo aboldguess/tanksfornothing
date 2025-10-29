@@ -169,11 +169,12 @@ const terrainScratch = {
   up: new THREE.Vector3(),
   forward: new THREE.Vector3(),
   projectedForward: new THREE.Vector3(),
-  right: new THREE.Vector3(),
   temp: new THREE.Vector3(),
-  rotationMatrix: new THREE.Matrix4(),
+  tiltedForward: new THREE.Vector3(),
   targetQuat: new THREE.Quaternion(),
-  bodyQuat: new THREE.Quaternion()
+  bodyQuat: new THREE.Quaternion(),
+  tiltQuat: new THREE.Quaternion(),
+  yawQuat: new THREE.Quaternion()
 };
 
 // Scratch vectors for translating local yaw torque (track differential) into world space
@@ -1051,6 +1052,12 @@ function alignChassisToTerrain(forceSnap = false) {
     chassisBody.quaternion.z,
     chassisBody.quaternion.w
   );
+
+  // Preserve the player's intended heading by projecting the current forward
+  // vector onto the terrain plane, then rotating the chassis so its up axis
+  // matches the sampled normal while its projected forward vector remains
+  // aligned with that heading. This avoids the previous behaviour where the
+  // hull snapped back to world-forward every frame, preventing A/D steering.
   terrainScratch.forward
     .set(0, 0, -1)
     .applyQuaternion(terrainScratch.bodyQuat);
@@ -1058,36 +1065,35 @@ function alignChassisToTerrain(forceSnap = false) {
     .copy(terrainScratch.forward)
     .projectOnPlane(terrainScratch.up);
   if (terrainScratch.projectedForward.lengthSq() < 1e-6) {
-    // Fallback: remove any residual component along the normal manually.
+    // Degenerate cases: try projecting global forward, otherwise fall back to
+    // a sane default so we never feed a zero vector into the quaternion math.
     terrainScratch.temp
-      .copy(terrainScratch.up)
-      .multiplyScalar(terrainScratch.forward.dot(terrainScratch.up));
-    terrainScratch.projectedForward.copy(terrainScratch.forward).sub(terrainScratch.temp);
-  }
-  if (terrainScratch.projectedForward.lengthSq() < 1e-6) {
-    terrainScratch.projectedForward.set(0, 0, -1);
+      .set(0, 0, -1)
+      .projectOnPlane(terrainScratch.up);
+    if (terrainScratch.temp.lengthSq() > 1e-6) {
+      terrainScratch.projectedForward.copy(terrainScratch.temp);
+    } else {
+      terrainScratch.projectedForward.set(0, 0, -1);
+    }
   }
   terrainScratch.projectedForward.normalize();
-  terrainScratch.right
-    .copy(terrainScratch.projectedForward)
-    .cross(terrainScratch.up);
-  if (terrainScratch.right.lengthSq() < 1e-6) {
-    terrainScratch.right
-      .set(1, 0, 0)
-      .applyQuaternion(terrainScratch.bodyQuat)
-      .projectOnPlane(terrainScratch.up);
-  }
-  if (terrainScratch.right.lengthSq() < 1e-6) {
-    terrainScratch.right.crossVectors(terrainScratch.up, terrainScratch.projectedForward);
-  }
-  terrainScratch.right.normalize();
-  terrainScratch.projectedForward.crossVectors(terrainScratch.up, terrainScratch.right).normalize();
-  terrainScratch.rotationMatrix.makeBasis(
-    terrainScratch.right,
-    terrainScratch.up,
+
+  terrainScratch.tiltQuat.setFromUnitVectors(
+    terrainScratch.temp.set(0, 1, 0),
+    terrainScratch.up
+  );
+  terrainScratch.tiltedForward
+    .set(0, 0, -1)
+    .applyQuaternion(terrainScratch.tiltQuat)
+    .normalize();
+  terrainScratch.yawQuat.setFromUnitVectors(
+    terrainScratch.tiltedForward,
     terrainScratch.projectedForward
   );
-  terrainScratch.targetQuat.setFromRotationMatrix(terrainScratch.rotationMatrix);
+  terrainScratch.targetQuat
+    .copy(terrainScratch.tiltQuat)
+    .multiply(terrainScratch.yawQuat)
+    .normalize();
   chassisBody.quaternion.set(
     terrainScratch.targetQuat.x,
     terrainScratch.targetQuat.y,
