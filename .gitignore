@@ -30,8 +30,13 @@ logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-data/*.db
-data/*.bak
+
+# Persisted data snapshots
+# Allow committed user/account databases and seed data under data/ by default so
+# they remain version-controlled.
+# Ignore only obvious temporary backups that editors create.
+data/*.tmp
+data/*~
 
 # Environment & OS files
 .env
