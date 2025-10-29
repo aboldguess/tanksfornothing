@@ -126,6 +126,19 @@ try {
 let playerAmmo = [];
 let selectedAmmo = null;
 const projectiles = new Map(); // id -> { mesh }
+// Client-side tracer spheres rendered immediately upon firing so clicks always
+// yield visual feedback, even when the server is slow or unreachable.
+const localProjectiles = [];
+// Scratch buffers reused when spawning tracers to avoid per-shot allocations.
+const muzzleScratch = {
+  position: new THREE.Vector3(),
+  direction: new THREE.Vector3(0, 0, -1),
+  quaternion: new THREE.Quaternion(),
+  velocity: new THREE.Vector3()
+};
+const LOCAL_PROJECTILE_LIFETIME = 2; // seconds before a tracer despawns
+const LOCAL_PROJECTILE_SPEED = 120; // metres per second for the visual tracer
+const LOCAL_PROJECTILE_GRAVITY = 9.81; // m/s^2 downward acceleration
 let playerHealth = 100;
 let remoteWorld = null;
 
@@ -184,7 +197,8 @@ const movementScratch = {
   localTorque: new CANNON.Vec3(),
   worldTorque: new CANNON.Vec3(),
   localAngularVelocity: new CANNON.Vec3(),
-  worldToLocalQuat: new CANNON.Quaternion()
+  worldToLocalQuat: new CANNON.Quaternion(),
+  worldAngularVelocity: new CANNON.Vec3()
 };
 
 // Build a simplified tank mesh for remote players using dimensions from the
@@ -249,6 +263,7 @@ function resetProjectileWorld() {
   projectileServerToLocal.clear();
   projectileIdToServer.clear();
   projectileWorld = createGameWorld();
+  clearLocalProjectiles();
 }
 
 function syncProjectileWorld(buffer) {
@@ -348,6 +363,66 @@ function removeProjectileVisual(id) {
     if (obj.material) obj.material.dispose();
   });
   projectiles.delete(id);
+}
+
+// Spawn a short-lived tracer so the player receives instant visual feedback
+// when firing. The server remains authoritative for real projectiles, but these
+// local meshes bridge latency and also work when running offline.
+function spawnLocalProjectileTrace() {
+  if (!scene || !barrelMesh) return;
+  barrelMesh.updateWorldMatrix(true, true);
+  barrelMesh.getWorldPosition(muzzleScratch.position);
+  barrelMesh.getWorldQuaternion(muzzleScratch.quaternion);
+  muzzleScratch.direction.set(0, 0, -1).applyQuaternion(muzzleScratch.quaternion).normalize();
+
+  const geom = new THREE.SphereGeometry(0.15, 10, 10);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffc25a });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.copy(muzzleScratch.position);
+  scene.add(mesh);
+
+  muzzleScratch.velocity
+    .copy(muzzleScratch.direction)
+    .multiplyScalar(LOCAL_PROJECTILE_SPEED);
+
+  localProjectiles.push({
+    mesh,
+    velocity: muzzleScratch.velocity.clone(),
+    lifetime: LOCAL_PROJECTILE_LIFETIME
+  });
+}
+
+function updateLocalProjectiles(delta) {
+  for (let i = localProjectiles.length - 1; i >= 0; i -= 1) {
+    const entry = localProjectiles[i];
+    entry.velocity.y -= LOCAL_PROJECTILE_GRAVITY * delta;
+    entry.mesh.position.addScaledVector(entry.velocity, delta);
+    entry.lifetime -= delta;
+    if (entry.lifetime <= 0 || entry.mesh.position.y < 0) {
+      scene.remove(entry.mesh);
+      entry.mesh.geometry?.dispose?.();
+      if (Array.isArray(entry.mesh.material)) {
+        entry.mesh.material.forEach((mat) => mat.dispose?.());
+      } else {
+        entry.mesh.material?.dispose?.();
+      }
+      localProjectiles.splice(i, 1);
+    }
+  }
+}
+
+function clearLocalProjectiles() {
+  for (let i = localProjectiles.length - 1; i >= 0; i -= 1) {
+    const entry = localProjectiles[i];
+    scene?.remove(entry.mesh);
+    entry.mesh.geometry?.dispose?.();
+    if (Array.isArray(entry.mesh.material)) {
+      entry.mesh.material.forEach((mat) => mat.dispose?.());
+    } else {
+      entry.mesh.material?.dispose?.();
+    }
+    localProjectiles.pop();
+  }
 }
 
 function extractAmmoLoadoutFromMetadata(metadata) {
@@ -819,7 +894,7 @@ joinBtn.addEventListener('click', async () => {
 loadLobbyData();
 
 // Core scene objects
-let tank, turret, gun, camera, scene, renderer, ground;
+let tank, turret, gun, camera, scene, renderer, ground, barrelMesh;
 // Physics objects
 let world, chassisBody, groundBody;
 // Default tank stats used for movement and rotation
@@ -865,6 +940,11 @@ const GROUND_FRICTION = 0.65;
 const MIN_ROLLING_DAMPING = 0.15;
 const MAX_ROLLING_DAMPING = 0.65;
 const BRAKE_DAMPING = 0.85;
+// Threshold at which we snap yaw angular velocity to zero so the hull actually
+// stops turning instead of creeping forever, plus proportional brake stiffness
+// used while A/D are released.
+const TURN_STOP_THRESHOLD = THREE.MathUtils.degToRad(0.25);
+const TURN_BRAKE_STIFFNESS = 4.5;
 // Default traction/viscosity values when palette data is missing or malformed.
 const DEFAULT_SURFACE = { traction: 0.9, viscosity: 0.3 };
 // Torque applied for A/D rotation; derived from mass, friction, and desired acceleration
@@ -1417,6 +1497,7 @@ function init() {
   barrel.castShadow = true;
   barrel.receiveShadow = true;
   gun.add(barrel);
+  barrelMesh = barrel;
   turret.add(gun);
   tank.add(turret);
 
@@ -1503,21 +1584,23 @@ function init() {
 
   // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
-    if (document.pointerLockElement && room && selectedAmmo) {
-      const now = Date.now();
-      if (
-        now - lastFireTime >= FIRE_DELAY * 1000 &&
-        ammoLeft > 0 &&
-        selectedAmmo.count > 0
-      ) {
-        console.debug('Firing', selectedAmmo.name);
-        room.send(GAME_COMMAND.PlayerFire, selectedAmmo.name);
-        lastFireTime = now;
-        selectedAmmo.count -= 1;
-        ammoLeft -= 1;
-        updateAmmoHUD(playerAmmo, selectedAmmo.name);
-        console.debug('Ammo remaining', ammoLeft);
-      }
+    if (!document.pointerLockElement || !selectedAmmo) return;
+
+    const now = Date.now();
+    const ready = now - lastFireTime >= FIRE_DELAY * 1000;
+    if (!ready || ammoLeft <= 0 || selectedAmmo.count <= 0) return;
+
+    lastFireTime = now;
+    selectedAmmo.count -= 1;
+    ammoLeft -= 1;
+    updateAmmoHUD(playerAmmo, selectedAmmo.name);
+    spawnLocalProjectileTrace();
+    console.debug('Firing', selectedAmmo.name, { ammoLeft });
+
+    if (room) {
+      room.send(GAME_COMMAND.PlayerFire, selectedAmmo.name);
+    } else {
+      console.debug('Offline shot: no room joined, rendering local tracer only');
     }
   });
 
@@ -1574,7 +1657,14 @@ function applyTankConfig(t) {
       (t.bodyLength ?? defaultTank.bodyLength)
   );
   if (gun && gun.children[0]) {
-    gun.remove(gun.children[0]);
+    const oldBarrel = gun.children[0];
+    gun.remove(oldBarrel);
+    oldBarrel.geometry?.dispose?.();
+    if (Array.isArray(oldBarrel.material)) {
+      oldBarrel.material.forEach((mat) => mat.dispose?.());
+    } else {
+      oldBarrel.material?.dispose?.();
+    }
   }
   const newBarrel = new THREE.Mesh(
     new THREE.CylinderGeometry(
@@ -1587,6 +1677,7 @@ function applyTankConfig(t) {
   newBarrel.rotation.x = -Math.PI / 2;
   newBarrel.position.z = -(t.barrelLength ?? defaultTank.barrelLength) / 2;
   gun.add(newBarrel);
+  barrelMesh = newBarrel;
 
   world.removeBody(chassisBody);
   const box = new CANNON.Box(
@@ -1641,6 +1732,42 @@ function onMouseMove(e) {
     MAX_TURRET_INCLINE
   );
 }
+
+// Ensure angle differences stay in the [-π, π] range so yaw easing always
+// travels the shortest arc when re-aligning the turret with the camera.
+function normaliseAngle(value) {
+  return Math.atan2(Math.sin(value), Math.cos(value));
+}
+
+// Apply a light, explicit yaw brake so the hull actually comes to rest after
+// releasing A/D. Cannon's built-in angular damping slows rotation but never
+// fully reaches zero, which left the tank drifting and made mouse movement feel
+// inverted. The proportional torque below cancels the remaining angular
+// velocity and snaps extremely small values to zero so the chassis sleeps.
+function stabiliseHullYaw(tractionScale) {
+  if (!chassisBody) return;
+  movementScratch.worldToLocalQuat.copy(chassisBody.quaternion);
+  movementScratch.worldToLocalQuat.conjugate();
+  movementScratch.worldToLocalQuat.vmult(
+    chassisBody.angularVelocity,
+    movementScratch.localAngularVelocity
+  );
+  const yawRate = movementScratch.localAngularVelocity.y;
+  if (Math.abs(yawRate) < TURN_STOP_THRESHOLD) {
+    movementScratch.localAngularVelocity.y = 0;
+    chassisBody.quaternion.vmult(
+      movementScratch.localAngularVelocity,
+      movementScratch.worldAngularVelocity
+    );
+    chassisBody.angularVelocity.copy(movementScratch.worldAngularVelocity);
+    return;
+  }
+
+  const brakeTorque = -yawRate * chassisBody.inertia.y * TURN_BRAKE_STIFFNESS * tractionScale;
+  movementScratch.localTorque.set(0, brakeTorque, 0);
+  chassisBody.vectorToWorldFrame(movementScratch.localTorque, movementScratch.worldTorque);
+  chassisBody.torque.vadd(movementScratch.worldTorque, chassisBody.torque);
+}
 /**
  * updateMovement translates key inputs into physics state. It constrains the
  * chassis to horizontal movement while allowing yaw rotation.
@@ -1692,6 +1819,8 @@ function updateMovement() {
     movementScratch.localTorque.set(0, baseTorque + correctiveTorque, 0);
     chassisBody.vectorToWorldFrame(movementScratch.localTorque, movementScratch.worldTorque);
     chassisBody.torque.vadd(movementScratch.worldTorque, chassisBody.torque);
+  } else {
+    stabiliseHullYaw(tractionScale);
   }
 
   // Simple hand brake: increase damping while space is held
@@ -1735,9 +1864,10 @@ function animate() {
   tank.quaternion.copy(chassisBody.quaternion);
 
   remoteWorld?.updateMeshes();
+  updateLocalProjectiles(delta);
 
   // Smoothly rotate turret and gun toward target angles
-  const yawDiff = targetYaw - turret.rotation.y;
+  const yawDiff = normaliseAngle(targetYaw - turret.rotation.y);
   const yawStep = THREE.MathUtils.clamp(
     yawDiff,
     -TURRET_ROT_SPEED * delta,
