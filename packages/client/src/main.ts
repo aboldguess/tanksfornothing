@@ -857,8 +857,10 @@ let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret rad
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
 let ammoLeft = defaultTank.ammoCapacity;
 let lastFireTime = 0;
-// Static friction coefficient representing tracks on typical terrain.
-const GROUND_FRICTION = 0.3;
+// Static friction coefficient representing tracks on typical terrain. Raised to
+// better reflect the grip of heavy tracked vehicles so the hull settles more
+// quickly after movement.
+const GROUND_FRICTION = 0.65;
 // Viscosity-driven damping ranges keep motion believable across mud/sand/water.
 const MIN_ROLLING_DAMPING = 0.15;
 const MAX_ROLLING_DAMPING = 0.65;
