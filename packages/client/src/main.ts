@@ -393,9 +393,24 @@ function attachRoomListeners(activeRoom) {
   let stateListenersBound = false;
   let waitingForSchemaState = false;
 
-  const bindSchemaCollections = (state) => {
+  const bindSchemaCollections = (stateCandidate) => {
+    const schemaState =
+      stateCandidate && typeof stateCandidate.listen === 'function'
+        ? stateCandidate
+        : typeof activeRoom.state?.listen === 'function'
+          ? activeRoom.state
+          : null;
+
+    if (!schemaState) {
+      if (!waitingForSchemaState) {
+        console.debug('Waiting for Colyseus schema state with listen() support before binding listeners');
+        waitingForSchemaState = true;
+      }
+      return;
+    }
+
     if (stateListenersBound) return;
-    if (!state || !state.playerMetadata || !state.playerRuntime || !state.projectileRuntime) {
+    if (!schemaState.playerMetadata || !schemaState.playerRuntime || !schemaState.projectileRuntime) {
       if (!waitingForSchemaState) {
         console.debug('Waiting for Colyseus state to initialise before binding listeners');
         waitingForSchemaState = true;
@@ -415,28 +430,28 @@ function attachRoomListeners(activeRoom) {
     const handleMetadataUpdate = (metadata, sessionId) => {
       if (!metadata) return;
       if (sessionId === activeRoom.sessionId) {
-        syncLocalPlayerState(metadata, state.playerRuntime);
+        syncLocalPlayerState(metadata, schemaState.playerRuntime);
         return;
       }
       remoteWorld?.addOrUpdateMetadata(sessionId, metadata);
     };
 
-    state.playerMetadata.onAdd = handleMetadataUpdate;
-    state.playerMetadata.onChange = handleMetadataUpdate;
-    state.playerMetadata.onRemove = (_metadata, sessionId) => {
+    schemaState.playerMetadata.onAdd = handleMetadataUpdate;
+    schemaState.playerMetadata.onChange = handleMetadataUpdate;
+    schemaState.playerMetadata.onRemove = (_metadata, sessionId) => {
       if (sessionId === activeRoom.sessionId) return;
       remoteWorld?.removeMetadata(sessionId);
     };
 
-    state.listen(
+    schemaState.listen(
       'tick',
       () => {
         if (remoteWorld) {
-          remoteWorld.applyRuntime(state.playerRuntime);
+          remoteWorld.applyRuntime(schemaState.playerRuntime);
         }
-        const localMetadata = state.playerMetadata.get(activeRoom.sessionId);
-        syncLocalPlayerState(localMetadata, state.playerRuntime);
-        syncProjectileWorld(state.projectileRuntime);
+        const localMetadata = schemaState.playerMetadata.get(activeRoom.sessionId);
+        syncLocalPlayerState(localMetadata, schemaState.playerRuntime);
+        syncProjectileWorld(schemaState.projectileRuntime);
       },
       true
     );
@@ -444,10 +459,10 @@ function attachRoomListeners(activeRoom) {
     stateListenersBound = true;
     console.debug('Colyseus schema listeners bound for active room', { sessionId: activeRoom.sessionId });
 
-    state.playerMetadata.forEach((metadata, sessionId) => {
+    schemaState.playerMetadata.forEach((metadata, sessionId) => {
       handleMetadataUpdate(metadata, sessionId);
     });
-    syncProjectileWorld(state.projectileRuntime);
+    syncProjectileWorld(schemaState.projectileRuntime);
   };
 
   if (activeRoom.state) {
