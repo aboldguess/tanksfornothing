@@ -181,7 +181,9 @@ const terrainScratch = {
 // allocations and keeps the movement hot path lean.
 const movementScratch = {
   localTorque: new CANNON.Vec3(),
-  worldTorque: new CANNON.Vec3()
+  worldTorque: new CANNON.Vec3(),
+  localAngularVelocity: new CANNON.Vec3(),
+  worldToLocalQuat: new CANNON.Quaternion()
 };
 
 // Build a simplified tank mesh for remote players using dimensions from the
@@ -1665,7 +1667,17 @@ function updateMovement() {
     // player input. Blend in a proportional correction toward the desired turn rate so
     // tapping A/D immediately produces visible rotation even after angular damping.
     const desiredYawRate = turn * TARGET_TURN_RATE;
-    const currentYawRate = chassisBody.angularVelocity.y;
+    // Convert the body's world-space angular velocity into the local frame so we
+    // compare two values that reference the same yaw axis even while perched on
+    // uneven terrain. This prevents the corrective torque from overreacting when
+    // the hull is pitched or rolled.
+    movementScratch.worldToLocalQuat.copy(chassisBody.quaternion);
+    movementScratch.worldToLocalQuat.conjugate();
+    movementScratch.worldToLocalQuat.vmult(
+      chassisBody.angularVelocity,
+      movementScratch.localAngularVelocity
+    );
+    const currentYawRate = movementScratch.localAngularVelocity.y;
     const yawError = desiredYawRate - currentYawRate;
     const correctiveTorque = yawError * chassisBody.inertia.y;
     const baseTorque = turn * TURN_TORQUE * tractionScale;
@@ -1697,7 +1709,18 @@ function animate() {
   const forward = new CANNON.Vec3(0, 0, -1);
   chassisBody.quaternion.vmult(forward, forward);
   currentSpeed = forward.dot(chassisBody.velocity);
-  logMovement('spd', currentSpeed.toFixed(2), 'ang', chassisBody.angularVelocity.y.toFixed(2));
+  movementScratch.worldToLocalQuat.copy(chassisBody.quaternion);
+  movementScratch.worldToLocalQuat.conjugate();
+  movementScratch.worldToLocalQuat.vmult(
+    chassisBody.angularVelocity,
+    movementScratch.localAngularVelocity
+  );
+  logMovement(
+    'spd',
+    currentSpeed.toFixed(2),
+    'ang',
+    movementScratch.localAngularVelocity.y.toFixed(2)
+  );
 
   // Sync Three.js mesh with physics body
   tank.position.copy(chassisBody.position);
