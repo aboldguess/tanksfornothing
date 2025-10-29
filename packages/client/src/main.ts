@@ -176,6 +176,14 @@ const terrainScratch = {
   bodyQuat: new THREE.Quaternion()
 };
 
+// Scratch vectors for translating local yaw torque (track differential) into world space
+// before applying it to the Cannon body. Re-using the buffers prevents per-frame
+// allocations and keeps the movement hot path lean.
+const movementScratch = {
+  localTorque: new CANNON.Vec3(),
+  worldTorque: new CANNON.Vec3()
+};
+
 // Build a simplified tank mesh for remote players using dimensions from the
 // server. These meshes are purely visual and have no physics bodies.
 function createRemoteTank(t) {
@@ -1652,7 +1660,18 @@ function updateMovement() {
   else if (keys['d']) turn = -1;
   if (turn !== 0) {
     chassisBody.wakeUp(); // ensure sleeping bodies respond immediately
-    chassisBody.torque.y += turn * TURN_TORQUE * tractionScale;
+    // Differential steering works in the tank's local space. Convert the desired yaw
+    // torque into world coordinates so slopes (where the hull is tilted) still honour
+    // player input. Blend in a proportional correction toward the desired turn rate so
+    // tapping A/D immediately produces visible rotation even after angular damping.
+    const desiredYawRate = turn * TARGET_TURN_RATE;
+    const currentYawRate = chassisBody.angularVelocity.y;
+    const yawError = desiredYawRate - currentYawRate;
+    const correctiveTorque = yawError * chassisBody.inertia.y;
+    const baseTorque = turn * TURN_TORQUE * tractionScale;
+    movementScratch.localTorque.set(0, baseTorque + correctiveTorque, 0);
+    chassisBody.vectorToWorldFrame(movementScratch.localTorque, movementScratch.worldTorque);
+    chassisBody.torque.vadd(movementScratch.worldTorque, chassisBody.torque);
   }
 
   // Simple hand brake: increase damping while space is held
