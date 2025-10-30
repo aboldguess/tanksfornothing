@@ -715,9 +715,12 @@ export class ServerWorldController {
       typeof turretHeightMeta === 'number' && Number.isFinite(turretHeightMeta)
         ? turretHeightMeta
         : TankStatsComponent.turretHeight[entity] || 0;
-    // The gun pivot sits atop the combined hull and turret stack; keep it positive so clamping later remains stable.
-    const pivotHeight = Math.max(0, bodyHeight) + Math.max(0, turretHeight);
-    const pivotY = baselineY + pivotHeight;
+    // The gun pivot sits atop the combined hull and turret stack; start from the centre-based baseline and
+    // add half-height contributions so level shots remain aligned with the previous origin while still
+    // accounting for taller turrets.
+    const halfBodyHeight = Math.max(0, bodyHeight) * 0.5;
+    const halfTurretHeight = Math.max(0, turretHeight) * 0.5;
+    const pivotY = baselineY + halfBodyHeight + halfTurretHeight;
     const muzzleX = TransformComponent.x[entity] + turretYOffset * meta.tank.bodyWidth - sinYaw * cosPitch * barrelLen;
     const unclampedMuzzleY = pivotY + sinPitch * barrelLen;
     // Guard against steep gun depression pushing the muzzle below the terrain baseline, which breaks FX visibility.
