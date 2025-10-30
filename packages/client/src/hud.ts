@@ -100,7 +100,9 @@ export function updateAmmoHUD(
     ammoSlotsEl.appendChild(item);
   });
   ammoHudEl.style.display = ammoList.length ? 'flex' : 'none';
-  if (cooldownEl) cooldownEl.style.display = 'none';
+  if (cooldownEl && ammoList.length === 0) {
+    cooldownEl.style.display = 'none';
+  }
 }
 
 /**
@@ -120,7 +122,7 @@ export function updateCooldownHUD(remainingSeconds: number, totalSeconds: number
   if (!cooldownEl || !cooldownFillEl || !cooldownLabelEl) return;
   const total = totalSeconds > 0 ? totalSeconds : 1;
   if (remainingSeconds <= 0.05) {
-    cooldownEl.style.display = 'none';
+    cooldownEl.style.display = 'flex';
     cooldownFillEl.style.width = '100%';
     cooldownLabelEl.textContent = 'Ready';
     return;
