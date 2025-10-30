@@ -71,16 +71,20 @@ window.addEventListener('unhandledrejection', (e) => {
 // Render a brief explosion effect at the given world position for feedback
 function renderExplosion(position) {
   if (!scene) return;
-  const geom = new THREE.SphereGeometry(1, 16, 16);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+  const geom = new THREE.SphereGeometry(1.2, 24, 24);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffd180,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 20;
   mesh.position.copy(position);
+  mesh.scale.setScalar(0.25);
   scene.add(mesh);
-  setTimeout(() => {
-    scene.remove(mesh);
-    geom.dispose();
-    mat.dispose();
-  }, 500);
+  explosionBursts.push({ mesh, material: mat, lifetime: 0.6, age: 0 });
 }
 
 // Scratch buffers shared by muzzle flash helpers so we avoid allocating vectors
@@ -223,10 +227,22 @@ try {
 // Client-side ammo handling
 let playerAmmo = [];
 let selectedAmmo = null;
-const projectiles = new Map(); // id -> { mesh }
+const projectiles = new Map(); // id -> { mesh, material }
 // Client-side tracer spheres rendered immediately upon firing so clicks always
 // yield visual feedback, even when the server is slow or unreachable.
-const localProjectiles = [];
+const localProjectiles: Array<{
+  mesh: THREE.Mesh;
+  material: THREE.Material & { opacity?: number };
+  velocity: THREE.Vector3;
+  lifetime: number;
+}> = [];
+// Explosion visuals fade over a short lifetime to keep impact feedback obvious.
+const explosionBursts: Array<{
+  mesh: THREE.Mesh;
+  material: THREE.Material & { opacity?: number };
+  lifetime: number;
+  age: number;
+}> = [];
 // Scratch buffers reused when spawning tracers to avoid per-shot allocations.
 const muzzleScratch = {
   position: new THREE.Vector3(),
@@ -362,6 +378,7 @@ function resetProjectileWorld() {
   projectileIdToServer.clear();
   projectileWorld = createGameWorld();
   clearLocalProjectiles();
+  clearExplosions();
 }
 
 function syncProjectileWorld(buffer) {
@@ -442,12 +459,19 @@ function resetGameState() {
 
 function createProjectileVisual(id, position) {
   if (!scene) return null;
-  const geom = new THREE.SphereGeometry(0.3, 12, 12);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const geom = new THREE.SphereGeometry(0.38, 18, 18);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff8a3d,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 15;
   mesh.position.set(position.x, position.y, position.z);
   scene.add(mesh);
-  const record = { mesh };
+  const record = { mesh, material: mat };
   projectiles.set(id, record);
   return record;
 }
@@ -460,6 +484,7 @@ function removeProjectileVisual(id) {
     if (obj.geometry) obj.geometry.dispose();
     if (obj.material) obj.material.dispose();
   });
+  record.material?.dispose?.();
   projectiles.delete(id);
 }
 
@@ -474,8 +499,14 @@ function spawnLocalProjectileTrace() {
   muzzleScratch.direction.set(0, 0, -1).applyQuaternion(muzzleScratch.quaternion).normalize();
   renderMuzzleFlash(muzzleScratch.position, muzzleScratch.direction);
 
-  const geom = new THREE.SphereGeometry(0.15, 10, 10);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffc25a });
+  const geom = new THREE.SphereGeometry(0.22, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffc25a,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geom, mat);
   mesh.position.copy(muzzleScratch.position);
   scene.add(mesh);
@@ -486,6 +517,7 @@ function spawnLocalProjectileTrace() {
 
   localProjectiles.push({
     mesh,
+    material: mat,
     velocity: muzzleScratch.velocity.clone(),
     lifetime: LOCAL_PROJECTILE_LIFETIME
   });
@@ -497,6 +529,9 @@ function updateLocalProjectiles(delta) {
     entry.velocity.y -= LOCAL_PROJECTILE_GRAVITY * delta;
     entry.mesh.position.addScaledVector(entry.velocity, delta);
     entry.lifetime -= delta;
+    if (entry.material && typeof entry.material.opacity === 'number') {
+      entry.material.opacity = Math.max(0, entry.lifetime / LOCAL_PROJECTILE_LIFETIME);
+    }
     if (entry.lifetime <= 0 || entry.mesh.position.y < 0) {
       scene.remove(entry.mesh);
       entry.mesh.geometry?.dispose?.();
@@ -505,6 +540,7 @@ function updateLocalProjectiles(delta) {
       } else {
         entry.mesh.material?.dispose?.();
       }
+      entry.material?.dispose?.();
       localProjectiles.splice(i, 1);
     }
   }
@@ -520,7 +556,47 @@ function clearLocalProjectiles() {
     } else {
       entry.mesh.material?.dispose?.();
     }
+    entry.material?.dispose?.();
     localProjectiles.pop();
+  }
+}
+
+function updateExplosions(delta) {
+  for (let i = explosionBursts.length - 1; i >= 0; i -= 1) {
+    const burst = explosionBursts[i];
+    burst.age += delta;
+    const progress = THREE.MathUtils.clamp(burst.age / burst.lifetime, 0, 1);
+    const scale = THREE.MathUtils.lerp(0.25, 2.6, progress);
+    burst.mesh.scale.setScalar(scale);
+    if (burst.material && typeof burst.material.opacity === 'number') {
+      burst.material.opacity = THREE.MathUtils.lerp(0.95, 0, progress);
+    }
+    if (burst.age >= burst.lifetime) {
+      scene?.remove(burst.mesh);
+      burst.mesh.geometry?.dispose?.();
+      if (Array.isArray(burst.mesh.material)) {
+        burst.mesh.material.forEach((mat) => mat.dispose?.());
+      } else {
+        burst.mesh.material?.dispose?.();
+      }
+      burst.material?.dispose?.();
+      explosionBursts.splice(i, 1);
+    }
+  }
+}
+
+function clearExplosions() {
+  for (let i = explosionBursts.length - 1; i >= 0; i -= 1) {
+    const burst = explosionBursts[i];
+    scene?.remove(burst.mesh);
+    burst.mesh.geometry?.dispose?.();
+    if (Array.isArray(burst.mesh.material)) {
+      burst.mesh.material.forEach((mat) => mat.dispose?.());
+    } else {
+      burst.mesh.material?.dispose?.();
+    }
+    burst.material?.dispose?.();
+    explosionBursts.pop();
   }
 }
 
@@ -2109,6 +2185,7 @@ function animate() {
 
   remoteWorld?.updateMeshes();
   updateLocalProjectiles(delta);
+  updateExplosions(delta);
 
   // Smoothly rotate turret and gun toward target angles
   const yawDiff = normaliseAngle(targetYaw - turret.rotation.y);
