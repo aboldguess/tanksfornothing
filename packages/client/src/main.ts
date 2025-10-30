@@ -11,8 +11,9 @@
 //          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
 //          under gravity. Remote players are represented with simple meshes that now
 //          include a visible cannon barrel and update as network events arrive so
-//          everyone shares the same battlefield. HUD displays current ammo selections
-//          and remaining rounds.
+//          everyone shares the same battlefield. HUD displays current ammo selections,
+//          auto-distributes lobby loadouts with live capacity feedback, and local firing
+//          now layers in muzzle flashes plus audio for instant feedback.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Registered as the Vite entry module (see ../public/index.html). Relies on bundled
@@ -80,6 +81,103 @@ function renderExplosion(position) {
     geom.dispose();
     mat.dispose();
   }, 500);
+}
+
+// Scratch buffers shared by muzzle flash helpers so we avoid allocating vectors
+// every time the player fires. The direction vector is normalised before use so
+// callers may pass any non-zero magnitude without worrying about side effects.
+const muzzleFlashScratch = {
+  offset: new THREE.Vector3(),
+  direction: new THREE.Vector3()
+};
+
+// Lightweight muzzle flash: a short-lived additive sprite and point light at
+// the muzzle end gives instant visual feedback even before the server confirms
+// the projectile spawn.
+function renderMuzzleFlash(position, direction) {
+  if (!scene) return;
+  const flashMaterial = new THREE.SpriteMaterial({
+    color: 0xfff2a6,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false
+  });
+  const flash = new THREE.Sprite(flashMaterial);
+  flash.scale.set(0.9, 0.9, 0.9);
+  muzzleFlashScratch.direction.copy(direction).normalize();
+  muzzleFlashScratch.offset
+    .copy(muzzleFlashScratch.direction)
+    .multiplyScalar(0.8);
+  flash.position.copy(position).add(muzzleFlashScratch.offset);
+  scene.add(flash);
+
+  const light = new THREE.PointLight(0xffbb66, 2.2, 10, 2);
+  light.position.copy(flash.position);
+  scene.add(light);
+
+  setTimeout(() => {
+    scene.remove(flash);
+    scene.remove(light);
+    flashMaterial.dispose();
+  }, 80);
+}
+
+let audioContext = null;
+
+// Ensure a Web Audio context exists and is resumed. Browsers suspend contexts
+// until the user interacts with the page, so this helper gracefully handles
+// the common failure cases and logs rather than throwing.
+function ensureAudioContext() {
+  try {
+    if (!audioContext) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      audioContext = Ctor ? new Ctor() : null;
+    }
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().catch((err) => console.warn('Audio resume failed', err));
+    }
+  } catch (error) {
+    console.warn('AudioContext initialisation failed', error);
+    audioContext = null;
+  }
+  return audioContext;
+}
+
+// Fire a short, percussive cannon blast combining filtered noise with a low
+// sawtooth oscillator. The envelope keeps the sound tight and avoids clipping.
+function playCannonSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  try {
+    const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.25), ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = 1 - i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * fade * fade;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.35, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(now);
+    noiseSource.stop(now + 0.25);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(65, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.25, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(oscGain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (error) {
+    console.warn('Cannon sound playback failed', error);
+  }
 }
 
 // Resolve Colyseus endpoint with awareness of build-time env vars so the development
@@ -374,6 +472,7 @@ function spawnLocalProjectileTrace() {
   barrelMesh.getWorldPosition(muzzleScratch.position);
   barrelMesh.getWorldQuaternion(muzzleScratch.quaternion);
   muzzleScratch.direction.set(0, 0, -1).applyQuaternion(muzzleScratch.quaternion).normalize();
+  renderMuzzleFlash(muzzleScratch.position, muzzleScratch.direction);
 
   const geom = new THREE.SphereGeometry(0.15, 10, 10);
   const mat = new THREE.MeshBasicMaterial({ color: 0xffc25a });
@@ -455,6 +554,9 @@ function syncLocalPlayerState(metadata, runtime) {
       playerAmmo.find((entry) => entry.name === previousSelection) || playerAmmo[0] || null;
     ammoLeft = newTotal;
     updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+  }
+  if (metadata && typeof metadata.ammoCapacity === 'number') {
+    activeAmmoCapacity = metadata.ammoCapacity;
   }
   if (metadata && runtime) {
     const entityId = metadata.entityId;
@@ -637,12 +739,18 @@ const ammoColumn = document.getElementById('ammoColumn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
 const instructions = document.getElementById('instructions');
+let loadoutSummaryEl = null;
+if (joinBtn) {
+  joinBtn.disabled = true;
+  joinBtn.title = 'Select a tank and allocate ammo before joining.';
+}
 let availableTanks = [];
 let ammoDefs = [];
 let selectedNation = null;
 let selectedTank = null;
 let selectedClass = null; // current tank class tab
 const loadout = {};
+let activeAmmoCapacity = 0;
 // Largest dimension across all tanks; used to render consistent-scale thumbnails
 let maxTankDimension = 0;
 
@@ -692,6 +800,8 @@ function renderTanks() {
   tankList.innerHTML = '';
   ammoColumn.innerHTML = '';
   selectedTank = null;
+  loadoutSummaryEl = null;
+  updateLoadoutSummary();
   if (!selectedNation) return;
 
   // Build tab list from tank classes available to the chosen nation
@@ -826,34 +936,151 @@ function renderTankList(list) {
   });
 }
 
+function sanitiseLoadout() {
+  return Object.fromEntries(
+    Object.entries(loadout).map(([name, value]) => [name, Math.max(0, Math.floor(Number(value) || 0))])
+  );
+}
+
+function totalAllocatedRounds() {
+  return Object.values(loadout).reduce(
+    (sum, value) => sum + Math.max(0, Math.floor(Number(value) || 0)),
+    0
+  );
+}
+
+function updateLoadoutSummary() {
+  const capacity = Math.max(0, activeAmmoCapacity);
+  const total = totalAllocatedRounds();
+  const overCapacity = capacity > 0 && total > capacity;
+  const noAmmo = total <= 0;
+  if (loadoutSummaryEl) {
+    const capacityText = capacity > 0 ? `${total}/${capacity}` : `${total}`;
+    loadoutSummaryEl.textContent = `Allocated ${capacityText} rounds`;
+    loadoutSummaryEl.classList.toggle('warning', overCapacity || noAmmo);
+  }
+  if (joinBtn) {
+    const needsTank = !selectedTank;
+    const invalid = overCapacity || noAmmo || needsTank;
+    joinBtn.disabled = invalid;
+    if (needsTank) {
+      joinBtn.title = 'Select a tank and allocate ammo before joining.';
+    } else if (overCapacity) {
+      joinBtn.title = `Reduce your loadout to ${capacity} rounds or fewer.`;
+    } else if (noAmmo) {
+      joinBtn.title = 'Allocate at least one round before joining.';
+    } else {
+      joinBtn.title = 'Join the battle!';
+    }
+  }
+}
+
+function computeDefaultLoadout(ammoNames, capacity) {
+  const defaults = {};
+  const names = Array.isArray(ammoNames) ? ammoNames : [];
+  let remaining = Math.max(0, capacity);
+  const count = names.length;
+  names.forEach((name, index) => {
+    if (remaining <= 0) {
+      defaults[name] = 0;
+      return;
+    }
+    const slots = Math.min(
+      remaining,
+      Math.max(1, Math.floor(remaining / Math.max(1, count - index)))
+    );
+    defaults[name] = slots;
+    remaining -= slots;
+  });
+  return defaults;
+}
+
 function renderAmmo() {
   ammoColumn.innerHTML = '';
+  loadoutSummaryEl = null;
   Object.keys(loadout).forEach(k => delete loadout[k]);
+  updateLoadoutSummary();
   if (!selectedTank) return;
-  selectedTank.ammo.forEach(name => {
-    const def = ammoDefs.find(a => a.name === name);
-    if (!def) return;
-    loadout[name] = 0;
-    const div = document.createElement('div');
-    div.className = 'ammo-item';
+
+  activeAmmoCapacity = Math.max(0, selectedTank.ammoCapacity ?? defaultTank.ammoCapacity);
+  const ammoDefinitions = Array.isArray(selectedTank.ammo)
+    ? selectedTank.ammo
+        .map(name => ammoDefs.find(a => a.name === name))
+        .filter(def => !!def)
+    : [];
+
+  if (!ammoDefinitions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ammo-empty';
+    empty.textContent = 'No ammunition is configured for this tank. Visit the admin tools to assign shells.';
+    ammoColumn.appendChild(empty);
+    updateLoadoutSummary();
+    return;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'ammo-header';
+  header.textContent = `Distribute up to ${activeAmmoCapacity} rounds. Adjust sliders now; press 1-9 in battle to switch shells.`;
+  ammoColumn.appendChild(header);
+
+  loadoutSummaryEl = document.createElement('div');
+  loadoutSummaryEl.className = 'ammo-summary';
+  ammoColumn.appendChild(loadoutSummaryEl);
+
+  const defaults = computeDefaultLoadout(
+    ammoDefinitions.map(def => def.name),
+    activeAmmoCapacity
+  );
+
+  ammoDefinitions.forEach(def => {
+    const row = document.createElement('div');
+    row.className = 'ammo-item';
+
     const img = document.createElement('img');
     img.src = def.image || 'https://placehold.co/40x40?text=A';
-    img.alt = name;
+    img.alt = def.name;
+
+    const details = document.createElement('div');
+    details.className = 'ammo-details';
+
     const label = document.createElement('span');
-    label.textContent = name;
+    label.className = 'ammo-label';
+    label.textContent = def.name;
+
+    const countLabel = document.createElement('span');
+    countLabel.className = 'ammo-count';
+
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0';
-    slider.max = '50';
-    slider.value = '0';
+    slider.max = String(activeAmmoCapacity);
+    const defaultCount = defaults[def.name] ?? 0;
+    slider.value = String(defaultCount);
+    loadout[def.name] = defaultCount;
+    countLabel.textContent = `${defaultCount} rounds`;
+
     slider.addEventListener('input', () => {
-      loadout[name] = parseInt(slider.value, 10);
+      const desired = Math.max(0, Math.floor(Number(slider.value) || 0));
+      const current = loadout[def.name] ?? 0;
+      const othersTotal = totalAllocatedRounds() - current;
+      const allowed = Math.min(desired, Math.max(0, activeAmmoCapacity - othersTotal));
+      if (allowed !== desired) {
+        slider.value = String(allowed);
+      }
+      loadout[def.name] = allowed;
+      countLabel.textContent = `${allowed} rounds`;
+      updateLoadoutSummary();
     });
-    div.appendChild(img);
-    div.appendChild(label);
-    div.appendChild(slider);
-    ammoColumn.appendChild(div);
+
+    details.appendChild(label);
+    details.appendChild(countLabel);
+    row.appendChild(img);
+    row.appendChild(details);
+    row.appendChild(slider);
+    ammoColumn.appendChild(row);
   });
+
+  updateLoadoutSummary();
 }
 
 joinBtn.addEventListener('click', async () => {
@@ -862,15 +1089,28 @@ joinBtn.addEventListener('click', async () => {
     lobbyError.textContent = 'Select a tank';
     return;
   }
+  const capacity = Math.max(0, activeAmmoCapacity);
+  const totalRounds = totalAllocatedRounds();
+  if (totalRounds <= 0) {
+    lobbyError.textContent = 'Allocate ammunition using the sliders before deploying.';
+    updateLoadoutSummary();
+    return;
+  }
+  if (capacity > 0 && totalRounds > capacity) {
+    lobbyError.textContent = `Too many rounds selected. Limit to ${capacity} in total.`;
+    updateLoadoutSummary();
+    return;
+  }
   lobby.style.display = 'none';
   instructions.style.display = 'block';
   showCrosshair(true);
   applyTankConfig(selectedTank);
 
   // Build player-specific ammo list from lobby selections
-  playerAmmo = Object.entries(loadout)
-    .filter(([, count]) => count > 0)
-    .map(([name, count]) => ({ name, count }));
+  const sanitizedLoadout = sanitiseLoadout();
+  const positiveEntries = Object.entries(sanitizedLoadout).filter(([, count]) => count > 0);
+  const payload = Object.fromEntries(positiveEntries);
+  playerAmmo = positiveEntries.map(([name, count]) => ({ name, count }));
   selectedAmmo = playerAmmo[0] || null;
   ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
   updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
@@ -880,7 +1120,7 @@ joinBtn.addEventListener('click', async () => {
     return;
   }
   try {
-    await joinRoomWithSelection(selectedTank, loadout);
+    await joinRoomWithSelection(selectedTank, payload);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     lobbyError.textContent = message || 'Failed to join room';
@@ -931,6 +1171,7 @@ let ROT_ACCEL = TARGET_TURN_RATE; // rad/s² to reach target rate in ~1 s
 let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
 let ammoLeft = defaultTank.ammoCapacity;
+activeAmmoCapacity = defaultTank.ammoCapacity;
 let lastFireTime = 0;
 // Static friction coefficient representing tracks on typical terrain. Raised to
 // better reflect the grip of heavy tracked vehicles so the hull settles more
@@ -1556,6 +1797,7 @@ function init() {
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
       document.addEventListener('mousemove', onMouseMove);
+      ensureAudioContext();
     } else {
       document.removeEventListener('mousemove', onMouseMove);
     }
@@ -1595,6 +1837,7 @@ function init() {
     ammoLeft -= 1;
     updateAmmoHUD(playerAmmo, selectedAmmo.name);
     spawnLocalProjectileTrace();
+    playCannonSound();
     console.debug('Firing', selectedAmmo.name, { ammoLeft });
 
     if (room) {
@@ -1625,6 +1868,7 @@ function applyTankConfig(t) {
   ACCELERATION = MAX_SPEED / 3;
   FIRE_DELAY = 60 / (t.mainCannonFireRate ?? defaultTank.mainCannonFireRate);
   ammoLeft = t.ammoCapacity ?? defaultTank.ammoCapacity;
+  activeAmmoCapacity = t.ammoCapacity ?? defaultTank.ammoCapacity;
   lastFireTime = 0;
   updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 
