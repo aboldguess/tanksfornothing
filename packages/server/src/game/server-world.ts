@@ -697,17 +697,37 @@ export class ServerWorldController {
     const yaw = (TransformComponent.rot[entity] || 0) + (TransformComponent.turret[entity] || 0);
     const pitch = TransformComponent.gun[entity] || 0;
     const cosPitch = Math.cos(pitch);
+    const sinPitch = Math.sin(pitch);
     const sinYaw = Math.sin(yaw);
     const cosYaw = Math.cos(yaw);
     const speed = ammo.speed ?? 200;
     const barrelLen = meta.tank.barrelLength || TankStatsComponent.barrelLength[entity] || 3;
     const turretYOffset = (meta.tank.turretYPercent ?? 50) / 100 - 0.5;
     const turretXOffset = 0.5 - (meta.tank.turretXPercent ?? 50) / 100;
+    const baselineY = TransformComponent.y[entity] || 0;
+    // Use metadata first, but fall back to the authoritative TankStats component when lobby data is missing.
+    const bodyHeight =
+      Number.isFinite(meta.tank.bodyHeight) && typeof meta.tank.bodyHeight === 'number'
+        ? meta.tank.bodyHeight
+        : TankStatsComponent.bodyHeight[entity] || 0;
+    const turretHeightMeta = meta.tank.turretHeight;
+    const turretHeight =
+      typeof turretHeightMeta === 'number' && Number.isFinite(turretHeightMeta)
+        ? turretHeightMeta
+        : TankStatsComponent.turretHeight[entity] || 0;
+    // The gun pivot sits atop the combined hull and turret stack; start from the centre-based baseline and
+    // add half-height contributions so level shots remain aligned with the previous origin while still
+    // accounting for taller turrets.
+    const halfBodyHeight = Math.max(0, bodyHeight) * 0.5;
+    const halfTurretHeight = Math.max(0, turretHeight) * 0.5;
+    const pivotY = baselineY + halfBodyHeight + halfTurretHeight;
     const muzzleX = TransformComponent.x[entity] + turretYOffset * meta.tank.bodyWidth - sinYaw * cosPitch * barrelLen;
-    const muzzleY = TransformComponent.y[entity] + meta.tank.bodyHeight / 2 + Math.sin(pitch) * barrelLen;
+    const unclampedMuzzleY = pivotY + sinPitch * barrelLen;
+    // Guard against steep gun depression pushing the muzzle below the terrain baseline, which breaks FX visibility.
+    const muzzleY = Math.max(baselineY, unclampedMuzzleY);
     const muzzleZ = TransformComponent.z[entity] + turretXOffset * meta.tank.bodyLength - cosYaw * cosPitch * barrelLen;
     const vx = -sinYaw * cosPitch * speed;
-    const vy = Math.sin(pitch) * speed;
+    const vy = sinPitch * speed;
     const vz = -cosYaw * cosPitch * speed;
     return { muzzleX, muzzleY, muzzleZ, vx, vy, vz };
   }
