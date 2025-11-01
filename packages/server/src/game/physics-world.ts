@@ -34,6 +34,7 @@ export interface PhysicsUserData {
 export type PhysicsBody = Body & { userData?: PhysicsUserData };
 
 const DEFAULT_GRAVITY = -9.81;
+const METERS_PER_KILOMETRE = 1000;
 
 export class PhysicsWorldManager {
   readonly world: World;
@@ -105,14 +106,26 @@ export class PhysicsWorldManager {
     const columns = grid[0]?.length ?? 0;
     if (columns < 2) return null;
 
-    const width = Number(definition.size?.x) || columns - 1;
-    const depth = Number(definition.size?.y) || grid.length - 1;
+    const widthKilometres = Number(definition.size?.x);
+    const depthKilometres = Number(definition.size?.y);
+    // Terrain definitions describe extents in kilometres for content tooling, so convert to metres
+    // before constructing Cannon-es geometries. If no explicit size is provided, fall back to grid
+    // resolution which already represents metre spacing.
+    const width =
+      Number.isFinite(widthKilometres) && widthKilometres > 0
+        ? widthKilometres * METERS_PER_KILOMETRE
+        : columns - 1;
+    const depth =
+      Number.isFinite(depthKilometres) && depthKilometres > 0
+        ? depthKilometres * METERS_PER_KILOMETRE
+        : grid.length - 1;
 
     const gridIsSquare = Math.abs(columns - grid.length) <= 1;
     if (gridIsSquare) {
       const matrix = grid.map((row) =>
         row.map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0))
       );
+      // With width/depth now in metres, elementSize also represents metres between samples.
       const elementSize = width / Math.max(1, columns - 1);
       const body: PhysicsBody = new Body({ mass: 0 });
       const heightfield = new Heightfield(matrix, { elementSize });
