@@ -177,13 +177,15 @@ export class ServerWorldController {
     TankStatsComponent.maxSpeed[entity] = tank.maxSpeed ?? 10;
     TankStatsComponent.maxReverseSpeed[entity] = tank.maxReverseSpeed ?? 5;
     TankStatsComponent.turretRotation[entity] = tank.turretRotation ?? 30;
-    const maxTurretDecline =
+    const rawTurretDecline =
       typeof tank.maxTurretDecline === 'number' && Number.isFinite(tank.maxTurretDecline)
-        ? Math.abs(tank.maxTurretDecline)
+        ? tank.maxTurretDecline
         : 10;
+    const declineMagnitude = Math.max(0, Math.abs(rawTurretDecline));
+    const signedGunDepression = declineMagnitude === 0 ? 0 : -declineMagnitude;
     // Store depression as a negative angle so downstream radian conversions maintain the
     // "down is negative" convention enforced by updateTankFromPhysics.
-    TankStatsComponent.gunDepression[entity] = -maxTurretDecline;
+    TankStatsComponent.gunDepression[entity] = signedGunDepression;
     TankStatsComponent.gunElevation[entity] = tank.maxTurretIncline ?? 10;
     TankStatsComponent.barrelLength[entity] = tank.barrelLength ?? 3;
     TankStatsComponent.bodyWidth[entity] = tank.bodyWidth ?? 3;

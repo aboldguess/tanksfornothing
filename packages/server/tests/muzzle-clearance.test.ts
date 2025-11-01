@@ -48,7 +48,9 @@ const tank: TankDefinition = {
   bodyRotation: 0,
   turretRotation: 60,
   maxTurretIncline: 20,
-  maxTurretDecline: -15,
+  // The production tank catalogue stores decline as a positive magnitude, so mirror that
+  // convention here to ensure the server normalises it into a negative clamp value.
+  maxTurretDecline: 15,
   horizontalTraverse: 0,
   bodyWidth: 3,
   bodyLength: 6,
@@ -71,6 +73,11 @@ test('muzzle height clamps to terrain during steep depression', () => {
   assert.ok(playerMeta, 'player metadata should exist after adding a player');
 
   const entity = playerMeta.entity;
+  assert.strictEqual(
+    TankStatsComponent.gunDepression[entity],
+    -tank.maxTurretDecline,
+    'gun depression should be stored as a negative degree magnitude'
+  );
   TransformComponent.y[entity] = 0;
   TransformComponent.rot[entity] = 0;
   TransformComponent.turret[entity] = 0;
