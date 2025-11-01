@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert';
 
 import type { AmmoDefinition, TankDefinition } from '../src/types.js';
-import { TransformComponent, TankStatsComponent } from '@tanksfornothing/shared';
+import { TransformComponent, TankStatsComponent, ProjectileComponent } from '@tanksfornothing/shared';
 import { MUZZLE_TERRAIN_CLEARANCE, ServerWorldController } from '../src/game/server-world.js';
 
 const ammo: AmmoDefinition = {
@@ -116,5 +116,11 @@ test('muzzle height clamps to terrain during steep depression', () => {
   assert.ok(
     Math.abs(projectileBody.position.y - clearanceFloor) < 1e-3,
     'physics spawn height should mirror the clamped muzzle height'
+  );
+
+  const verticalVelocity = ProjectileComponent.vy[projectileEntity];
+  assert.ok(
+    verticalVelocity < 0,
+    `expected depressed shot to start descending, but vy=${verticalVelocity} was not negative`
   );
 });
