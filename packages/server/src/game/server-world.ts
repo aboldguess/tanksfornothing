@@ -785,17 +785,29 @@ export class ServerWorldController {
     vy: number;
     vz: number;
   } {
-    const yaw = (TransformComponent.rot[entity] || 0) + (TransformComponent.turret[entity] || 0);
+    const hullYaw = TransformComponent.rot[entity] || 0;
+    const turretYaw = TransformComponent.turret[entity] || 0;
+    const yaw = hullYaw + turretYaw;
     const pitch = TransformComponent.gun[entity] || 0;
     const cosPitch = Math.cos(pitch);
     const sinPitch = Math.sin(pitch);
     const sinYaw = Math.sin(yaw);
     const cosYaw = Math.cos(yaw);
+    const sinHullYaw = Math.sin(hullYaw);
+    const cosHullYaw = Math.cos(hullYaw);
     const speed = ammo.speed ?? 200;
     const barrelLen = meta.tank.barrelLength || TankStatsComponent.barrelLength[entity] || 3;
     const turretYOffset = (meta.tank.turretYPercent ?? 50) / 100 - 0.5;
     const turretXOffset = 0.5 - (meta.tank.turretXPercent ?? 50) / 100;
     const baselineY = TransformComponent.y[entity] || 0;
+    const bodyWidth =
+      Number.isFinite(meta.tank.bodyWidth) && typeof meta.tank.bodyWidth === 'number'
+        ? meta.tank.bodyWidth
+        : TankStatsComponent.bodyWidth[entity] || 0;
+    const bodyLength =
+      Number.isFinite(meta.tank.bodyLength) && typeof meta.tank.bodyLength === 'number'
+        ? meta.tank.bodyLength
+        : TankStatsComponent.bodyLength[entity] || 0;
     // Use metadata first, but fall back to the authoritative TankStats component when lobby data is missing.
     const bodyHeight =
       Number.isFinite(meta.tank.bodyHeight) && typeof meta.tank.bodyHeight === 'number'
@@ -839,11 +851,15 @@ export class ServerWorldController {
       }
     }
 
-    const muzzleX =
-      TransformComponent.x[entity] + turretYOffset * meta.tank.bodyWidth + muzzleDirectionX * effectiveBarrelLen;
+    const offsetRight = turretYOffset * bodyWidth;
+    const offsetForward = turretXOffset * bodyLength;
+    // Rotate the hull-local offset vector using the hull yaw so asymmetrically placed turrets spawn shells from
+    // the correct world-space position even when the chassis is rotated independently of the turret.
+    const rotatedOffsetX = offsetRight * cosHullYaw - offsetForward * sinHullYaw;
+    const rotatedOffsetZ = offsetRight * sinHullYaw + offsetForward * cosHullYaw;
+    const muzzleX = TransformComponent.x[entity] + rotatedOffsetX + muzzleDirectionX * effectiveBarrelLen;
     const muzzleY = pivotY + muzzleDirectionY * effectiveBarrelLen;
-    const muzzleZ =
-      TransformComponent.z[entity] + turretXOffset * meta.tank.bodyLength + muzzleDirectionZ * effectiveBarrelLen;
+    const muzzleZ = TransformComponent.z[entity] + rotatedOffsetZ + muzzleDirectionZ * effectiveBarrelLen;
     const vx = muzzleDirectionX * speed;
     const vy = muzzleDirectionY * speed;
     const vz = muzzleDirectionZ * speed;

@@ -1,7 +1,7 @@
 // muzzle-clearance.test.ts
-// Summary: Ensures depressed cannon shots spawn their muzzle and physics bodies above the ground plane.
-// Structure: Bootstraps a ServerWorldController with a single tank, forces a steep gun depression, fires once,
-//            and checks both ECS and physics spawn heights against the tank's terrain baseline.
+// Summary: Validates muzzle spawn logic including depressed cannon clearance and yaw-rotated turret offsets.
+// Structure: Bootstraps a ServerWorldController, first forcing a steep gun depression to check terrain clearance,
+//            then rotating a hull with an asymmetric turret placement to ensure muzzle origins rotate correctly.
 // Usage: Executed via `npm test` which compiles the workspace then runs Node's test runner over dist/tests.
 // ---------------------------------------------------------------------------
 
@@ -130,4 +130,89 @@ test('muzzle height clamps to terrain during steep depression', () => {
     verticalVelocity < 0,
     `expected depressed shot to start descending, but vy=${verticalVelocity} was not negative`
   );
+});
+
+test('muzzle origin rotates asymmetric turret offsets with hull yaw', () => {
+  const controller = new ServerWorldController({
+    getAmmo: () => [ammo],
+    getTerrain: () => null
+  });
+
+  controller.addPlayer('session-yaw', 'RotatedTester', tank, { [ammo.name]: 1 }, 1);
+  const playerMeta = controller.getMetadataForSession('session-yaw');
+  assert.ok(playerMeta, 'player metadata should exist for rotated hull scenario');
+
+  const entity = playerMeta.entity;
+  TransformComponent.x[entity] = 12.5;
+  TransformComponent.y[entity] = 1.25;
+  TransformComponent.z[entity] = -3.75;
+  TransformComponent.rot[entity] = Math.PI / 4; // 45° hull yaw.
+  TransformComponent.turret[entity] = 0;
+  TransformComponent.gun[entity] = 0;
+
+  playerMeta.tank.turretXPercent = 30;
+  playerMeta.tank.turretYPercent = 65;
+  playerMeta.tank.bodyWidth = Number.NaN;
+  playerMeta.tank.bodyLength = Number.NaN;
+
+  const controllerInternals = controller as unknown as {
+    processFireRequest: (entity: number, request: { ammoName: string }) => boolean;
+    projectileMetadata: Map<string, { entity: number }>;
+  };
+
+  const fired = controllerInternals.processFireRequest(entity, { ammoName: ammo.name });
+  assert.ok(fired, 'fire request should succeed for rotated hull scenario');
+
+  const projectiles = [...controllerInternals.projectileMetadata.values()];
+  assert.strictEqual(projectiles.length, 1, 'one projectile should spawn from the rotated shot');
+
+  const projectileEntity = projectiles[0].entity;
+  const muzzleX = TransformComponent.x[projectileEntity];
+  const muzzleY = TransformComponent.y[projectileEntity];
+  const muzzleZ = TransformComponent.z[projectileEntity];
+
+  const hullYaw = TransformComponent.rot[entity] || 0;
+  const turretYaw = TransformComponent.turret[entity] || 0;
+  const yaw = hullYaw + turretYaw;
+  const pitch = TransformComponent.gun[entity] || 0;
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
+  const sinYaw = Math.sin(yaw);
+  const cosYaw = Math.cos(yaw);
+  const sinHullYaw = Math.sin(hullYaw);
+  const cosHullYaw = Math.cos(hullYaw);
+  const barrelLen = playerMeta.tank.barrelLength || TankStatsComponent.barrelLength[entity] || 3;
+  const turretYOffset = (playerMeta.tank.turretYPercent ?? 50) / 100 - 0.5;
+  const turretXOffset = 0.5 - (playerMeta.tank.turretXPercent ?? 50) / 100;
+  const bodyWidth = TankStatsComponent.bodyWidth[entity] ?? tank.bodyWidth ?? 0;
+  const bodyLength = TankStatsComponent.bodyLength[entity] ?? tank.bodyLength ?? 0;
+  const offsetRight = turretYOffset * bodyWidth;
+  const offsetForward = turretXOffset * bodyLength;
+  const rotatedOffsetX = offsetRight * cosHullYaw - offsetForward * sinHullYaw;
+  const rotatedOffsetZ = offsetRight * sinHullYaw + offsetForward * cosHullYaw;
+  const muzzleDirectionX = -sinYaw * cosPitch;
+  const muzzleDirectionY = sinPitch;
+  const muzzleDirectionZ = -cosYaw * cosPitch;
+  const baselineY = TransformComponent.y[entity] || 0;
+  const bodyHeight =
+    Number.isFinite(playerMeta.tank.bodyHeight) && typeof playerMeta.tank.bodyHeight === 'number'
+      ? playerMeta.tank.bodyHeight
+      : TankStatsComponent.bodyHeight[entity] || 0;
+  const turretHeightMeta = playerMeta.tank.turretHeight;
+  const turretHeight =
+    typeof turretHeightMeta === 'number' && Number.isFinite(turretHeightMeta)
+      ? turretHeightMeta
+      : TankStatsComponent.turretHeight[entity] || 0;
+  const halfBodyHeight = Math.max(0, bodyHeight) * 0.5;
+  const halfTurretHeight = Math.max(0, turretHeight) * 0.5;
+  const pivotY = baselineY + halfBodyHeight + halfTurretHeight;
+  // Reconstruct the authoritative computeMuzzle math so we can assert the world offset incorporates hull yaw.
+  const expectedX = TransformComponent.x[entity] + rotatedOffsetX + muzzleDirectionX * barrelLen;
+  const expectedY = pivotY + muzzleDirectionY * barrelLen;
+  const expectedZ = TransformComponent.z[entity] + rotatedOffsetZ + muzzleDirectionZ * barrelLen;
+
+  const precision = 1e-6;
+  assert.ok(Math.abs(muzzleX - expectedX) < precision, `expected muzzle x ${expectedX}, got ${muzzleX}`);
+  assert.ok(Math.abs(muzzleY - expectedY) < precision, `expected muzzle y ${expectedY}, got ${muzzleY}`);
+  assert.ok(Math.abs(muzzleZ - expectedZ) < precision, `expected muzzle z ${expectedZ}, got ${muzzleZ}`);
 });
