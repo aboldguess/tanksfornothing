@@ -57,8 +57,23 @@ interface FireRequest {
   ammoName: string;
 }
 
+interface ExplosionTelemetry {
+  id: string;
+  x: number;
+  y: number;
+  z: number;
+  ammoName: string;
+  shooterSessionId: string | null;
+  hitKind: 'terrain' | 'tank' | 'timeout' | 'cleanup' | 'lost' | 'unknown';
+  hitSessionId: string | null;
+  distanceTravelled: number;
+  travelTimeMs: number;
+  impactSpeed: number;
+  impactVelocity: { x: number; y: number; z: number };
+}
+
 interface StepResult {
-  explosions: Array<{ id: string; x: number; y: number; z: number }>;
+  explosions: ExplosionTelemetry[];
   damage: Array<{ sessionId: string; health: number; shooter: string | null }>;
   kills: Array<{ shooter: string | null; victim: string }>;
 }
@@ -76,6 +91,7 @@ interface ServerWorldOptions {
 
 const GRAVITY = -9.81;
 const PROJECTILE_LIFETIME = 5;
+export const MUZZLE_TERRAIN_CLEARANCE = 0.05;
 
 export class ServerWorldController {
   readonly world: GameWorld;
@@ -341,7 +357,10 @@ export class ServerWorldController {
     for (const [id, meta] of [...this.projectileMetadata]) {
       if (!hasComponent(this.world, ProjectileComponent, meta.entity)) {
         const body = this.projectileBodies.get(id);
-        this.destroyProjectile(id, body ? body.position.clone() : null, { spawnExplosion: false });
+        this.destroyProjectile(id, body ? body.position.clone() : null, {
+          spawnExplosion: false,
+          hitKind: 'cleanup'
+        });
       }
     }
   }
@@ -556,6 +575,7 @@ export class ServerWorldController {
 
     CooldownComponent.value[entity] = this.computeCooldown(meta);
 
+    const spawnTimeMs = Date.now();
     this.projectileMetadata.set(projectileId, {
       entity: projectileEntity,
       id: projectileId,
@@ -563,7 +583,13 @@ export class ServerWorldController {
       shooterSessionId: meta.sessionId,
       damage: ammo.damage ?? ammo.penetration ?? 10,
       penetration: ammo.penetration ?? ammo.pen0 ?? 0,
-      explosion: ammo.explosion ?? ammo.explosionRadius ?? 0
+      explosion: ammo.explosion ?? ammo.explosionRadius ?? 0,
+      spawnPosition: { x: muzzleX, y: muzzleY, z: muzzleZ },
+      lastKnownPosition: { x: muzzleX, y: muzzleY, z: muzzleZ },
+      lastKnownVelocity: { x: vx, y: vy, z: vz },
+      distanceTravelled: 0,
+      spawnedAtMs: spawnTimeMs,
+      lastUpdatedMs: spawnTimeMs
     });
 
     return true;
@@ -573,13 +599,13 @@ export class ServerWorldController {
     for (const [id, meta] of [...this.projectileMetadata]) {
       const entity = meta.entity;
       if (!hasComponent(this.world, ProjectileComponent, entity) || !hasComponent(this.world, TransformComponent, entity)) {
-        this.destroyProjectile(id, null, { spawnExplosion: false });
+        this.destroyProjectile(id, null, { spawnExplosion: false, hitKind: 'cleanup' });
         continue;
       }
 
       const body = this.projectileBodies.get(id);
       if (!body) {
-        this.destroyProjectile(id, null, { spawnExplosion: false });
+        this.destroyProjectile(id, null, { spawnExplosion: false, hitKind: 'cleanup' });
         continue;
       }
 
@@ -592,8 +618,31 @@ export class ServerWorldController {
       ProjectileComponent.vz[entity] = body.velocity.z;
       ProjectileComponent.life[entity] -= dt;
 
+      const projectileMeta = this.projectileMetadata.get(id);
+      if (projectileMeta) {
+        const last = projectileMeta.lastKnownPosition;
+        const dx = body.position.x - last.x;
+        const dy = body.position.y - last.y;
+        const dz = body.position.z - last.z;
+        const segment = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        if (Number.isFinite(segment) && segment > 0) {
+          projectileMeta.distanceTravelled += segment;
+        }
+        projectileMeta.lastKnownPosition = {
+          x: body.position.x,
+          y: body.position.y,
+          z: body.position.z
+        };
+        projectileMeta.lastKnownVelocity = {
+          x: body.velocity.x,
+          y: body.velocity.y,
+          z: body.velocity.z
+        };
+        projectileMeta.lastUpdatedMs = Date.now();
+      }
+
       if (ProjectileComponent.life[entity] <= 0 || body.position.y <= -5) {
-        this.destroyProjectile(id, body.position.clone());
+        this.destroyProjectile(id, body.position.clone(), { hitKind: 'timeout' });
       }
     }
   }
@@ -628,13 +677,30 @@ export class ServerWorldController {
     }
 
     const position = projectileBody.position.clone();
-    this.destroyProjectile(projectileId, position);
+    const lastKnown = projectileMeta.lastKnownPosition;
+    const dx = position.x - lastKnown.x;
+    const dy = position.y - lastKnown.y;
+    const dz = position.z - lastKnown.z;
+    const collisionSegment = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (Number.isFinite(collisionSegment) && collisionSegment > 0) {
+      projectileMeta.distanceTravelled += collisionSegment;
+    }
+    projectileMeta.lastKnownPosition = { x: position.x, y: position.y, z: position.z };
+    projectileMeta.lastKnownVelocity = {
+      x: projectileBody.velocity.x,
+      y: projectileBody.velocity.y,
+      z: projectileBody.velocity.z
+    };
+    projectileMeta.lastUpdatedMs = Date.now();
+    const hitKind = (otherData?.kind as ExplosionTelemetry['hitKind']) ?? 'unknown';
+    const hitSessionId = typeof otherData?.sessionId === 'string' ? otherData.sessionId : null;
+    this.destroyProjectile(projectileId, position, { hitKind, hitSessionId });
   }
 
   private destroyProjectile(
     projectileId: string,
     explosionPosition: Vec3 | null,
-    options: { spawnExplosion?: boolean } = {}
+    options: { spawnExplosion?: boolean; hitKind?: ExplosionTelemetry['hitKind']; hitSessionId?: string | null } = {}
   ): void {
     if (this.destroyedProjectiles.has(projectileId)) return;
     this.destroyedProjectiles.add(projectileId);
@@ -661,12 +727,29 @@ export class ServerWorldController {
     }
 
     if (spawnExplosion && explosionPosition && this.activeExplosions) {
-      this.activeExplosions.push({
+      const eventTimestamp = meta?.lastUpdatedMs ?? Date.now();
+      const telemetry: ExplosionTelemetry = {
         id: projectileId,
         x: explosionPosition.x,
         y: explosionPosition.y,
-        z: explosionPosition.z
-      });
+        z: explosionPosition.z,
+        ammoName: meta?.ammoName ?? 'unknown',
+        shooterSessionId: meta?.shooterSessionId ?? null,
+        hitKind: options.hitKind ?? 'unknown',
+        hitSessionId: options.hitSessionId ?? null,
+        distanceTravelled: meta?.distanceTravelled ?? 0,
+        travelTimeMs:
+          meta && meta.spawnedAtMs ? Math.max(0, eventTimestamp - meta.spawnedAtMs) : 0,
+        impactSpeed: meta?.lastKnownVelocity
+          ? Math.hypot(
+              meta.lastKnownVelocity.x,
+              meta.lastKnownVelocity.y,
+              meta.lastKnownVelocity.z
+            )
+          : 0,
+        impactVelocity: meta?.lastKnownVelocity ?? { x: 0, y: 0, z: 0 }
+      };
+      this.activeExplosions.push(telemetry);
     }
   }
 
@@ -721,14 +804,41 @@ export class ServerWorldController {
     const halfBodyHeight = Math.max(0, bodyHeight) * 0.5;
     const halfTurretHeight = Math.max(0, turretHeight) * 0.5;
     const pivotY = baselineY + halfBodyHeight + halfTurretHeight;
-    const muzzleX = TransformComponent.x[entity] + turretYOffset * meta.tank.bodyWidth - sinYaw * cosPitch * barrelLen;
-    const unclampedMuzzleY = pivotY + sinPitch * barrelLen;
-    // Guard against steep gun depression pushing the muzzle below the terrain baseline, which breaks FX visibility.
-    const muzzleY = Math.max(baselineY, unclampedMuzzleY);
-    const muzzleZ = TransformComponent.z[entity] + turretXOffset * meta.tank.bodyLength - cosYaw * cosPitch * barrelLen;
-    const vx = -sinYaw * cosPitch * speed;
-    const vy = sinPitch * speed;
-    const vz = -cosYaw * cosPitch * speed;
+    const groundY = baselineY - halfBodyHeight;
+    const clearanceY = groundY + MUZZLE_TERRAIN_CLEARANCE;
+
+    const muzzleDirectionX = -sinYaw * cosPitch;
+    const muzzleDirectionY = sinPitch;
+    const muzzleDirectionZ = -cosYaw * cosPitch;
+
+    const unclampedMuzzleY = pivotY + muzzleDirectionY * barrelLen;
+    let effectiveBarrelLen = barrelLen;
+    if (muzzleDirectionY < 0 && unclampedMuzzleY < clearanceY) {
+      if (Math.abs(muzzleDirectionY) > 1e-5) {
+        const allowableLength = (clearanceY - pivotY) / muzzleDirectionY;
+        effectiveBarrelLen = Math.max(0, Math.min(barrelLen, allowableLength));
+      } else {
+        effectiveBarrelLen = 0;
+      }
+      if (unclampedMuzzleY < clearanceY) {
+        console.debug('Clamping depressed muzzle to maintain ground clearance', {
+          entity,
+          requestedLength: barrelLen,
+          adjustedLength: effectiveBarrelLen,
+          pivotY,
+          clearanceY
+        });
+      }
+    }
+
+    const muzzleX =
+      TransformComponent.x[entity] + turretYOffset * meta.tank.bodyWidth + muzzleDirectionX * effectiveBarrelLen;
+    const muzzleY = pivotY + muzzleDirectionY * effectiveBarrelLen;
+    const muzzleZ =
+      TransformComponent.z[entity] + turretXOffset * meta.tank.bodyLength + muzzleDirectionZ * effectiveBarrelLen;
+    const vx = muzzleDirectionX * speed;
+    const vy = muzzleDirectionY * speed;
+    const vz = muzzleDirectionZ * speed;
     return { muzzleX, muzzleY, muzzleZ, vx, vy, vz };
   }
 

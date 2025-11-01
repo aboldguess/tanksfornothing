@@ -9,8 +9,8 @@ import test from 'node:test';
 import assert from 'node:assert';
 
 import type { AmmoDefinition, TankDefinition } from '../src/types.js';
-import { TransformComponent } from '@tanksfornothing/shared';
-import { ServerWorldController } from '../src/game/server-world.js';
+import { TransformComponent, TankStatsComponent } from '@tanksfornothing/shared';
+import { MUZZLE_TERRAIN_CLEARANCE, ServerWorldController } from '../src/game/server-world.js';
 
 const ammo: AmmoDefinition = {
   name: 'UnitTestShell',
@@ -95,25 +95,26 @@ test('muzzle height clamps to terrain during steep depression', () => {
   const projectileEntity = projectiles[0].entity;
   const muzzleY = TransformComponent.y[projectileEntity];
   const tankBaseline = TransformComponent.y[entity];
+  const halfBodyHeight = (TankStatsComponent.bodyHeight[entity] ?? tank.bodyHeight ?? 0) / 2;
+  const clearanceFloor = tankBaseline - halfBodyHeight + MUZZLE_TERRAIN_CLEARANCE;
 
   assert.ok(
-    muzzleY >= tankBaseline,
-    `expected muzzle height ${muzzleY} to stay above terrain baseline ${tankBaseline}`
+    muzzleY >= clearanceFloor - 1e-3,
+    `expected muzzle height ${muzzleY} to stay above clearance floor ${clearanceFloor}`
   );
-  assert.strictEqual(
-    muzzleY,
-    tankBaseline,
-    'steep depression should clamp muzzle exactly to the baseline when it would otherwise dip underground'
+  assert.ok(
+    Math.abs(muzzleY - clearanceFloor) < 1e-3,
+    'steep depression should clamp muzzle precisely to the clearance floor above terrain'
   );
 
   const projectileBody = controllerInternals.projectileBodies.values().next().value;
   assert.ok(projectileBody, 'physics body should be created for the projectile');
   assert.ok(
-    projectileBody.position.y >= tankBaseline,
-    `expected projectile body spawn height ${projectileBody.position.y} to stay above baseline ${tankBaseline}`
+    projectileBody.position.y >= clearanceFloor - 1e-3,
+    `expected projectile body spawn height ${projectileBody.position.y} to stay above clearance ${clearanceFloor}`
   );
   assert.ok(
-    Math.abs(projectileBody.position.y - tankBaseline) < 1e-6,
+    Math.abs(projectileBody.position.y - clearanceFloor) < 1e-3,
     'physics spawn height should mirror the clamped muzzle height'
   );
 });

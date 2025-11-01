@@ -67,6 +67,12 @@ export interface ProjectileMetadata {
   damage: number;
   penetration: number;
   explosion: number;
+  spawnPosition: { x: number; y: number; z: number };
+  lastKnownPosition: { x: number; y: number; z: number };
+  lastKnownVelocity: { x: number; y: number; z: number };
+  distanceTravelled: number;
+  spawnedAtMs: number;
+  lastUpdatedMs: number;
 }
 
 /**

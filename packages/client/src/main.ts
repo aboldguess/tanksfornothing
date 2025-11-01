@@ -43,6 +43,7 @@ import { RemoteWorldRenderer } from './remote-world';
 
 import './nav';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
+import { initProjectileDebugOverlay, updateProjectileDebugOverlay } from './projectile-debug-overlay';
 import { buildGroundTexture } from './ground-textures';
 
 // Utility: render fatal errors directly on screen for easier debugging.
@@ -266,6 +267,13 @@ const ensureProjectileEntity = (serverEntityId) => {
   }
   return projectileServerToLocal.get(serverEntityId) ?? null;
 };
+// Live projectile telemetry for the debug overlay keyed by projectile id.
+const projectileDebug = new Map();
+// SessionId -> username mapping so overlay rows can show human-readable labels.
+const playerNamesBySession = new Map();
+let lastProjectileOverlayUpdate = 0;
+const PROJECTILE_OVERLAY_REFRESH_MS = 200;
+const PROJECTILE_DEBUG_RETENTION_MS = 15000;
 const fallbackPalette = [
   { name: 'grass', color: '#3cb043', texture: 'grass' },
   { name: 'mud', color: '#6b4423', texture: 'mud' },
@@ -303,6 +311,188 @@ const terrainScratch = {
   tiltQuat: new THREE.Quaternion(),
   yawQuat: new THREE.Quaternion()
 };
+
+function resolveSessionLabel(sessionId) {
+  if (!sessionId) return 'Unknown';
+  const known = playerNamesBySession.get(sessionId);
+  if (typeof known === 'string' && known.trim().length > 0) return known;
+  return String(sessionId).slice(0, 6);
+}
+
+function ensureProjectileDebugRecord(id, ammoName, shooterId, position, velocity) {
+  const now = performance.now();
+  const wallNow = Date.now();
+  let record = projectileDebug.get(id);
+  if (!record) {
+    record = {
+      id,
+      ammoName: ammoName || 'Unknown',
+      shooterId: shooterId || '',
+      shooterLabel: resolveSessionLabel(shooterId),
+      distance: 0,
+      status: 'In flight',
+      hitSummary: 'Tracking trajectory…',
+      travelTimeMs: 0,
+      impactSpeed: 0,
+      spawnTime: now,
+      spawnWallClock: wallNow,
+      lastUpdated: now,
+      finalised: false,
+      lastPosition: position
+        ? { x: position.x, y: position.y, z: position.z }
+        : { x: 0, y: 0, z: 0 },
+      lastVelocity: velocity
+        ? { x: velocity.x, y: velocity.y, z: velocity.z }
+        : { x: 0, y: 0, z: 0 }
+    };
+    projectileDebug.set(id, record);
+  }
+
+  if (ammoName) record.ammoName = ammoName;
+  if (shooterId) {
+    record.shooterId = shooterId;
+    record.shooterLabel = resolveSessionLabel(shooterId);
+  }
+  if (position) {
+    const dx = position.x - record.lastPosition.x;
+    const dy = position.y - record.lastPosition.y;
+    const dz = position.z - record.lastPosition.z;
+    const segment = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (Number.isFinite(segment) && segment > 0) {
+      record.distance += segment;
+    }
+    record.lastPosition = { x: position.x, y: position.y, z: position.z };
+  }
+  if (velocity) {
+    record.lastVelocity = { x: velocity.x, y: velocity.y, z: velocity.z };
+  }
+  record.travelTimeMs = Math.max(0, Date.now() - record.spawnWallClock);
+  if (!record.finalised) {
+    record.status = 'In flight';
+    record.hitSummary = 'Tracking trajectory…';
+  }
+  record.lastUpdated = now;
+  return record;
+}
+
+function markProjectileLost(id, reason = 'Awaiting impact telemetry from server…') {
+  const record = projectileDebug.get(id);
+  if (record && !record.finalised) {
+    record.status = 'Pending impact';
+    record.hitSummary = reason;
+    record.lastUpdated = performance.now();
+    refreshProjectileDebugOverlay(true);
+  }
+}
+
+function applyImpactTelemetry(payload) {
+  if (!payload || !payload.id) return;
+  const position = {
+    x: typeof payload.x === 'number' ? payload.x : 0,
+    y: typeof payload.y === 'number' ? payload.y : 0,
+    z: typeof payload.z === 'number' ? payload.z : 0
+  };
+  const impactVelocity = payload.impactVelocity
+    ? {
+        x: typeof payload.impactVelocity.x === 'number' ? payload.impactVelocity.x : 0,
+        y: typeof payload.impactVelocity.y === 'number' ? payload.impactVelocity.y : 0,
+        z: typeof payload.impactVelocity.z === 'number' ? payload.impactVelocity.z : 0
+      }
+    : null;
+
+  const record = ensureProjectileDebugRecord(
+    payload.id,
+    payload.ammoName,
+    payload.shooterSessionId,
+    position,
+    impactVelocity
+  );
+
+  if (typeof payload.distanceTravelled === 'number' && Number.isFinite(payload.distanceTravelled)) {
+    record.distance = payload.distanceTravelled;
+  }
+  if (typeof payload.travelTimeMs === 'number' && Number.isFinite(payload.travelTimeMs)) {
+    record.travelTimeMs = payload.travelTimeMs;
+  }
+  if (typeof payload.impactSpeed === 'number' && Number.isFinite(payload.impactSpeed)) {
+    record.impactSpeed = payload.impactSpeed;
+  }
+
+  const hitLabel = resolveSessionLabel(payload.hitSessionId);
+  switch (payload.hitKind) {
+    case 'tank':
+      record.status = 'Hit tank';
+      record.hitSummary = payload.hitSessionId
+        ? `Hit ${hitLabel} (${String(payload.hitSessionId).slice(0, 6)})`
+        : 'Hit tank (unknown session)';
+      break;
+    case 'terrain':
+      record.status = 'Hit terrain';
+      record.hitSummary = 'Detonated on terrain surface.';
+      break;
+    case 'timeout':
+      record.status = 'Expired';
+      record.hitSummary = 'Projectile timed out before impact.';
+      break;
+    case 'cleanup':
+      record.status = 'Removed';
+      record.hitSummary = 'Projectile cleaned up without explosion.';
+      break;
+    case 'lost':
+      record.status = 'Lost';
+      record.hitSummary = 'Projectile left bounds or was culled.';
+      break;
+    default:
+      record.status = 'Impact';
+      record.hitSummary = 'Impact recorded without explicit target metadata.';
+  }
+
+  if (impactVelocity) {
+    record.hitSummary += ` · v=(${impactVelocity.x.toFixed(1)}, ${impactVelocity.y.toFixed(
+      1
+    )}, ${impactVelocity.z.toFixed(1)})`;
+  }
+
+  record.finalised = true;
+  record.lastUpdated = performance.now();
+  record.travelTimeMs = Math.max(0, record.travelTimeMs);
+
+  console.info('Projectile impact telemetry', {
+    id: payload.id,
+    status: record.status,
+    distance: record.distance,
+    travelTimeMs: record.travelTimeMs,
+    impactSpeed: record.impactSpeed,
+    hit: record.hitSummary
+  });
+
+  refreshProjectileDebugOverlay(true);
+}
+
+function refreshProjectileDebugOverlay(force = false) {
+  const now = performance.now();
+  if (!force && now - lastProjectileOverlayUpdate < PROJECTILE_OVERLAY_REFRESH_MS) return;
+  lastProjectileOverlayUpdate = now;
+  const entries = [];
+  for (const [id, record] of projectileDebug) {
+    if (record.finalised && now - record.lastUpdated > PROJECTILE_DEBUG_RETENTION_MS) {
+      projectileDebug.delete(id);
+      continue;
+    }
+    entries.push({
+      id,
+      ammoLabel: record.ammoName || 'Unknown',
+      shooterLabel: record.shooterLabel || 'Unknown',
+      distanceMetres: Number.isFinite(record.distance) ? record.distance : 0,
+      status: record.status || 'In flight',
+      hitSummary: record.hitSummary || '',
+      travelTimeMs: Number.isFinite(record.travelTimeMs) ? record.travelTimeMs : 0,
+      impactSpeed: Number.isFinite(record.impactSpeed) ? record.impactSpeed : 0,
+      lastUpdated: record.lastUpdated || now
+    });
+  }
+  updateProjectileDebugOverlay(entries);
+}
 
 // Scratch vectors for translating local yaw torque (track differential) into world space
 // before applying it to the Cannon body. Re-using the buffers prevents per-frame
@@ -379,6 +569,9 @@ function resetProjectileWorld() {
   projectileWorld = createGameWorld();
   clearLocalProjectiles();
   clearExplosions();
+  projectileDebug.clear();
+  updateProjectileDebugOverlay([]);
+  lastProjectileOverlayUpdate = 0;
 }
 
 function syncProjectileWorld(buffer) {
@@ -396,12 +589,20 @@ function syncProjectileWorld(buffer) {
       y: TransformComponent.y[localEntity] || 0,
       z: TransformComponent.z[localEntity] || 0
     };
+    const velocity = {
+      x: ProjectileComponent.vx[localEntity] || 0,
+      y: ProjectileComponent.vy[localEntity] || 0,
+      z: ProjectileComponent.vz[localEntity] || 0
+    };
+    const ammoName = buffer.ammo?.[i] || 'Unknown';
+    const shooterId = buffer.shooter?.[i] || '';
     let record = projectiles.get(id);
     if (!record) {
       record = createProjectileVisual(id, position);
     } else {
       record.mesh.position.set(position.x, position.y, position.z);
     }
+    ensureProjectileDebugRecord(id, ammoName, shooterId, position, velocity);
   }
 
   for (const [id] of [...projectiles]) {
@@ -416,6 +617,7 @@ function syncProjectileWorld(buffer) {
         projectileServerToLocal.delete(serverEntity);
         projectileIdToServer.delete(id);
       }
+      markProjectileLost(id);
     }
   }
 
@@ -425,10 +627,12 @@ function syncProjectileWorld(buffer) {
       projectileServerToLocal.delete(serverEntity);
     }
   }
+  refreshProjectileDebugOverlay();
 }
 
 function resetGameState() {
   if (!tank || !turret) return;
+  playerNamesBySession.clear();
   tank.position.set(0, 0, 0);
   tank.rotation.set(0, 0, 0);
   turret.rotation.set(0, 0, 0);
@@ -617,6 +821,9 @@ function extractAmmoLoadoutFromMetadata(metadata) {
 }
 
 function syncLocalPlayerState(metadata, runtime) {
+  if (metadata?.username && metadata.sessionId) {
+    playerNamesBySession.set(metadata.sessionId, metadata.username);
+  }
   const newAmmo = extractAmmoLoadoutFromMetadata(metadata);
   const newTotal = newAmmo.reduce((sum, entry) => sum + entry.count, 0);
   const ammoChanged =
@@ -693,6 +900,9 @@ function attachRoomListeners(activeRoom) {
 
     const handleMetadataUpdate = (metadata, sessionId) => {
       if (!metadata) return;
+      if (metadata.username) {
+        playerNamesBySession.set(sessionId, metadata.username);
+      }
       if (sessionId === activeRoom.sessionId) {
         syncLocalPlayerState(metadata, schemaState.playerRuntime);
         return;
@@ -705,6 +915,7 @@ function attachRoomListeners(activeRoom) {
     schemaState.playerMetadata.onRemove = (_metadata, sessionId) => {
       if (sessionId === activeRoom.sessionId) return;
       remoteWorld?.removeMetadata(sessionId);
+      playerNamesBySession.delete(sessionId);
     };
 
     schemaState.listen(
@@ -745,6 +956,7 @@ function attachRoomListeners(activeRoom) {
 
   activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
   activeRoom.onMessage(GAME_EVENT.ProjectileExploded, (p) => {
+    applyImpactTelemetry(p);
     removeProjectileVisual(p.id);
     const serverEntity = projectileIdToServer.get(p.id);
     if (typeof serverEntity === 'number') {
@@ -1849,6 +2061,7 @@ function init() {
 
   // Build HUD overlay to display runtime metrics and hide crosshair until gameplay
   initHUD();
+  initProjectileDebugOverlay();
   updateAmmoHUD([]);
   updateCooldownHUD(0, 1);
   showCrosshair(false);
@@ -2218,6 +2431,7 @@ function animate() {
   updateHUD(speedKmh, inclination, playerHealth);
 
   updateCamera();
+  refreshProjectileDebugOverlay();
   renderer.render(scene, camera);
   const reloadRemaining = Math.max(0, FIRE_DELAY - (Date.now() - lastFireTime) / 1000);
   updateCooldownHUD(reloadRemaining, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
