@@ -76,6 +76,43 @@ export class PhysicsWorldManager {
     this.terrainBody = terrainBody;
   }
 
+  // Sample the current terrain body's elevation at the supplied world-space X/Z coordinates.
+  // Used by the server to augment Cannon's discrete collision detection when fast projectiles
+  // tunnel through normalised heightfields between substeps.
+  getTerrainElevationAt(x: number, z: number): number | null {
+    if (!this.terrainBody || this.terrainBody.shapes.length === 0) {
+      return null;
+    }
+
+    const shape = this.terrainBody.shapes[0];
+    const offset = this.terrainBody.shapeOffsets?.[0] ?? new Vec3(0, 0, 0);
+    const localPoint = new Vec3();
+    const worldPoint = new Vec3(x, 0, z);
+    this.terrainBody.pointToLocalFrame(worldPoint, localPoint);
+
+    if (shape instanceof Heightfield) {
+      const height = shape.getHeightAt(localPoint.x - offset.x, localPoint.z - offset.z, true);
+      return Number.isFinite(height) ? height + this.terrainBody.position.y + offset.y : null;
+    }
+
+    if (shape instanceof Box) {
+      return this.terrainBody.position.y + offset.y + shape.halfExtents.y;
+    }
+
+    return null;
+  }
+
+  // Expose the radius of a projectile sphere so higher-level systems can perform coarse
+  // intersection tests without needing direct access to Cannon-es internals.
+  getProjectileRadius(body: PhysicsBody): number {
+    const shape = body.shapes[0];
+    if (!shape) return 0.25;
+    if ('radius' in shape && typeof (shape as Sphere).radius === 'number') {
+      return Math.max(0, (shape as Sphere).radius);
+    }
+    return 0.25;
+  }
+
   createTankBody(size: { width: number; height: number; length: number }, mass: number): PhysicsBody {
     const shape = new Box(new Vec3(Math.max(size.width, 1) / 2, Math.max(size.height, 1) / 2, Math.max(size.length, 1) / 2));
     const body: PhysicsBody = new Body({
@@ -137,16 +174,17 @@ export class PhysicsWorldManager {
     const widthKilometres = Number(definition.size?.x);
     const depthKilometres = Number(definition.size?.y);
     // Terrain definitions describe extents in kilometres for content tooling, so convert to metres
-    // before constructing Cannon-es geometries. If no explicit size is provided, fall back to grid
-    // resolution which already represents metre spacing.
+    // before constructing Cannon-es geometries. If authors omit the explicit size, treat each cell
+    // as spanning one kilometre so the fallback mesh still covers the combat space and avoids
+    // projectiles immediately leaving the heightfield.
     const width =
       Number.isFinite(widthKilometres) && widthKilometres > 0
         ? widthKilometres * METERS_PER_KILOMETRE
-        : columns - 1;
+        : Math.max(1, columns - 1) * METERS_PER_KILOMETRE;
     const depth =
       Number.isFinite(depthKilometres) && depthKilometres > 0
         ? depthKilometres * METERS_PER_KILOMETRE
-        : grid.length - 1;
+        : Math.max(1, grid.length - 1) * METERS_PER_KILOMETRE;
 
     const gridIsSquare = Math.abs(columns - grid.length) <= 1;
     if (gridIsSquare) {

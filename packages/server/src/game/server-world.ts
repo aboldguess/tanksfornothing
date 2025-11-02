@@ -271,7 +271,8 @@ export class ServerWorldController {
       this.fireRequests.delete(entity);
     }
 
-    this.physics.world.step(1 / 60, dt, 8);
+    // Run the physics world at 120 Hz to reduce projectile tunnelling through normalised terrain meshes.
+    this.physics.world.step(1 / 120, dt, 8);
 
     for (const meta of this.metadata.values()) {
       const entity = meta.entity;
@@ -605,6 +606,9 @@ export class ServerWorldController {
 
   private updateProjectiles(dt: number): void {
     for (const [id, meta] of [...this.projectileMetadata]) {
+      if (this.destroyedProjectiles.has(id)) {
+        continue;
+      }
       const entity = meta.entity;
       if (!hasComponent(this.world, ProjectileComponent, entity) || !hasComponent(this.world, TransformComponent, entity)) {
         this.destroyProjectile(id, null, { spawnExplosion: false, hitKind: 'cleanup' });
@@ -629,6 +633,7 @@ export class ServerWorldController {
       const projectileMeta = this.projectileMetadata.get(id);
       if (projectileMeta) {
         const last = projectileMeta.lastKnownPosition;
+        const previousPosition = { x: last.x, y: last.y, z: last.z };
         const dx = body.position.x - last.x;
         const dy = body.position.y - last.y;
         const dz = body.position.z - last.z;
@@ -647,6 +652,26 @@ export class ServerWorldController {
           z: body.velocity.z
         };
         projectileMeta.lastUpdatedMs = Date.now();
+
+        if (body.velocity.y <= 0) {
+          // Supplement Cannon-es collision callbacks with a terrain height probe so fast-moving
+          // rounds cannot tunnel through the normalised heightfield between fixed timesteps.
+          const radius = this.physics.getProjectileRadius(body);
+          const currentTerrain = this.physics.getTerrainElevationAt(body.position.x, body.position.z);
+          const previousTerrain = this.physics.getTerrainElevationAt(previousPosition.x, previousPosition.z);
+          const previousReference = previousTerrain ?? currentTerrain;
+          const currentReference = currentTerrain ?? previousTerrain;
+          if (previousReference !== null && currentReference !== null) {
+            const previousClearance = previousPosition.y - radius - previousReference;
+            const currentClearance = body.position.y - radius - currentReference;
+            if (previousClearance > 0 && currentClearance <= 0) {
+              const impactY = Math.max(currentReference, body.position.y - radius);
+              const impactPoint = new Vec3(body.position.x, impactY, body.position.z);
+              this.destroyProjectile(id, impactPoint, { hitKind: 'terrain' });
+              continue;
+            }
+          }
+        }
       }
 
       if (ProjectileComponent.life[entity] <= 0 || body.position.y <= -5) {
