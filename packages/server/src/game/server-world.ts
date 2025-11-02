@@ -638,20 +638,11 @@ export class ServerWorldController {
         const dy = body.position.y - last.y;
         const dz = body.position.z - last.z;
         const segment = Math.sqrt(dx * dx + dy * dy + dz * dz);
-        if (Number.isFinite(segment) && segment > 0) {
-          projectileMeta.distanceTravelled += segment;
-        }
-        projectileMeta.lastKnownPosition = {
-          x: body.position.x,
-          y: body.position.y,
-          z: body.position.z
-        };
-        projectileMeta.lastKnownVelocity = {
-          x: body.velocity.x,
-          y: body.velocity.y,
-          z: body.velocity.z
-        };
-        projectileMeta.lastUpdatedMs = Date.now();
+
+        // Track whether we detect a terrain intersection within the current physics step so we
+        // can stop accumulating travel distance once the projectile actually touches ground.
+        let impactPoint: Vec3 | null = null;
+        let impactDistanceMultiplier = 1;
 
         if (body.velocity.y <= 0) {
           // Supplement Cannon-es collision callbacks with a terrain height probe so fast-moving
@@ -665,12 +656,42 @@ export class ServerWorldController {
             const previousClearance = previousPosition.y - radius - previousReference;
             const currentClearance = body.position.y - radius - currentReference;
             if (previousClearance > 0 && currentClearance <= 0) {
-              const impactY = Math.max(currentReference, body.position.y - radius);
-              const impactPoint = new Vec3(body.position.x, impactY, body.position.z);
-              this.destroyProjectile(id, impactPoint, { hitKind: 'terrain' });
-              continue;
+              const clearanceDelta = previousClearance - currentClearance;
+              const interpolationFactor =
+                clearanceDelta !== 0 ? previousClearance / clearanceDelta : 1;
+              const t = Math.min(Math.max(interpolationFactor, 0), 1);
+              const impactX = previousPosition.x + dx * t;
+              const impactZ = previousPosition.z + dz * t;
+              const sampledTerrain = this.physics.getTerrainElevationAt(impactX, impactZ);
+              const interpolatedTerrain =
+                previousReference + (currentReference - previousReference) * t;
+              const referenceElevation =
+                sampledTerrain ?? interpolatedTerrain ?? currentReference ?? previousReference;
+              const impactY = referenceElevation + radius;
+              impactPoint = new Vec3(impactX, impactY, impactZ);
+              impactDistanceMultiplier = t;
             }
           }
+        }
+
+        if (Number.isFinite(segment) && segment > 0) {
+          projectileMeta.distanceTravelled += segment * impactDistanceMultiplier;
+        }
+
+        const latestPosition = impactPoint
+          ? { x: impactPoint.x, y: impactPoint.y, z: impactPoint.z }
+          : { x: body.position.x, y: body.position.y, z: body.position.z };
+        projectileMeta.lastKnownPosition = latestPosition;
+        projectileMeta.lastKnownVelocity = {
+          x: body.velocity.x,
+          y: body.velocity.y,
+          z: body.velocity.z
+        };
+        projectileMeta.lastUpdatedMs = Date.now();
+
+        if (impactPoint) {
+          this.destroyProjectile(id, impactPoint, { hitKind: 'terrain' });
+          continue;
         }
       }
 
