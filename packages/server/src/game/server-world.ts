@@ -92,6 +92,7 @@ interface ServerWorldOptions {
 const GRAVITY = -9.81;
 const PROJECTILE_LIFETIME = 5;
 export const MUZZLE_TERRAIN_CLEARANCE = 0.05;
+export const MIN_PROJECTILE_RADIUS = 0.03;
 
 export class ServerWorldController {
   readonly world: GameWorld;
@@ -557,7 +558,7 @@ export class ServerWorldController {
     addComponent(this.world, ProjectileComponent, projectileEntity);
     addComponent(this.world, TransformComponent, projectileEntity);
 
-    const { muzzleX, muzzleY, muzzleZ, vx, vy, vz } = this.computeMuzzle(meta, ammo, entity);
+    const { muzzleX, muzzleY, muzzleZ, vx, vy, vz, radius } = this.computeMuzzle(meta, ammo, entity);
     TransformComponent.x[projectileEntity] = muzzleX;
     TransformComponent.y[projectileEntity] = muzzleY;
     TransformComponent.z[projectileEntity] = muzzleZ;
@@ -567,7 +568,7 @@ export class ServerWorldController {
     ProjectileComponent.life[projectileEntity] = PROJECTILE_LIFETIME;
     ProjectileComponent.shooter[projectileEntity] = entity;
 
-    const projectileBody = this.physics.createProjectileBody(Math.max(0.2, (ammo.caliber ?? 75) / 1000), 5);
+    const projectileBody = this.physics.createProjectileBody(radius, 5);
     projectileBody.position.set(muzzleX, muzzleY, muzzleZ);
     projectileBody.velocity.set(vx, vy, vz);
     projectileBody.userData = { kind: 'projectile', entity: projectileEntity, projectileId };
@@ -887,6 +888,7 @@ export class ServerWorldController {
     vx: number;
     vy: number;
     vz: number;
+    radius: number;
   } {
     const hullYaw = TransformComponent.rot[entity] || 0;
     const turretYaw = TransformComponent.turret[entity] || 0;
@@ -899,6 +901,13 @@ export class ServerWorldController {
     const sinHullYaw = Math.sin(hullYaw);
     const cosHullYaw = Math.cos(hullYaw);
     const speed = ammo.speed ?? 200;
+    const ammoCaliberMm = typeof ammo.caliber === 'number' && Number.isFinite(ammo.caliber)
+      ? ammo.caliber
+      : typeof meta.tank.cannonCaliber === 'number' && Number.isFinite(meta.tank.cannonCaliber)
+        ? meta.tank.cannonCaliber
+        : 75;
+    const caliberMetres = ammoCaliberMm / 1000;
+    const projectileRadius = Math.max(MIN_PROJECTILE_RADIUS, caliberMetres / 2);
     const barrelLen = meta.tank.barrelLength || TankStatsComponent.barrelLength[entity] || 3;
     const turretYOffset = (meta.tank.turretYPercent ?? 50) / 100 - 0.5;
     const turretXOffset = 0.5 - (meta.tank.turretXPercent ?? 50) / 100;
@@ -928,7 +937,7 @@ export class ServerWorldController {
     const halfTurretHeight = Math.max(0, turretHeight) * 0.5;
     const pivotY = baselineY + halfBodyHeight + halfTurretHeight;
     const groundY = baselineY - halfBodyHeight;
-    const clearanceY = groundY + MUZZLE_TERRAIN_CLEARANCE;
+    const clearanceY = groundY + MUZZLE_TERRAIN_CLEARANCE + projectileRadius;
 
     const muzzleDirectionX = -sinYaw * cosPitch;
     const muzzleDirectionY = sinPitch;
@@ -966,7 +975,7 @@ export class ServerWorldController {
     const vx = muzzleDirectionX * speed;
     const vy = muzzleDirectionY * speed;
     const vz = muzzleDirectionZ * speed;
-    return { muzzleX, muzzleY, muzzleZ, vx, vy, vz };
+    return { muzzleX, muzzleY, muzzleZ, vx, vy, vz, radius: projectileRadius };
   }
 
   private getYawFromBody(body: PhysicsBody): number {
