@@ -106,6 +106,34 @@ export class PhysicsWorldManager {
     const columns = grid[0]?.length ?? 0;
     if (columns < 2) return null;
 
+    // Convert every elevation sample to a finite number while tracking extrema so the final
+    // physics mesh can be recentered around the renderer's zero-height plane. Cannon bodies are
+    // happiest when massless shapes rest near the origin, so normalising prevents the terrain
+    // from hovering metres above (or below) projectiles whenever content authors offset the map.
+    const sanitisedGrid: number[][] = [];
+    let minElevation = Infinity;
+    let maxElevation = -Infinity;
+    for (let row = 0; row < grid.length; row += 1) {
+      const currentRow = grid[row];
+      if (!Array.isArray(currentRow) || currentRow.length !== columns) {
+        return null;
+      }
+      const sanitisedRow: number[] = [];
+      for (let col = 0; col < columns; col += 1) {
+        const sample = currentRow[col];
+        const numeric = typeof sample === 'number' && Number.isFinite(sample) ? sample : Number(sample) || 0;
+        if (numeric < minElevation) minElevation = numeric;
+        if (numeric > maxElevation) maxElevation = numeric;
+        sanitisedRow.push(numeric);
+      }
+      sanitisedGrid.push(sanitisedRow);
+    }
+
+    const midpoint = Number.isFinite(minElevation) && Number.isFinite(maxElevation)
+      ? (minElevation + maxElevation) / 2
+      : 0;
+    const normalisedGrid = sanitisedGrid.map((row) => row.map((value) => value - midpoint));
+
     const widthKilometres = Number(definition.size?.x);
     const depthKilometres = Number(definition.size?.y);
     // Terrain definitions describe extents in kilometres for content tooling, so convert to metres
@@ -122,9 +150,7 @@ export class PhysicsWorldManager {
 
     const gridIsSquare = Math.abs(columns - grid.length) <= 1;
     if (gridIsSquare) {
-      const matrix = grid.map((row) =>
-        row.map((value) => (typeof value === 'number' && Number.isFinite(value) ? value : Number(value) || 0))
-      );
+      const matrix = normalisedGrid;
       // With width/depth now in metres, elementSize also represents metres between samples.
       const elementSize = width / Math.max(1, columns - 1);
       const body: PhysicsBody = new Body({ mass: 0 });
@@ -141,12 +167,10 @@ export class PhysicsWorldManager {
     const zOffset = depth / 2;
 
     for (let row = 0; row < grid.length; row += 1) {
-      const currentRow = grid[row];
-      if (!currentRow || currentRow.length !== columns) return null;
+      const currentRow = normalisedGrid[row];
       for (let col = 0; col < columns; col += 1) {
         const x = col * xStep - xOffset;
-        const sample = currentRow[col];
-        const y = typeof sample === 'number' && Number.isFinite(sample) ? sample : Number(sample) || 0;
+        const y = currentRow[col];
         const z = row * zStep - zOffset;
         vertices.push(x, y, z);
       }
