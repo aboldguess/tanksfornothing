@@ -643,6 +643,9 @@ export class ServerWorldController {
         // can stop accumulating travel distance once the projectile actually touches ground.
         let impactPoint: Vec3 | null = null;
         let impactDistanceMultiplier = 1;
+        let pendingHitKind: ExplosionTelemetry['hitKind'] | null = null;
+        let pendingHitSession: string | null = null;
+        let pendingTankEntity: number | null = null;
 
         if (body.velocity.y <= 0) {
           // Supplement Cannon-es collision callbacks with a terrain height probe so fast-moving
@@ -674,6 +677,34 @@ export class ServerWorldController {
           }
         }
 
+        if (!impactPoint) {
+          const radius = this.physics.getProjectileRadius(body);
+          const shooterEntity = ProjectileComponent.shooter[entity] ?? null;
+          for (const targetMeta of this.metadata.values()) {
+            const targetEntity = targetMeta.entity;
+            if (targetEntity === shooterEntity) {
+              continue;
+            }
+            if (!hasComponent(this.world, TransformComponent, targetEntity)) {
+              continue;
+            }
+            const intersection = this.segmentIntersectsTank(
+              previousPosition,
+              body.position,
+              radius,
+              targetMeta
+            );
+            if (intersection) {
+              impactPoint = intersection.point;
+              impactDistanceMultiplier = intersection.t;
+              pendingHitKind = 'tank';
+              pendingHitSession = targetMeta.sessionId;
+              pendingTankEntity = targetEntity;
+              break;
+            }
+          }
+        }
+
         if (Number.isFinite(segment) && segment > 0) {
           projectileMeta.distanceTravelled += segment * impactDistanceMultiplier;
         }
@@ -690,7 +721,33 @@ export class ServerWorldController {
         projectileMeta.lastUpdatedMs = Date.now();
 
         if (impactPoint) {
-          this.destroyProjectile(id, impactPoint, { hitKind: 'terrain' });
+          if (pendingTankEntity !== null && pendingHitKind === 'tank') {
+            const remaining = this.applyDamage(pendingTankEntity, projectileMeta);
+            const victimMeta = this.getMetadataForEntity(pendingTankEntity);
+            if (victimMeta && this.activeDamage) {
+              this.activeDamage.push({
+                sessionId: victimMeta.sessionId,
+                health: remaining,
+                shooter: projectileMeta.shooterSessionId
+              });
+              if (remaining <= 0 && this.activeKills) {
+                this.activeKills.push({
+                  shooter: projectileMeta.shooterSessionId,
+                  victim: victimMeta.sessionId
+                });
+              }
+            }
+            this.destroyProjectile(id, impactPoint, {
+              hitKind: 'tank',
+              hitSessionId: pendingHitSession ?? null
+            });
+            continue;
+          }
+
+          this.destroyProjectile(id, impactPoint, {
+            hitKind: pendingHitKind ?? 'terrain',
+            hitSessionId: pendingHitSession ?? null
+          });
           continue;
         }
       }
@@ -917,6 +974,119 @@ export class ServerWorldController {
     const siny = 2 * (w * y + z * x);
     const cosy = 1 - 2 * (y * y + z * z);
     return Math.atan2(siny, cosy);
+  }
+
+  private segmentIntersectsTank(
+    start: { x: number; y: number; z: number },
+    end: { x: number; y: number; z: number },
+    radius: number,
+    target: PlayerMetadata
+  ): { t: number; point: Vec3 } | null {
+    const entity = target.entity;
+    if (!hasComponent(this.world, TransformComponent, entity)) {
+      return null;
+    }
+
+    const centerX = TransformComponent.x[entity] || 0;
+    const centerY = TransformComponent.y[entity] || 0;
+    const centerZ = TransformComponent.z[entity] || 0;
+    const yaw = TransformComponent.rot[entity] || 0;
+
+    const bodyWidth =
+      Number.isFinite(TankStatsComponent.bodyWidth[entity])
+        ? TankStatsComponent.bodyWidth[entity]
+        : target.tank.bodyWidth || 0;
+    const turretWidth =
+      Number.isFinite(TankStatsComponent.turretWidth[entity])
+        ? TankStatsComponent.turretWidth[entity]
+        : target.tank.turretWidth || 0;
+    const bodyLength =
+      Number.isFinite(TankStatsComponent.bodyLength[entity])
+        ? TankStatsComponent.bodyLength[entity]
+        : target.tank.bodyLength || 0;
+    const turretLength =
+      Number.isFinite(TankStatsComponent.turretLength[entity])
+        ? TankStatsComponent.turretLength[entity]
+        : target.tank.turretLength || 0;
+    const bodyHeight =
+      Number.isFinite(TankStatsComponent.bodyHeight[entity])
+        ? TankStatsComponent.bodyHeight[entity]
+        : target.tank.bodyHeight || 0;
+    const turretHeight =
+      Number.isFinite(TankStatsComponent.turretHeight[entity])
+        ? TankStatsComponent.turretHeight[entity]
+        : target.tank.turretHeight || 0;
+
+    const halfBodyHeight = Math.max(0, bodyHeight) * 0.5;
+    const positiveTurretHeight = Math.max(0, turretHeight);
+    const halfWidth = Math.max(bodyWidth, turretWidth) * 0.5 + radius;
+    const halfLength = Math.max(bodyLength, turretLength) * 0.5 + radius;
+    const minY = -halfBodyHeight - radius;
+    const maxY = halfBodyHeight + positiveTurretHeight + radius;
+
+    const cosYaw = Math.cos(-yaw);
+    const sinYaw = Math.sin(-yaw);
+
+    const toLocal = (point: { x: number; y: number; z: number }) => {
+      const lx = point.x - centerX;
+      const ly = point.y - centerY;
+      const lz = point.z - centerZ;
+      return {
+        x: lx * cosYaw - lz * sinYaw,
+        y: ly,
+        z: lx * sinYaw + lz * cosYaw
+      };
+    };
+
+    const fromLocal = (point: { x: number; y: number; z: number }) => {
+      const cosYawInv = Math.cos(yaw);
+      const sinYawInv = Math.sin(yaw);
+      const wx = point.x * cosYawInv - point.z * sinYawInv + centerX;
+      const wy = point.y + centerY;
+      const wz = point.x * sinYawInv + point.z * cosYawInv + centerZ;
+      return new Vec3(wx, wy, wz);
+    };
+
+    const localStart = toLocal(start);
+    const localEnd = toLocal(end);
+    const dir = {
+      x: localEnd.x - localStart.x,
+      y: localEnd.y - localStart.y,
+      z: localEnd.z - localStart.z
+    };
+
+    let tMin = 0;
+    let tMax = 1;
+
+    const updateInterval = (origin: number, direction: number, min: number, max: number): boolean => {
+      if (Math.abs(direction) < 1e-8) {
+        return origin >= min && origin <= max;
+      }
+      const invD = 1 / direction;
+      let t1 = (min - origin) * invD;
+      let t2 = (max - origin) * invD;
+      if (t1 > t2) {
+        const temp = t1;
+        t1 = t2;
+        t2 = temp;
+      }
+      if (t1 > tMin) tMin = t1;
+      if (t2 < tMax) tMax = t2;
+      return tMin <= tMax;
+    };
+
+    if (!updateInterval(localStart.x, dir.x, -halfWidth, halfWidth)) return null;
+    if (!updateInterval(localStart.y, dir.y, minY, maxY)) return null;
+    if (!updateInterval(localStart.z, dir.z, -halfLength, halfLength)) return null;
+
+    if (tMin < 0 || tMin > 1) return null;
+
+    const hitLocal = {
+      x: localStart.x + dir.x * tMin,
+      y: localStart.y + dir.y * tMin,
+      z: localStart.z + dir.z * tMin
+    };
+    return { t: tMin, point: fromLocal(hitLocal) };
   }
 
   private estimateTankMass(tank: TankDefinition): number {
