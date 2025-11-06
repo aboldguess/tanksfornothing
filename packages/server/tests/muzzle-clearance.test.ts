@@ -177,7 +177,9 @@ test('muzzle origin rotates asymmetric turret offsets with hull yaw', () => {
   const hullYaw = TransformComponent.rot[entity] || 0;
   const turretYaw = TransformComponent.turret[entity] || 0;
   const yaw = hullYaw + turretYaw;
-  const pitch = TransformComponent.gun[entity] || 0;
+  const rawPitch = TransformComponent.gun[entity] || 0;
+  // Mirror the server's convention shift where positive pitch indicates elevation.
+  const pitch = -rawPitch;
   const cosPitch = Math.cos(pitch);
   const sinPitch = Math.sin(pitch);
   const sinYaw = Math.sin(yaw);
