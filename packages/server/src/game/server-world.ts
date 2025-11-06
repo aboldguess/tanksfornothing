@@ -972,9 +972,35 @@ export class ServerWorldController {
     // the correct world-space position even when the chassis is rotated independently of the turret.
     const rotatedOffsetX = offsetRight * cosHullYaw - offsetForward * sinHullYaw;
     const rotatedOffsetZ = offsetRight * sinHullYaw + offsetForward * cosHullYaw;
-    const muzzleX = TransformComponent.x[entity] + rotatedOffsetX + muzzleDirectionX * effectiveBarrelLen;
-    const muzzleY = pivotY + muzzleDirectionY * effectiveBarrelLen;
-    const muzzleZ = TransformComponent.z[entity] + rotatedOffsetZ + muzzleDirectionZ * effectiveBarrelLen;
+    let muzzleTravel = effectiveBarrelLen;
+    const muzzleBaseX = TransformComponent.x[entity] + rotatedOffsetX;
+    const muzzleBaseZ = TransformComponent.z[entity] + rotatedOffsetZ;
+    let muzzleX = muzzleBaseX + muzzleDirectionX * muzzleTravel;
+    let muzzleY = pivotY + muzzleDirectionY * muzzleTravel;
+    let muzzleZ = muzzleBaseZ + muzzleDirectionZ * muzzleTravel;
+
+    if (muzzleY < clearanceY) {
+      const previousTravel = muzzleTravel;
+      if (Math.abs(muzzleDirectionY) > 1e-5) {
+        const clearanceTravel = (clearanceY - pivotY) / muzzleDirectionY;
+        muzzleTravel = Math.max(0, Math.min(barrelLen, clearanceTravel));
+      } else {
+        muzzleTravel = 0;
+      }
+
+      muzzleX = muzzleBaseX + muzzleDirectionX * muzzleTravel;
+      muzzleY = clearanceY;
+      muzzleZ = muzzleBaseZ + muzzleDirectionZ * muzzleTravel;
+
+      if (muzzleTravel !== previousTravel) {
+        console.debug('Raising depressed muzzle to maintain clearance floor', {
+          entity,
+          requestedLength: barrelLen,
+          adjustedLength: muzzleTravel,
+          clearanceY
+        });
+      }
+    }
     const vx = muzzleDirectionX * speed;
     const vy = muzzleDirectionY * speed;
     const vz = muzzleDirectionZ * speed;
