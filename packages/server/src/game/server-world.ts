@@ -893,10 +893,10 @@ export class ServerWorldController {
     const hullYaw = TransformComponent.rot[entity] || 0;
     const turretYaw = TransformComponent.turret[entity] || 0;
     const yaw = hullYaw + turretYaw;
-    const rawPitch = TransformComponent.gun[entity] || 0;
-    // Client gun transforms report positive rotation when depressing the barrel. Invert the
-    // sign so physics calculations continue using the conventional "positive pitch aims up".
-    const pitch = -rawPitch;
+    const pitch = TransformComponent.gun[entity] || 0;
+    // By convention a positive pitch elevates the barrel while negative angles depress it.
+    // Preserve that sign so the projectile kinematics align with the client transform data
+    // without requiring additional conversion when spawning shells.
     const cosPitch = Math.cos(pitch);
     const sinPitch = Math.sin(pitch);
     const sinYaw = Math.sin(yaw);
