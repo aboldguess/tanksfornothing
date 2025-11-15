@@ -8,6 +8,10 @@ import assert from 'node:assert';
 
 process.env.PORT = 0; // use random available port
 const { server } = await import('../tanksfornothing-server.js');
+// Mirror the main entrypoint behaviour by manually starting the listener for tests.
+if (!server.listening) {
+  server.listen(process.env.PORT || 0);
+}
 await new Promise(resolve => server.on('listening', resolve));
 const base = `http://localhost:${server.address().port}`;
 
