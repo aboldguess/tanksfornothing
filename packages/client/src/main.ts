@@ -480,6 +480,21 @@ function attachRoomListeners(activeRoom) {
     bindSchemaCollections(activeRoom.state);
   }
 
+  // Colyseus exposes onStateChange as a Signal instance; subscribe via .add so we
+  // receive the first state payload even when players/projectiles populate lazily.
+  const stateChangeSignal = activeRoom.onStateChange;
+  if (stateChangeSignal && typeof stateChangeSignal.add === 'function') {
+    const attemptSchemaBinding = (state) => {
+      if (!stateListenersBound) {
+        bindSchemaCollections(state);
+        if (stateListenersBound && typeof stateChangeSignal.remove === 'function') {
+          stateChangeSignal.remove(attemptSchemaBinding);
+        }
+      }
+    };
+    stateChangeSignal.add(attemptSchemaBinding);
+  } else {
+    console.warn('Colyseus room missing onStateChange signal helpers; multiplayer state may not sync correctly');
   if (typeof activeRoom.onStateChange === 'function') {
     activeRoom.onStateChange((state) => {
       if (!stateListenersBound) {
