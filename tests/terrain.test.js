@@ -32,6 +32,11 @@ const seed = {
 await fs.writeFile(terrainFile, JSON.stringify(seed, null, 2));
 
 const { server } = await import('../tanksfornothing-server.js');
+// The production entrypoint only starts listening when executed directly, so tests
+// explicitly bind to an ephemeral port after importing the shared server instance.
+if (!server.listening) {
+  server.listen(process.env.PORT || 0);
+}
 await new Promise(resolve => server.on('listening', resolve));
 const base = `http://localhost:${server.address().port}`;
 

@@ -22,6 +22,7 @@
   "type": "module",
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "cannon-es": "^0.20.0",
     "cookie": "^0.6.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.1.0",

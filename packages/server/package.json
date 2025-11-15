@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "Summary: Dedicated Tanks for Nothing server workspace manifest that isolates physics and game-loop dependencies.",
+    "Structure: Defines cannon-es runtime dependency and TypeScript tooling used to compile the shared server world module.",
+    "Usage: Run 'npm install' within packages/server to install dependencies, then 'npm run build' to emit dist/ JavaScript." 
+  ],
+  "name": "@tanksfornothing/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc --project tsconfig.json"
+  },
+  "dependencies": {
+    "cannon-es": "^0.20.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

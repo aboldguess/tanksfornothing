@@ -4,11 +4,11 @@
 // updates, handles image uploads for ammo types, stores flag emojis for nations,
 // persists admin-defined tanks, nations and terrain details (including capture-the-flag positions)
 // to disk and enforces Battle Rating constraints when players join. Tank definitions
-// now also store an ammoCapacity value to limit carried rounds and the server
-// tracks turret and gun orientation so remote players render complete cannons
-// and projectiles spawn from the muzzle using that orientation and arc under gravity.
+// now also store an ammoCapacity value to limit carried rounds and the server orchestrates
+// a cannon-es powered physics world so turret orientation and muzzle velocity generate
+// authoritative trajectories and collision events for tanks and shells.
 // Structure: configuration -> express setup -> socket handlers -> in-memory stores ->
-//            persistence helpers -> projectile physics loop -> server start.
+//            persistence helpers -> physics world integration -> server start.
 // Usage: Run with `node tanksfornothing-server.js` or `npm start`. Set PORT env to change port.
 // ---------------------------------------------------------------------------
 
@@ -24,6 +24,7 @@ import multer from 'multer';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { generateGentleHills } from './utils/terrain-noise.js';
+import ServerWorld from './packages/server/dist/game/server-world.js';
 
 const app = express();
 const server = http.createServer(app);
@@ -91,10 +92,10 @@ const defaultAmmo = [
     explosion: 50
   }
 ];
-// Active projectile list; each projectile contains position, velocity and metadata
-const projectiles = new Map(); // id -> projectile state
-// Gravity acceleration applied to shells (m/s^2)
-const GRAVITY = -9.81;
+// Authoritative physics controller now powered by cannon-es.
+const physicsWorld = new ServerWorld();
+// Track metadata required for gameplay (damage lookup, shooter attribution).
+const projectileDetails = new Map(); // id -> { ammo: string, shooter: string }
 // Terrains now include metadata so map listings can show thumbnails and size
 function defaultFlags() {
   return {
@@ -704,7 +705,14 @@ app.post('/api/restart', requireAdmin, async (req, res) => {
   currentTerrain = idx;
   terrain = terrains[currentTerrain].name;
   await saveTerrains();
+  for (const id of players.keys()) {
+    physicsWorld.removeTank(id);
+  }
   players.clear();
+  for (const id of projectileDetails.keys()) {
+    physicsWorld.removeProjectile(id, 'manual');
+  }
+  projectileDetails.clear();
   baseBR = null;
   io.emit('restart');
   io.emit('terrain', terrain);
@@ -755,6 +763,22 @@ io.on('connection', (socket) => {
         ammoRemaining: tank.ammoCapacity ?? 0,
         lastFire: 0
       });
+      physicsWorld.registerTank(
+        socket.id,
+        {
+          width: tank.bodyWidth ?? 3,
+          height: tank.bodyHeight ?? 2,
+          length: tank.bodyLength ?? 5,
+          mass: tank.mass ?? tank.weight ?? 30000
+        },
+        {
+          position: { x: 0, y: 2, z: 0 },
+          velocity: { x: 0, y: 0, z: 0 },
+          rotation: 0,
+          turret: 0,
+          gun: 0
+        }
+      );
       // Synchronize the newcomer with any players already in the game world.
       // Send existing player info before broadcasting the new arrival so the
       // client can immediately render all tanks.
@@ -774,7 +798,31 @@ io.on('connection', (socket) => {
   socket.on('update', (state) => {
     const p = players.get(socket.id);
     if (!p) return;
-    Object.assign(p, state);
+    const nextState = {
+      position: {
+        x: typeof state.x === 'number' ? state.x : p.x ?? 0,
+        y: typeof state.y === 'number' ? state.y : p.y ?? 0,
+        z: typeof state.z === 'number' ? state.z : p.z ?? 0
+      },
+      velocity: {
+        x: typeof state.vx === 'number' ? state.vx : 0,
+        y: typeof state.vy === 'number' ? state.vy : 0,
+        z: typeof state.vz === 'number' ? state.vz : 0
+      },
+      rotation: typeof state.rot === 'number' ? state.rot : p.rot ?? 0,
+      turret: typeof state.turret === 'number' ? state.turret : p.turret ?? 0,
+      gun: typeof state.gun === 'number' ? state.gun : p.gun ?? 0
+    };
+    physicsWorld.updateTankState(socket.id, nextState);
+    p.x = nextState.position.x;
+    p.y = nextState.position.y;
+    p.z = nextState.position.z;
+    p.vx = nextState.velocity.x;
+    p.vy = nextState.velocity.y;
+    p.vz = nextState.velocity.z;
+    p.rot = nextState.rotation;
+    p.turret = nextState.turret;
+    p.gun = nextState.gun;
     socket.broadcast.emit('player-update', { id: socket.id, state: p });
   });
 
@@ -812,81 +860,163 @@ io.on('connection', (socket) => {
       shooter.z +
       (0.5 - shooter.turretXPercent / 100) * shooter.bodyLength -
       cosYaw * cosPitch * barrelLen;
-    const projectile = {
+    const projectileState = physicsWorld.spawnProjectile({
       id,
-      x: muzzleX,
-      y: muzzleY,
-      z: muzzleZ,
-      vx: -sinYaw * cosPitch * speed,
-      vy: Math.sin(pitch) * speed,
-      vz: -cosYaw * cosPitch * speed,
+      shooterId: socket.id,
+      ammoId: ammoDef.name,
+      position: { x: muzzleX, y: muzzleY, z: muzzleZ },
+      velocity: {
+        x: -sinYaw * cosPitch * speed,
+        y: Math.sin(pitch) * speed,
+        z: -cosYaw * cosPitch * speed
+      },
+      radius: ammoDef.collisionRadius ?? ammoDef.radius ?? 0.25,
+      mass: ammoDef.mass ?? ammoDef.shellMass ?? 2,
+      lifeMs:
+        typeof ammoDef.lifeSeconds === 'number'
+          ? ammoDef.lifeSeconds * 1000
+          : typeof ammoDef.lifeMs === 'number'
+            ? ammoDef.lifeMs
+            : 5000
+    });
+    projectileDetails.set(projectileState.id, {
+      ammo: ammoDef.name,
+      shooter: socket.id
+    });
+    io.emit('projectile-fired', {
+      id: projectileState.id,
+      x: projectileState.position.x,
+      y: projectileState.position.y,
+      z: projectileState.position.z,
+      vx: projectileState.velocity.x,
+      vy: projectileState.velocity.y,
+      vz: projectileState.velocity.z,
+      ammo: ammoDef.name,
+      shooter: socket.id
+    });
+    // Debug: log projectile to server console to trace firing events.
+    console.debug('Projectile fired', {
+      id: projectileState.id,
       ammo: ammoDef.name,
       shooter: socket.id,
-      life: 5
-    };
-    projectiles.set(id, projectile);
-    io.emit('projectile-fired', projectile);
-    // Debug: log projectile to server console to trace firing events.
-    console.debug('Projectile fired', projectile);
+      position: projectileState.position,
+      velocity: projectileState.velocity
+    });
   });
 
   socket.on('disconnect', () => {
     console.log('player disconnected', socket.id);
     players.delete(socket.id);
+    physicsWorld.removeTank(socket.id);
     io.emit('player-left', socket.id);
     if (players.size === 0) baseBR = null; // reset BR when game empty
   });
 });
 
-// Basic projectile physics loop. Moves projectiles forward and checks for
-// simple spherical collisions with players, applying damage on impact.
+// Physics loop: advances the cannon-es world, applies collision damage and emits
+// authoritative snapshots to clients.
+const PHYSICS_DT = 1 / 60;
 setInterval(() => {
-  const dt = 0.05; // 20 ticks per second
-  for (const [id, p] of projectiles) {
-    p.vy += GRAVITY * dt;
-    p.x += p.vx * dt;
-    p.y += p.vy * dt;
-    p.z += p.vz * dt;
-    if (p.y <= 0) {
-      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-      projectiles.delete(id);
-      continue;
-    }
-    for (const [pid, player] of players) {
-      if (pid === p.shooter) continue;
-      const dx = player.x - p.x;
-      const dy = player.y - p.y;
-      const dz = player.z - p.z;
-      if (Math.sqrt(dx * dx + dy * dy + dz * dz) < 2) {
-        const ammoDef = ammo.find((a) => a.name === p.ammo) || {};
-        const armor = player.armor || 0;
-        const dmg = ammoDef.damage ?? ammoDef.armorPen ?? 10;
-        const pen = ammoDef.penetration ?? ammoDef.pen0 ?? 0;
-        const explosion = ammoDef.explosion ?? ammoDef.explosionRadius ?? 0;
-        let total = pen > armor ? dmg : dmg / 2;
-        total += explosion;
-        player.health = Math.max(0, (player.health ?? 100) - total);
-        io.emit('tank-damaged', { id: pid, health: player.health });
-        if (player.health <= 0) {
-          const shooter = players.get(p.shooter);
-          const shooterUser = shooter && users.get(shooter.username);
-          const victimUser = users.get(player.username);
-          if (shooterUser) shooterUser.stats.kills += 1;
-          if (victimUser) victimUser.stats.deaths += 1;
-          saveUsers();
-        }
-        io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-        projectiles.delete(id);
-        break;
+  const snapshot = physicsWorld.step(PHYSICS_DT);
+  const now = Date.now();
+  const removedIds = new Set();
+
+  for (const tank of snapshot.tanks) {
+    const player = players.get(tank.id);
+    if (!player) continue;
+    player.x = tank.position.x;
+    player.y = tank.position.y;
+    player.z = tank.position.z;
+    player.vx = tank.velocity.x;
+    player.vy = tank.velocity.y;
+    player.vz = tank.velocity.z;
+    player.rot = tank.rotation;
+    player.turret = tank.turret;
+    player.gun = tank.gun;
+  }
+
+  for (const removal of snapshot.removedProjectiles) {
+    removedIds.add(removal.id);
+    projectileDetails.delete(removal.id);
+    io.emit('projectile-exploded', {
+      id: removal.id,
+      x: removal.position.x,
+      y: removal.position.y,
+      z: removal.position.z,
+      reason: removal.reason,
+      shooter: removal.metadata.shooterId
+    });
+  }
+
+  for (const collision of snapshot.collisions) {
+    if (collision.type === 'projectile-tank') {
+      if (removedIds.has(collision.projectileId)) continue;
+      const target = collision.targetId ? players.get(collision.targetId) : undefined;
+      const detail = projectileDetails.get(collision.projectileId);
+      if (!target || !detail) continue;
+      if (detail.shooter === collision.targetId) {
+        // Ignore the originating tank so muzzle overlaps do not self-damage the shooter.
+        continue;
+      }
+      const ammoDef = ammo.find((a) => a.name === detail.ammo) || {};
+      const armor = target.armor || 0;
+      const dmg = ammoDef.damage ?? ammoDef.armorPen ?? 10;
+      const pen = ammoDef.penetration ?? ammoDef.pen0 ?? 0;
+      const explosion = ammoDef.explosion ?? ammoDef.explosionRadius ?? 0;
+      let total = pen > armor ? dmg : dmg / 2;
+      total += explosion;
+      target.health = Math.max(0, (target.health ?? 100) - total);
+      io.emit('tank-damaged', { id: collision.targetId, health: target.health });
+      if (target.health <= 0) {
+        const shooterPlayer = players.get(detail.shooter);
+        const shooterUser = shooterPlayer && users.get(shooterPlayer.username);
+        const victimUser = users.get(target.username);
+        if (shooterUser) shooterUser.stats.kills += 1;
+        if (victimUser) victimUser.stats.deaths += 1;
+        saveUsers();
+      }
+      const removal = physicsWorld.removeProjectile(collision.projectileId, 'collision');
+      if (removal) {
+        removedIds.add(removal.id);
+        projectileDetails.delete(removal.id);
+        io.emit('projectile-exploded', {
+          id: removal.id,
+          x: removal.position.x,
+          y: removal.position.y,
+          z: removal.position.z,
+          reason: removal.reason,
+          shooter: removal.metadata.shooterId,
+          target: collision.targetId,
+          impactVelocity: collision.relativeVelocity
+        });
+      }
+    } else if (collision.type === 'projectile-ground') {
+      if (removedIds.has(collision.projectileId)) continue;
+      const removal = physicsWorld.removeProjectile(collision.projectileId, 'collision');
+      if (removal) {
+        removedIds.add(removal.id);
+        projectileDetails.delete(removal.id);
+        io.emit('projectile-exploded', {
+          id: removal.id,
+          x: removal.position.x,
+          y: removal.position.y,
+          z: removal.position.z,
+          reason: removal.reason,
+          impactVelocity: collision.relativeVelocity
+        });
       }
     }
-    p.life -= dt;
-    if (projectiles.has(id) && p.life <= 0) {
-      io.emit('projectile-exploded', { id, x: p.x, y: p.y, z: p.z });
-      projectiles.delete(id);
-    }
   }
-}, 50).unref();
+
+  const activeProjectiles = snapshot.projectiles.filter((p) => !removedIds.has(p.id));
+
+  io.emit('colyseus-snapshot', {
+    timestamp: now,
+    tanks: snapshot.tanks,
+    projectiles: activeProjectiles,
+    collisions: snapshot.collisions
+  });
+}, Math.round(PHYSICS_DT * 1000)).unref();
 
 if (process.argv[1] === __filename) {
   server.listen(PORT, () => console.log(`Tanks for Nothing server running on port ${PORT}`));
