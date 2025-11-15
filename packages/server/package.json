@@ -25,6 +25,7 @@
     "@tanksfornothing/shared": "^1.0.0",
     "bcryptjs": "^3.0.2",
     "bitecs": "^0.3.40",
+    "cannon-es": "^0.20.0",
     "colyseus": "^0.16.5",
     "cookie": "^1.0.2",
     "cookie-parser": "^1.4.7",

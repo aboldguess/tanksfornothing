@@ -11,8 +11,9 @@
 //          turret and gun lag behind to emulate realistic traverse. Projectiles now drop
 //          under gravity. Remote players are represented with simple meshes that now
 //          include a visible cannon barrel and update as network events arrive so
-//          everyone shares the same battlefield. HUD displays current ammo selections
-//          and remaining rounds.
+//          everyone shares the same battlefield. HUD displays current ammo selections,
+//          auto-distributes lobby loadouts with live capacity feedback, and local firing
+//          now layers in muzzle flashes plus audio for instant feedback.
 // Structure: lobby data fetch -> scene setup -> physics setup -> input handling ->
 //             firing helpers -> movement update -> animation loop -> optional networking.
 // Usage: Registered as the Vite entry module (see ../public/index.html). Relies on bundled
@@ -42,6 +43,7 @@ import { RemoteWorldRenderer } from './remote-world';
 
 import './nav';
 import { initHUD, updateHUD, updateAmmoHUD, showCrosshair, updateCooldownHUD } from './hud';
+import { initProjectileDebugOverlay, updateProjectileDebugOverlay } from './projectile-debug-overlay';
 import { buildGroundTexture } from './ground-textures';
 
 // Utility: render fatal errors directly on screen for easier debugging.
@@ -70,16 +72,117 @@ window.addEventListener('unhandledrejection', (e) => {
 // Render a brief explosion effect at the given world position for feedback
 function renderExplosion(position) {
   if (!scene) return;
-  const geom = new THREE.SphereGeometry(1, 16, 16);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+  const geom = new THREE.SphereGeometry(1.2, 24, 24);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffd180,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 20;
   mesh.position.copy(position);
+  mesh.scale.setScalar(0.25);
   scene.add(mesh);
+  explosionBursts.push({ mesh, material: mat, lifetime: 0.6, age: 0 });
+}
+
+// Scratch buffers shared by muzzle flash helpers so we avoid allocating vectors
+// every time the player fires. The direction vector is normalised before use so
+// callers may pass any non-zero magnitude without worrying about side effects.
+const muzzleFlashScratch = {
+  offset: new THREE.Vector3(),
+  direction: new THREE.Vector3()
+};
+
+// Lightweight muzzle flash: a short-lived additive sprite and point light at
+// the muzzle end gives instant visual feedback even before the server confirms
+// the projectile spawn.
+function renderMuzzleFlash(position, direction) {
+  if (!scene) return;
+  const flashMaterial = new THREE.SpriteMaterial({
+    color: 0xfff2a6,
+    blending: THREE.AdditiveBlending,
+    transparent: true,
+    depthWrite: false
+  });
+  const flash = new THREE.Sprite(flashMaterial);
+  flash.scale.set(0.9, 0.9, 0.9);
+  muzzleFlashScratch.direction.copy(direction).normalize();
+  muzzleFlashScratch.offset
+    .copy(muzzleFlashScratch.direction)
+    .multiplyScalar(0.8);
+  flash.position.copy(position).add(muzzleFlashScratch.offset);
+  scene.add(flash);
+
+  const light = new THREE.PointLight(0xffbb66, 2.2, 10, 2);
+  light.position.copy(flash.position);
+  scene.add(light);
+
   setTimeout(() => {
-    scene.remove(mesh);
-    geom.dispose();
-    mat.dispose();
-  }, 500);
+    scene.remove(flash);
+    scene.remove(light);
+    flashMaterial.dispose();
+  }, 80);
+}
+
+let audioContext = null;
+
+// Ensure a Web Audio context exists and is resumed. Browsers suspend contexts
+// until the user interacts with the page, so this helper gracefully handles
+// the common failure cases and logs rather than throwing.
+function ensureAudioContext() {
+  try {
+    if (!audioContext) {
+      const Ctor = window.AudioContext || window.webkitAudioContext;
+      audioContext = Ctor ? new Ctor() : null;
+    }
+    if (audioContext && audioContext.state === 'suspended') {
+      audioContext.resume().catch((err) => console.warn('Audio resume failed', err));
+    }
+  } catch (error) {
+    console.warn('AudioContext initialisation failed', error);
+    audioContext = null;
+  }
+  return audioContext;
+}
+
+// Fire a short, percussive cannon blast combining filtered noise with a low
+// sawtooth oscillator. The envelope keeps the sound tight and avoids clipping.
+function playCannonSound() {
+  const ctx = ensureAudioContext();
+  if (!ctx) return;
+  const now = ctx.currentTime;
+  try {
+    const noiseBuffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.25), ctx.sampleRate);
+    const channel = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < channel.length; i += 1) {
+      const fade = 1 - i / channel.length;
+      channel[i] = (Math.random() * 2 - 1) * fade * fade;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.setValueAtTime(0.35, now);
+    noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.25);
+    noiseSource.connect(noiseGain).connect(ctx.destination);
+    noiseSource.start(now);
+    noiseSource.stop(now + 0.25);
+
+    const osc = ctx.createOscillator();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(65, now);
+    osc.frequency.exponentialRampToValueAtTime(30, now + 0.25);
+    const oscGain = ctx.createGain();
+    oscGain.gain.setValueAtTime(0.25, now);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+    osc.connect(oscGain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  } catch (error) {
+    console.warn('Cannon sound playback failed', error);
+  }
 }
 
 // Resolve Colyseus endpoint with awareness of build-time env vars so the development
@@ -125,7 +228,32 @@ try {
 // Client-side ammo handling
 let playerAmmo = [];
 let selectedAmmo = null;
-const projectiles = new Map(); // id -> { mesh }
+const projectiles = new Map(); // id -> { mesh, material }
+// Client-side tracer spheres rendered immediately upon firing so clicks always
+// yield visual feedback, even when the server is slow or unreachable.
+const localProjectiles: Array<{
+  mesh: THREE.Mesh;
+  material: THREE.Material & { opacity?: number };
+  velocity: THREE.Vector3;
+  lifetime: number;
+}> = [];
+// Explosion visuals fade over a short lifetime to keep impact feedback obvious.
+const explosionBursts: Array<{
+  mesh: THREE.Mesh;
+  material: THREE.Material & { opacity?: number };
+  lifetime: number;
+  age: number;
+}> = [];
+// Scratch buffers reused when spawning tracers to avoid per-shot allocations.
+const muzzleScratch = {
+  position: new THREE.Vector3(),
+  direction: new THREE.Vector3(0, 0, -1),
+  quaternion: new THREE.Quaternion(),
+  velocity: new THREE.Vector3()
+};
+const LOCAL_PROJECTILE_LIFETIME = 2; // seconds before a tracer despawns
+const LOCAL_PROJECTILE_SPEED = 120; // metres per second for the visual tracer
+const LOCAL_PROJECTILE_GRAVITY = 9.81; // m/s^2 downward acceleration
 let playerHealth = 100;
 let remoteWorld = null;
 
@@ -139,6 +267,13 @@ const ensureProjectileEntity = (serverEntityId) => {
   }
   return projectileServerToLocal.get(serverEntityId) ?? null;
 };
+// Live projectile telemetry for the debug overlay keyed by projectile id.
+const projectileDebug = new Map();
+// SessionId -> username mapping so overlay rows can show human-readable labels.
+const playerNamesBySession = new Map();
+let lastProjectileOverlayUpdate = 0;
+const PROJECTILE_OVERLAY_REFRESH_MS = 200;
+const PROJECTILE_DEBUG_RETENTION_MS = 15000;
 const fallbackPalette = [
   { name: 'grass', color: '#3cb043', texture: 'grass' },
   { name: 'mud', color: '#6b4423', texture: 'mud' },
@@ -177,6 +312,188 @@ const terrainScratch = {
   yawQuat: new THREE.Quaternion()
 };
 
+function resolveSessionLabel(sessionId) {
+  if (!sessionId) return 'Unknown';
+  const known = playerNamesBySession.get(sessionId);
+  if (typeof known === 'string' && known.trim().length > 0) return known;
+  return String(sessionId).slice(0, 6);
+}
+
+function ensureProjectileDebugRecord(id, ammoName, shooterId, position, velocity) {
+  const now = performance.now();
+  const wallNow = Date.now();
+  let record = projectileDebug.get(id);
+  if (!record) {
+    record = {
+      id,
+      ammoName: ammoName || 'Unknown',
+      shooterId: shooterId || '',
+      shooterLabel: resolveSessionLabel(shooterId),
+      distance: 0,
+      status: 'In flight',
+      hitSummary: 'Tracking trajectory…',
+      travelTimeMs: 0,
+      impactSpeed: 0,
+      spawnTime: now,
+      spawnWallClock: wallNow,
+      lastUpdated: now,
+      finalised: false,
+      lastPosition: position
+        ? { x: position.x, y: position.y, z: position.z }
+        : { x: 0, y: 0, z: 0 },
+      lastVelocity: velocity
+        ? { x: velocity.x, y: velocity.y, z: velocity.z }
+        : { x: 0, y: 0, z: 0 }
+    };
+    projectileDebug.set(id, record);
+  }
+
+  if (ammoName) record.ammoName = ammoName;
+  if (shooterId) {
+    record.shooterId = shooterId;
+    record.shooterLabel = resolveSessionLabel(shooterId);
+  }
+  if (position) {
+    const dx = position.x - record.lastPosition.x;
+    const dy = position.y - record.lastPosition.y;
+    const dz = position.z - record.lastPosition.z;
+    const segment = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    if (Number.isFinite(segment) && segment > 0) {
+      record.distance += segment;
+    }
+    record.lastPosition = { x: position.x, y: position.y, z: position.z };
+  }
+  if (velocity) {
+    record.lastVelocity = { x: velocity.x, y: velocity.y, z: velocity.z };
+  }
+  record.travelTimeMs = Math.max(0, Date.now() - record.spawnWallClock);
+  if (!record.finalised) {
+    record.status = 'In flight';
+    record.hitSummary = 'Tracking trajectory…';
+  }
+  record.lastUpdated = now;
+  return record;
+}
+
+function markProjectileLost(id, reason = 'Awaiting impact telemetry from server…') {
+  const record = projectileDebug.get(id);
+  if (record && !record.finalised) {
+    record.status = 'Pending impact';
+    record.hitSummary = reason;
+    record.lastUpdated = performance.now();
+    refreshProjectileDebugOverlay(true);
+  }
+}
+
+function applyImpactTelemetry(payload) {
+  if (!payload || !payload.id) return;
+  const position = {
+    x: typeof payload.x === 'number' ? payload.x : 0,
+    y: typeof payload.y === 'number' ? payload.y : 0,
+    z: typeof payload.z === 'number' ? payload.z : 0
+  };
+  const impactVelocity = payload.impactVelocity
+    ? {
+        x: typeof payload.impactVelocity.x === 'number' ? payload.impactVelocity.x : 0,
+        y: typeof payload.impactVelocity.y === 'number' ? payload.impactVelocity.y : 0,
+        z: typeof payload.impactVelocity.z === 'number' ? payload.impactVelocity.z : 0
+      }
+    : null;
+
+  const record = ensureProjectileDebugRecord(
+    payload.id,
+    payload.ammoName,
+    payload.shooterSessionId,
+    position,
+    impactVelocity
+  );
+
+  if (typeof payload.distanceTravelled === 'number' && Number.isFinite(payload.distanceTravelled)) {
+    record.distance = payload.distanceTravelled;
+  }
+  if (typeof payload.travelTimeMs === 'number' && Number.isFinite(payload.travelTimeMs)) {
+    record.travelTimeMs = payload.travelTimeMs;
+  }
+  if (typeof payload.impactSpeed === 'number' && Number.isFinite(payload.impactSpeed)) {
+    record.impactSpeed = payload.impactSpeed;
+  }
+
+  const hitLabel = resolveSessionLabel(payload.hitSessionId);
+  switch (payload.hitKind) {
+    case 'tank':
+      record.status = 'Hit tank';
+      record.hitSummary = payload.hitSessionId
+        ? `Hit ${hitLabel} (${String(payload.hitSessionId).slice(0, 6)})`
+        : 'Hit tank (unknown session)';
+      break;
+    case 'terrain':
+      record.status = 'Hit terrain';
+      record.hitSummary = 'Detonated on terrain surface.';
+      break;
+    case 'timeout':
+      record.status = 'Expired';
+      record.hitSummary = 'Projectile timed out before impact.';
+      break;
+    case 'cleanup':
+      record.status = 'Removed';
+      record.hitSummary = 'Projectile cleaned up without explosion.';
+      break;
+    case 'lost':
+      record.status = 'Lost';
+      record.hitSummary = 'Projectile left bounds or was culled.';
+      break;
+    default:
+      record.status = 'Impact';
+      record.hitSummary = 'Impact recorded without explicit target metadata.';
+  }
+
+  if (impactVelocity) {
+    record.hitSummary += ` · v=(${impactVelocity.x.toFixed(1)}, ${impactVelocity.y.toFixed(
+      1
+    )}, ${impactVelocity.z.toFixed(1)})`;
+  }
+
+  record.finalised = true;
+  record.lastUpdated = performance.now();
+  record.travelTimeMs = Math.max(0, record.travelTimeMs);
+
+  console.info('Projectile impact telemetry', {
+    id: payload.id,
+    status: record.status,
+    distance: record.distance,
+    travelTimeMs: record.travelTimeMs,
+    impactSpeed: record.impactSpeed,
+    hit: record.hitSummary
+  });
+
+  refreshProjectileDebugOverlay(true);
+}
+
+function refreshProjectileDebugOverlay(force = false) {
+  const now = performance.now();
+  if (!force && now - lastProjectileOverlayUpdate < PROJECTILE_OVERLAY_REFRESH_MS) return;
+  lastProjectileOverlayUpdate = now;
+  const entries = [];
+  for (const [id, record] of projectileDebug) {
+    if (record.finalised && now - record.lastUpdated > PROJECTILE_DEBUG_RETENTION_MS) {
+      projectileDebug.delete(id);
+      continue;
+    }
+    entries.push({
+      id,
+      ammoLabel: record.ammoName || 'Unknown',
+      shooterLabel: record.shooterLabel || 'Unknown',
+      distanceMetres: Number.isFinite(record.distance) ? record.distance : 0,
+      status: record.status || 'In flight',
+      hitSummary: record.hitSummary || '',
+      travelTimeMs: Number.isFinite(record.travelTimeMs) ? record.travelTimeMs : 0,
+      impactSpeed: Number.isFinite(record.impactSpeed) ? record.impactSpeed : 0,
+      lastUpdated: record.lastUpdated || now
+    });
+  }
+  updateProjectileDebugOverlay(entries);
+}
+
 // Scratch vectors for translating local yaw torque (track differential) into world space
 // before applying it to the Cannon body. Re-using the buffers prevents per-frame
 // allocations and keeps the movement hot path lean.
@@ -184,7 +501,8 @@ const movementScratch = {
   localTorque: new CANNON.Vec3(),
   worldTorque: new CANNON.Vec3(),
   localAngularVelocity: new CANNON.Vec3(),
-  worldToLocalQuat: new CANNON.Quaternion()
+  worldToLocalQuat: new CANNON.Quaternion(),
+  worldAngularVelocity: new CANNON.Vec3()
 };
 
 // Build a simplified tank mesh for remote players using dimensions from the
@@ -249,6 +567,11 @@ function resetProjectileWorld() {
   projectileServerToLocal.clear();
   projectileIdToServer.clear();
   projectileWorld = createGameWorld();
+  clearLocalProjectiles();
+  clearExplosions();
+  projectileDebug.clear();
+  updateProjectileDebugOverlay([]);
+  lastProjectileOverlayUpdate = 0;
 }
 
 function syncProjectileWorld(buffer) {
@@ -266,12 +589,20 @@ function syncProjectileWorld(buffer) {
       y: TransformComponent.y[localEntity] || 0,
       z: TransformComponent.z[localEntity] || 0
     };
+    const velocity = {
+      x: ProjectileComponent.vx[localEntity] || 0,
+      y: ProjectileComponent.vy[localEntity] || 0,
+      z: ProjectileComponent.vz[localEntity] || 0
+    };
+    const ammoName = buffer.ammo?.[i] || 'Unknown';
+    const shooterId = buffer.shooter?.[i] || '';
     let record = projectiles.get(id);
     if (!record) {
       record = createProjectileVisual(id, position);
     } else {
       record.mesh.position.set(position.x, position.y, position.z);
     }
+    ensureProjectileDebugRecord(id, ammoName, shooterId, position, velocity);
   }
 
   for (const [id] of [...projectiles]) {
@@ -286,6 +617,7 @@ function syncProjectileWorld(buffer) {
         projectileServerToLocal.delete(serverEntity);
         projectileIdToServer.delete(id);
       }
+      markProjectileLost(id);
     }
   }
 
@@ -295,10 +627,12 @@ function syncProjectileWorld(buffer) {
       projectileServerToLocal.delete(serverEntity);
     }
   }
+  refreshProjectileDebugOverlay();
 }
 
 function resetGameState() {
   if (!tank || !turret) return;
+  playerNamesBySession.clear();
   tank.position.set(0, 0, 0);
   tank.rotation.set(0, 0, 0);
   turret.rotation.set(0, 0, 0);
@@ -329,12 +663,19 @@ function resetGameState() {
 
 function createProjectileVisual(id, position) {
   if (!scene) return null;
-  const geom = new THREE.SphereGeometry(0.3, 12, 12);
-  const mat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+  const geom = new THREE.SphereGeometry(0.38, 18, 18);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xff8a3d,
+    transparent: true,
+    opacity: 0.85,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
   const mesh = new THREE.Mesh(geom, mat);
+  mesh.renderOrder = 15;
   mesh.position.set(position.x, position.y, position.z);
   scene.add(mesh);
-  const record = { mesh };
+  const record = { mesh, material: mat };
   projectiles.set(id, record);
   return record;
 }
@@ -347,7 +688,120 @@ function removeProjectileVisual(id) {
     if (obj.geometry) obj.geometry.dispose();
     if (obj.material) obj.material.dispose();
   });
+  record.material?.dispose?.();
   projectiles.delete(id);
+}
+
+// Spawn a short-lived tracer so the player receives instant visual feedback
+// when firing. The server remains authoritative for real projectiles, but these
+// local meshes bridge latency and also work when running offline.
+function spawnLocalProjectileTrace() {
+  if (!scene || !barrelMesh) return;
+  barrelMesh.updateWorldMatrix(true, true);
+  barrelMesh.getWorldPosition(muzzleScratch.position);
+  barrelMesh.getWorldQuaternion(muzzleScratch.quaternion);
+  muzzleScratch.direction.set(0, 0, -1).applyQuaternion(muzzleScratch.quaternion).normalize();
+  renderMuzzleFlash(muzzleScratch.position, muzzleScratch.direction);
+
+  const geom = new THREE.SphereGeometry(0.22, 16, 16);
+  const mat = new THREE.MeshBasicMaterial({
+    color: 0xffc25a,
+    transparent: true,
+    opacity: 0.95,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending
+  });
+  const mesh = new THREE.Mesh(geom, mat);
+  mesh.position.copy(muzzleScratch.position);
+  scene.add(mesh);
+
+  muzzleScratch.velocity
+    .copy(muzzleScratch.direction)
+    .multiplyScalar(LOCAL_PROJECTILE_SPEED);
+
+  localProjectiles.push({
+    mesh,
+    material: mat,
+    velocity: muzzleScratch.velocity.clone(),
+    lifetime: LOCAL_PROJECTILE_LIFETIME
+  });
+}
+
+function updateLocalProjectiles(delta) {
+  for (let i = localProjectiles.length - 1; i >= 0; i -= 1) {
+    const entry = localProjectiles[i];
+    entry.velocity.y -= LOCAL_PROJECTILE_GRAVITY * delta;
+    entry.mesh.position.addScaledVector(entry.velocity, delta);
+    entry.lifetime -= delta;
+    if (entry.material && typeof entry.material.opacity === 'number') {
+      entry.material.opacity = Math.max(0, entry.lifetime / LOCAL_PROJECTILE_LIFETIME);
+    }
+    if (entry.lifetime <= 0 || entry.mesh.position.y < 0) {
+      scene.remove(entry.mesh);
+      entry.mesh.geometry?.dispose?.();
+      if (Array.isArray(entry.mesh.material)) {
+        entry.mesh.material.forEach((mat) => mat.dispose?.());
+      } else {
+        entry.mesh.material?.dispose?.();
+      }
+      entry.material?.dispose?.();
+      localProjectiles.splice(i, 1);
+    }
+  }
+}
+
+function clearLocalProjectiles() {
+  for (let i = localProjectiles.length - 1; i >= 0; i -= 1) {
+    const entry = localProjectiles[i];
+    scene?.remove(entry.mesh);
+    entry.mesh.geometry?.dispose?.();
+    if (Array.isArray(entry.mesh.material)) {
+      entry.mesh.material.forEach((mat) => mat.dispose?.());
+    } else {
+      entry.mesh.material?.dispose?.();
+    }
+    entry.material?.dispose?.();
+    localProjectiles.pop();
+  }
+}
+
+function updateExplosions(delta) {
+  for (let i = explosionBursts.length - 1; i >= 0; i -= 1) {
+    const burst = explosionBursts[i];
+    burst.age += delta;
+    const progress = THREE.MathUtils.clamp(burst.age / burst.lifetime, 0, 1);
+    const scale = THREE.MathUtils.lerp(0.25, 2.6, progress);
+    burst.mesh.scale.setScalar(scale);
+    if (burst.material && typeof burst.material.opacity === 'number') {
+      burst.material.opacity = THREE.MathUtils.lerp(0.95, 0, progress);
+    }
+    if (burst.age >= burst.lifetime) {
+      scene?.remove(burst.mesh);
+      burst.mesh.geometry?.dispose?.();
+      if (Array.isArray(burst.mesh.material)) {
+        burst.mesh.material.forEach((mat) => mat.dispose?.());
+      } else {
+        burst.mesh.material?.dispose?.();
+      }
+      burst.material?.dispose?.();
+      explosionBursts.splice(i, 1);
+    }
+  }
+}
+
+function clearExplosions() {
+  for (let i = explosionBursts.length - 1; i >= 0; i -= 1) {
+    const burst = explosionBursts[i];
+    scene?.remove(burst.mesh);
+    burst.mesh.geometry?.dispose?.();
+    if (Array.isArray(burst.mesh.material)) {
+      burst.mesh.material.forEach((mat) => mat.dispose?.());
+    } else {
+      burst.mesh.material?.dispose?.();
+    }
+    burst.material?.dispose?.();
+    explosionBursts.pop();
+  }
 }
 
 function extractAmmoLoadoutFromMetadata(metadata) {
@@ -367,6 +821,9 @@ function extractAmmoLoadoutFromMetadata(metadata) {
 }
 
 function syncLocalPlayerState(metadata, runtime) {
+  if (metadata?.username && metadata.sessionId) {
+    playerNamesBySession.set(metadata.sessionId, metadata.username);
+  }
   const newAmmo = extractAmmoLoadoutFromMetadata(metadata);
   const newTotal = newAmmo.reduce((sum, entry) => sum + entry.count, 0);
   const ammoChanged =
@@ -380,6 +837,9 @@ function syncLocalPlayerState(metadata, runtime) {
       playerAmmo.find((entry) => entry.name === previousSelection) || playerAmmo[0] || null;
     ammoLeft = newTotal;
     updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
+  }
+  if (metadata && typeof metadata.ammoCapacity === 'number') {
+    activeAmmoCapacity = metadata.ammoCapacity;
   }
   if (metadata && runtime) {
     const entityId = metadata.entityId;
@@ -440,6 +900,9 @@ function attachRoomListeners(activeRoom) {
 
     const handleMetadataUpdate = (metadata, sessionId) => {
       if (!metadata) return;
+      if (metadata.username) {
+        playerNamesBySession.set(sessionId, metadata.username);
+      }
       if (sessionId === activeRoom.sessionId) {
         syncLocalPlayerState(metadata, schemaState.playerRuntime);
         return;
@@ -452,6 +915,7 @@ function attachRoomListeners(activeRoom) {
     schemaState.playerMetadata.onRemove = (_metadata, sessionId) => {
       if (sessionId === activeRoom.sessionId) return;
       remoteWorld?.removeMetadata(sessionId);
+      playerNamesBySession.delete(sessionId);
     };
 
     schemaState.listen(
@@ -492,6 +956,7 @@ function attachRoomListeners(activeRoom) {
 
   activeRoom.onMessage(GAME_EVENT.TerrainDefinition, (payload) => applyTerrainPayload(payload));
   activeRoom.onMessage(GAME_EVENT.ProjectileExploded, (p) => {
+    applyImpactTelemetry(p);
     removeProjectileVisual(p.id);
     const serverEntity = projectileIdToServer.get(p.id);
     if (typeof serverEntity === 'number') {
@@ -562,12 +1027,18 @@ const ammoColumn = document.getElementById('ammoColumn');
 const joinBtn = document.getElementById('joinBtn');
 const lobbyError = document.getElementById('lobbyError');
 const instructions = document.getElementById('instructions');
+let loadoutSummaryEl = null;
+if (joinBtn) {
+  joinBtn.disabled = true;
+  joinBtn.title = 'Select a tank and allocate ammo before joining.';
+}
 let availableTanks = [];
 let ammoDefs = [];
 let selectedNation = null;
 let selectedTank = null;
 let selectedClass = null; // current tank class tab
 const loadout = {};
+let activeAmmoCapacity = 0;
 // Largest dimension across all tanks; used to render consistent-scale thumbnails
 let maxTankDimension = 0;
 
@@ -617,6 +1088,8 @@ function renderTanks() {
   tankList.innerHTML = '';
   ammoColumn.innerHTML = '';
   selectedTank = null;
+  loadoutSummaryEl = null;
+  updateLoadoutSummary();
   if (!selectedNation) return;
 
   // Build tab list from tank classes available to the chosen nation
@@ -751,34 +1224,151 @@ function renderTankList(list) {
   });
 }
 
+function sanitiseLoadout() {
+  return Object.fromEntries(
+    Object.entries(loadout).map(([name, value]) => [name, Math.max(0, Math.floor(Number(value) || 0))])
+  );
+}
+
+function totalAllocatedRounds() {
+  return Object.values(loadout).reduce(
+    (sum, value) => sum + Math.max(0, Math.floor(Number(value) || 0)),
+    0
+  );
+}
+
+function updateLoadoutSummary() {
+  const capacity = Math.max(0, activeAmmoCapacity);
+  const total = totalAllocatedRounds();
+  const overCapacity = capacity > 0 && total > capacity;
+  const noAmmo = total <= 0;
+  if (loadoutSummaryEl) {
+    const capacityText = capacity > 0 ? `${total}/${capacity}` : `${total}`;
+    loadoutSummaryEl.textContent = `Allocated ${capacityText} rounds`;
+    loadoutSummaryEl.classList.toggle('warning', overCapacity || noAmmo);
+  }
+  if (joinBtn) {
+    const needsTank = !selectedTank;
+    const invalid = overCapacity || noAmmo || needsTank;
+    joinBtn.disabled = invalid;
+    if (needsTank) {
+      joinBtn.title = 'Select a tank and allocate ammo before joining.';
+    } else if (overCapacity) {
+      joinBtn.title = `Reduce your loadout to ${capacity} rounds or fewer.`;
+    } else if (noAmmo) {
+      joinBtn.title = 'Allocate at least one round before joining.';
+    } else {
+      joinBtn.title = 'Join the battle!';
+    }
+  }
+}
+
+function computeDefaultLoadout(ammoNames, capacity) {
+  const defaults = {};
+  const names = Array.isArray(ammoNames) ? ammoNames : [];
+  let remaining = Math.max(0, capacity);
+  const count = names.length;
+  names.forEach((name, index) => {
+    if (remaining <= 0) {
+      defaults[name] = 0;
+      return;
+    }
+    const slots = Math.min(
+      remaining,
+      Math.max(1, Math.floor(remaining / Math.max(1, count - index)))
+    );
+    defaults[name] = slots;
+    remaining -= slots;
+  });
+  return defaults;
+}
+
 function renderAmmo() {
   ammoColumn.innerHTML = '';
+  loadoutSummaryEl = null;
   Object.keys(loadout).forEach(k => delete loadout[k]);
+  updateLoadoutSummary();
   if (!selectedTank) return;
-  selectedTank.ammo.forEach(name => {
-    const def = ammoDefs.find(a => a.name === name);
-    if (!def) return;
-    loadout[name] = 0;
-    const div = document.createElement('div');
-    div.className = 'ammo-item';
+
+  activeAmmoCapacity = Math.max(0, selectedTank.ammoCapacity ?? defaultTank.ammoCapacity);
+  const ammoDefinitions = Array.isArray(selectedTank.ammo)
+    ? selectedTank.ammo
+        .map(name => ammoDefs.find(a => a.name === name))
+        .filter(def => !!def)
+    : [];
+
+  if (!ammoDefinitions.length) {
+    const empty = document.createElement('div');
+    empty.className = 'ammo-empty';
+    empty.textContent = 'No ammunition is configured for this tank. Visit the admin tools to assign shells.';
+    ammoColumn.appendChild(empty);
+    updateLoadoutSummary();
+    return;
+  }
+
+  const header = document.createElement('div');
+  header.className = 'ammo-header';
+  header.textContent = `Distribute up to ${activeAmmoCapacity} rounds. Adjust sliders now; press 1-9 in battle to switch shells.`;
+  ammoColumn.appendChild(header);
+
+  loadoutSummaryEl = document.createElement('div');
+  loadoutSummaryEl.className = 'ammo-summary';
+  ammoColumn.appendChild(loadoutSummaryEl);
+
+  const defaults = computeDefaultLoadout(
+    ammoDefinitions.map(def => def.name),
+    activeAmmoCapacity
+  );
+
+  ammoDefinitions.forEach(def => {
+    const row = document.createElement('div');
+    row.className = 'ammo-item';
+
     const img = document.createElement('img');
     img.src = def.image || 'https://placehold.co/40x40?text=A';
-    img.alt = name;
+    img.alt = def.name;
+
+    const details = document.createElement('div');
+    details.className = 'ammo-details';
+
     const label = document.createElement('span');
-    label.textContent = name;
+    label.className = 'ammo-label';
+    label.textContent = def.name;
+
+    const countLabel = document.createElement('span');
+    countLabel.className = 'ammo-count';
+
     const slider = document.createElement('input');
     slider.type = 'range';
     slider.min = '0';
-    slider.max = '50';
-    slider.value = '0';
+    slider.max = String(activeAmmoCapacity);
+    const defaultCount = defaults[def.name] ?? 0;
+    slider.value = String(defaultCount);
+    loadout[def.name] = defaultCount;
+    countLabel.textContent = `${defaultCount} rounds`;
+
     slider.addEventListener('input', () => {
-      loadout[name] = parseInt(slider.value, 10);
+      const desired = Math.max(0, Math.floor(Number(slider.value) || 0));
+      const current = loadout[def.name] ?? 0;
+      const othersTotal = totalAllocatedRounds() - current;
+      const allowed = Math.min(desired, Math.max(0, activeAmmoCapacity - othersTotal));
+      if (allowed !== desired) {
+        slider.value = String(allowed);
+      }
+      loadout[def.name] = allowed;
+      countLabel.textContent = `${allowed} rounds`;
+      updateLoadoutSummary();
     });
-    div.appendChild(img);
-    div.appendChild(label);
-    div.appendChild(slider);
-    ammoColumn.appendChild(div);
+
+    details.appendChild(label);
+    details.appendChild(countLabel);
+    row.appendChild(img);
+    row.appendChild(details);
+    row.appendChild(slider);
+    ammoColumn.appendChild(row);
   });
+
+  updateLoadoutSummary();
 }
 
 joinBtn.addEventListener('click', async () => {
@@ -787,15 +1377,28 @@ joinBtn.addEventListener('click', async () => {
     lobbyError.textContent = 'Select a tank';
     return;
   }
+  const capacity = Math.max(0, activeAmmoCapacity);
+  const totalRounds = totalAllocatedRounds();
+  if (totalRounds <= 0) {
+    lobbyError.textContent = 'Allocate ammunition using the sliders before deploying.';
+    updateLoadoutSummary();
+    return;
+  }
+  if (capacity > 0 && totalRounds > capacity) {
+    lobbyError.textContent = `Too many rounds selected. Limit to ${capacity} in total.`;
+    updateLoadoutSummary();
+    return;
+  }
   lobby.style.display = 'none';
   instructions.style.display = 'block';
   showCrosshair(true);
   applyTankConfig(selectedTank);
 
   // Build player-specific ammo list from lobby selections
-  playerAmmo = Object.entries(loadout)
-    .filter(([, count]) => count > 0)
-    .map(([name, count]) => ({ name, count }));
+  const sanitizedLoadout = sanitiseLoadout();
+  const positiveEntries = Object.entries(sanitizedLoadout).filter(([, count]) => count > 0);
+  const payload = Object.fromEntries(positiveEntries);
+  playerAmmo = positiveEntries.map(([name, count]) => ({ name, count }));
   selectedAmmo = playerAmmo[0] || null;
   ammoLeft = playerAmmo.reduce((sum, a) => sum + a.count, 0);
   updateAmmoHUD(playerAmmo, selectedAmmo ? selectedAmmo.name : '');
@@ -805,7 +1408,7 @@ joinBtn.addEventListener('click', async () => {
     return;
   }
   try {
-    await joinRoomWithSelection(selectedTank, loadout);
+    await joinRoomWithSelection(selectedTank, payload);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     lobbyError.textContent = message || 'Failed to join room';
@@ -819,7 +1422,7 @@ joinBtn.addEventListener('click', async () => {
 loadLobbyData();
 
 // Core scene objects
-let tank, turret, gun, camera, scene, renderer, ground;
+let tank, turret, gun, camera, scene, renderer, ground, barrelMesh;
 // Physics objects
 let world, chassisBody, groundBody;
 // Default tank stats used for movement and rotation
@@ -856,6 +1459,7 @@ let ROT_ACCEL = TARGET_TURN_RATE; // rad/s² to reach target rate in ~1 s
 let TURRET_ROT_SPEED = (2 * Math.PI) / defaultTank.turretRotation; // turret radians per second
 let FIRE_DELAY = 60 / defaultTank.mainCannonFireRate; // seconds between shots
 let ammoLeft = defaultTank.ammoCapacity;
+activeAmmoCapacity = defaultTank.ammoCapacity;
 let lastFireTime = 0;
 // Static friction coefficient representing tracks on typical terrain. Raised to
 // better reflect the grip of heavy tracked vehicles so the hull settles more
@@ -865,6 +1469,11 @@ const GROUND_FRICTION = 0.65;
 const MIN_ROLLING_DAMPING = 0.15;
 const MAX_ROLLING_DAMPING = 0.65;
 const BRAKE_DAMPING = 0.85;
+// Threshold at which we snap yaw angular velocity to zero so the hull actually
+// stops turning instead of creeping forever, plus proportional brake stiffness
+// used while A/D are released.
+const TURN_STOP_THRESHOLD = THREE.MathUtils.degToRad(0.25);
+const TURN_BRAKE_STIFFNESS = 4.5;
 // Default traction/viscosity values when palette data is missing or malformed.
 const DEFAULT_SURFACE = { traction: 0.9, viscosity: 0.3 };
 // Torque applied for A/D rotation; derived from mass, friction, and desired acceleration
@@ -1417,6 +2026,7 @@ function init() {
   barrel.castShadow = true;
   barrel.receiveShadow = true;
   gun.add(barrel);
+  barrelMesh = barrel;
   turret.add(gun);
   tank.add(turret);
 
@@ -1451,6 +2061,7 @@ function init() {
 
   // Build HUD overlay to display runtime metrics and hide crosshair until gameplay
   initHUD();
+  initProjectileDebugOverlay();
   updateAmmoHUD([]);
   updateCooldownHUD(0, 1);
   showCrosshair(false);
@@ -1475,6 +2086,7 @@ function init() {
   document.addEventListener('pointerlockchange', () => {
     if (document.pointerLockElement) {
       document.addEventListener('mousemove', onMouseMove);
+      ensureAudioContext();
     } else {
       document.removeEventListener('mousemove', onMouseMove);
     }
@@ -1503,21 +2115,24 @@ function init() {
 
   // Require pointer lock before firing so lobby clicks can't trigger shots.
   window.addEventListener('mousedown', () => {
-    if (document.pointerLockElement && room && selectedAmmo) {
-      const now = Date.now();
-      if (
-        now - lastFireTime >= FIRE_DELAY * 1000 &&
-        ammoLeft > 0 &&
-        selectedAmmo.count > 0
-      ) {
-        console.debug('Firing', selectedAmmo.name);
-        room.send(GAME_COMMAND.PlayerFire, selectedAmmo.name);
-        lastFireTime = now;
-        selectedAmmo.count -= 1;
-        ammoLeft -= 1;
-        updateAmmoHUD(playerAmmo, selectedAmmo.name);
-        console.debug('Ammo remaining', ammoLeft);
-      }
+    if (!document.pointerLockElement || !selectedAmmo) return;
+
+    const now = Date.now();
+    const ready = now - lastFireTime >= FIRE_DELAY * 1000;
+    if (!ready || ammoLeft <= 0 || selectedAmmo.count <= 0) return;
+
+    lastFireTime = now;
+    selectedAmmo.count -= 1;
+    ammoLeft -= 1;
+    updateAmmoHUD(playerAmmo, selectedAmmo.name);
+    spawnLocalProjectileTrace();
+    playCannonSound();
+    console.debug('Firing', selectedAmmo.name, { ammoLeft });
+
+    if (room) {
+      room.send(GAME_COMMAND.PlayerFire, selectedAmmo.name);
+    } else {
+      console.debug('Offline shot: no room joined, rendering local tracer only');
     }
   });
 
@@ -1542,6 +2157,7 @@ function applyTankConfig(t) {
   ACCELERATION = MAX_SPEED / 3;
   FIRE_DELAY = 60 / (t.mainCannonFireRate ?? defaultTank.mainCannonFireRate);
   ammoLeft = t.ammoCapacity ?? defaultTank.ammoCapacity;
+  activeAmmoCapacity = t.ammoCapacity ?? defaultTank.ammoCapacity;
   lastFireTime = 0;
   updateCooldownHUD(0, FIRE_DELAY > 0 ? FIRE_DELAY : 1);
 
@@ -1574,7 +2190,14 @@ function applyTankConfig(t) {
       (t.bodyLength ?? defaultTank.bodyLength)
   );
   if (gun && gun.children[0]) {
-    gun.remove(gun.children[0]);
+    const oldBarrel = gun.children[0];
+    gun.remove(oldBarrel);
+    oldBarrel.geometry?.dispose?.();
+    if (Array.isArray(oldBarrel.material)) {
+      oldBarrel.material.forEach((mat) => mat.dispose?.());
+    } else {
+      oldBarrel.material?.dispose?.();
+    }
   }
   const newBarrel = new THREE.Mesh(
     new THREE.CylinderGeometry(
@@ -1587,6 +2210,7 @@ function applyTankConfig(t) {
   newBarrel.rotation.x = -Math.PI / 2;
   newBarrel.position.z = -(t.barrelLength ?? defaultTank.barrelLength) / 2;
   gun.add(newBarrel);
+  barrelMesh = newBarrel;
 
   world.removeBody(chassisBody);
   const box = new CANNON.Box(
@@ -1641,6 +2265,42 @@ function onMouseMove(e) {
     MAX_TURRET_INCLINE
   );
 }
+
+// Ensure angle differences stay in the [-π, π] range so yaw easing always
+// travels the shortest arc when re-aligning the turret with the camera.
+function normaliseAngle(value) {
+  return Math.atan2(Math.sin(value), Math.cos(value));
+}
+
+// Apply a light, explicit yaw brake so the hull actually comes to rest after
+// releasing A/D. Cannon's built-in angular damping slows rotation but never
+// fully reaches zero, which left the tank drifting and made mouse movement feel
+// inverted. The proportional torque below cancels the remaining angular
+// velocity and snaps extremely small values to zero so the chassis sleeps.
+function stabiliseHullYaw(tractionScale) {
+  if (!chassisBody) return;
+  movementScratch.worldToLocalQuat.copy(chassisBody.quaternion);
+  movementScratch.worldToLocalQuat.conjugate();
+  movementScratch.worldToLocalQuat.vmult(
+    chassisBody.angularVelocity,
+    movementScratch.localAngularVelocity
+  );
+  const yawRate = movementScratch.localAngularVelocity.y;
+  if (Math.abs(yawRate) < TURN_STOP_THRESHOLD) {
+    movementScratch.localAngularVelocity.y = 0;
+    chassisBody.quaternion.vmult(
+      movementScratch.localAngularVelocity,
+      movementScratch.worldAngularVelocity
+    );
+    chassisBody.angularVelocity.copy(movementScratch.worldAngularVelocity);
+    return;
+  }
+
+  const brakeTorque = -yawRate * chassisBody.inertia.y * TURN_BRAKE_STIFFNESS * tractionScale;
+  movementScratch.localTorque.set(0, brakeTorque, 0);
+  chassisBody.vectorToWorldFrame(movementScratch.localTorque, movementScratch.worldTorque);
+  chassisBody.torque.vadd(movementScratch.worldTorque, chassisBody.torque);
+}
 /**
  * updateMovement translates key inputs into physics state. It constrains the
  * chassis to horizontal movement while allowing yaw rotation.
@@ -1692,6 +2352,8 @@ function updateMovement() {
     movementScratch.localTorque.set(0, baseTorque + correctiveTorque, 0);
     chassisBody.vectorToWorldFrame(movementScratch.localTorque, movementScratch.worldTorque);
     chassisBody.torque.vadd(movementScratch.worldTorque, chassisBody.torque);
+  } else {
+    stabiliseHullYaw(tractionScale);
   }
 
   // Simple hand brake: increase damping while space is held
@@ -1735,9 +2397,11 @@ function animate() {
   tank.quaternion.copy(chassisBody.quaternion);
 
   remoteWorld?.updateMeshes();
+  updateLocalProjectiles(delta);
+  updateExplosions(delta);
 
   // Smoothly rotate turret and gun toward target angles
-  const yawDiff = targetYaw - turret.rotation.y;
+  const yawDiff = normaliseAngle(targetYaw - turret.rotation.y);
   const yawStep = THREE.MathUtils.clamp(
     yawDiff,
     -TURRET_ROT_SPEED * delta,
@@ -1767,6 +2431,7 @@ function animate() {
   updateHUD(speedKmh, inclination, playerHealth);
 
   updateCamera();
+  refreshProjectileDebugOverlay();
   renderer.render(scene, camera);
   const reloadRemaining = Math.max(0, FIRE_DELAY - (Date.now() - lastFireTime) / 1000);
   updateCooldownHUD(reloadRemaining, FIRE_DELAY > 0 ? FIRE_DELAY : 1);

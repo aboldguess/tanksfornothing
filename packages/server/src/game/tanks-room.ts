@@ -49,12 +49,14 @@ export class TanksForNothingRoom extends Room<TanksForNothingState> {
   onCreate(options: { dependencies: TanksRoomDependencies }): void {
     this.dependencies = options.dependencies;
     this.world = new ServerWorldController({
-      getAmmo: () => this.dependencies.getAmmo()
+      getAmmo: () => this.dependencies.getAmmo(),
+      getTerrain: () => this.dependencies.getTerrain().definition
     });
     this.setState(new TanksForNothingState());
     const terrain = this.dependencies.getTerrain();
     this.state.terrainName = terrain.name;
     this.state.terrainRevision = Date.now();
+    this.world.setTerrain(terrain.definition);
     this.clock.setInterval(() => this.stepSimulation(0.05), 50);
     TanksForNothingRoom.activeRooms.add(this);
     this.onMessage(GAME_COMMAND.PlayerUpdate, (client, message) => {
@@ -129,13 +131,15 @@ export class TanksForNothingRoom extends Room<TanksForNothingState> {
 
   private restartWithTerrain(payload: TerrainPayload): void {
     this.world = new ServerWorldController({
-      getAmmo: () => this.dependencies.getAmmo()
+      getAmmo: () => this.dependencies.getAmmo(),
+      getTerrain: () => payload.definition
     });
     this.world.synchroniseState(this.state);
     this.baseBR = null;
     this.state.terrainName = payload.name;
     this.state.terrainRevision = Date.now();
     this.state.tick = 0;
+    this.world.setTerrain(payload.definition);
     this.broadcast(GAME_EVENT.Restart, true);
     this.broadcast(GAME_EVENT.TerrainDefinition, payload);
   }
