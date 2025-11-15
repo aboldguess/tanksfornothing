@@ -954,6 +954,10 @@ setInterval(() => {
       const target = collision.targetId ? players.get(collision.targetId) : undefined;
       const detail = projectileDetails.get(collision.projectileId);
       if (!target || !detail) continue;
+      if (detail.shooter === collision.targetId) {
+        // Ignore the originating tank so muzzle overlaps do not self-damage the shooter.
+        continue;
+      }
       const ammoDef = ammo.find((a) => a.name === detail.ammo) || {};
       const armor = target.armor || 0;
       const dmg = ammoDef.damage ?? ammoDef.armorPen ?? 10;
