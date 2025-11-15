@@ -1,0 +1,22 @@
+{
+  "_comment": [
+    "Summary: TypeScript compiler configuration for the Tanks for Nothing server physics workspace.",
+    "Structure: Emits ESM JavaScript into dist/ with strict type-checking for source files under src/.",
+    "Usage: Automatically consumed by 'npm run build' to regenerate the compiled server world module." 
+  ],
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "node16",
+    "outDir": "dist",
+    "rootDir": "src",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true
+  },
+  "include": ["src/**/*.ts"]
+}

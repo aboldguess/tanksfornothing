@@ -20,6 +20,8 @@ node_modules/
 # Build artifacts
 dist/
 build/
+!packages/server/dist/
+!packages/server/dist/**
 
 # Logs and runtime data
 logs/
