@@ -73,5 +73,18 @@ The tank editor now includes additional sliders for turret elevation limits and 
 - Body Width, Length and Height (1–5m / 1–10m / 1–3m)
 - Turret Width, Length and Height (1–3m / 1–5m / 0.25–2m)
 
+## Feature checklist for reproducibility
+Share this list with collaborators to help them recreate the app without referring to the code:
+
+- **Multiplayer tank arena** rendered in Three.js with keyboard driving, mouse turret control, first/third-person toggle, zoom and optional freelook.
+- **Physics-informed shells** with gravity drop and per-ammo velocity plus configurable ammo types (HE/HEAT/AP/Smoke) and penetration stats.
+- **Player accounts** with signup/login, JWT-secured sessions and persistent stats for games played, kills and deaths.
+- **Admin dashboard** (web UI) featuring CRUD pages for nations, tanks, ammo, terrain, maps and game settings, with live statistics visible to admins.
+- **Tank editor depth**: sliders for BR, armor (chassis and turret), speeds, crew size, engine horsepower, incline/rotation timings, camera distance/height and turret elevation limits.
+- **Geometry controls** for chassis and turret dimensions to shape the tank body and turret.
+- **Data persistence** to JSON files created via `npm run setup`, with optional War Thunder import via `npm run import-wt` to seed vehicles.
+- **Configurable server**: Node.js/Express backend with Socket.IO realtime sync; `PORT`, `ADMIN_PASSWORD` and `JWT_SECRET` environment variables for deployment-ready security and hosting flexibility.
+- **Debug-friendly**: console logging for connections and game updates plus `npm run dev` for auto-restarts during development.
+
 ## Debugging
 The server logs player connections and updates to the console. Use `npm run dev` to auto-restart on changes.
